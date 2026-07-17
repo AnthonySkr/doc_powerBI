@@ -13,6 +13,8 @@ from generators.word_generator import generate_word_documentation
 
 template_file = "template-doc-pbib.docx"
 
+EXCLUDED_TYPES = {"actionButton", "pageNavigator", "image", "shape"}
+
 
 def find_pbip_components(pbip_path: str) -> tuple[str | None, str | None]:
     """Identifie les dossiers SemanticModel et Report depuis un .pbip."""
@@ -110,7 +112,11 @@ def main() -> None:
     print("─" * 65)
     word_path = os.path.join(output_dir, f"documentation_{pbip_name}.docx")
     result = generate_word_documentation(
-        report, all_measures, word_path, template_path=template_file
+        report,
+        all_measures,
+        word_path,
+        template_path=template_file,
+        excluded_visual_types=EXCLUDED_TYPES,
     )
     print(f"  {result}")
     print()

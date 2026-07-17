@@ -86,6 +86,7 @@ def generate_word_documentation(
     all_measures: dict[str, DaxMeasure],
     output_path: str = "documentation_powerbi.docx",
     template_path: str = "../template-doc-pbib.docx",
+    excluded_visual_types: set | None = None,
 ) -> str:
     """Génère la documentation Word en utilisant le template Eiffage."""
 
@@ -98,22 +99,12 @@ def generate_word_documentation(
     doc.core_properties.title = f"Documentation Rapport Power BI : {report.name}"
 
     # --- Page de garde ---
-    # On va remplacer le placeholder "Titre du document" sur la première page.
-    # C'est plus robuste que de supprimer et recréer.
-    # (Cette partie est optionnelle et dépend de la structure exacte du template)
-    # for p in doc.paragraphs:
-    #     if "Titre du document" in p.text:
-    #         p.text = "" # Efface le placeholder
-    #         p.add_run(doc.core_properties.title).bold = True # Ajoute le vrai titre
-    #         break
-
-    doc.add_page_break()
-
-    # --- Table des matières ---
-    doc.add_heading("Table des matières", level=1)
-    doc.add_paragraph(
-        "Après avoir généré le document, veuillez faire un clic droit sur la table des matières ci-dessous et choisir 'Mettre à jour les champs' > 'Mettre à jour toute la table'."
-    )
+    for p in doc.paragraphs:
+        if "Titre du document" in p.text:
+            p.text = ""  # Efface le placeholder
+            run = p.add_run(f"Documentation du Rapport\n{report.name}")
+            run.bold = True
+            break
 
     doc.add_page_break()
 
@@ -124,7 +115,13 @@ def generate_word_documentation(
         doc.add_paragraph(f"Page : {page.display_name}", style=STYLE_TITRE_PAGE_RAPPORT)
         doc.add_paragraph()
 
+        if excluded_visual_types is None:
+            excluded_visual_types = set()
+
         for visual in sorted(page.visuals, key=lambda v: v.title):
+            if visual.visual_type in excluded_visual_types:
+                continue
+
             doc.add_paragraph(visual.title, style=STYLE_TITRE_VISUEL)
 
             p_type = doc.add_paragraph(style=STYLE_NORMAL)
@@ -163,7 +160,7 @@ def generate_word_documentation(
         doc.add_page_break()
         doc.add_paragraph("Dictionnaire des Mesures", style=STYLE_PAGE_INTERCALAIRE)
 
-        organized = _organize_measures(all_measures.keys(), all_measures)
+        organized = _organize_measures(all_measures.keys(), all_measures)  # type: ignore
 
         for table in sorted(organized.keys()):
             doc.add_paragraph(f"Table : {table}", style=STYLE_TITRE_PAGE_RAPPORT)
