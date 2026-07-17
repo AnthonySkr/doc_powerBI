@@ -11,6 +11,8 @@ from parsers.dependency_analyzer import (
 )
 from generators.word_generator import generate_word_documentation
 
+template_file = "template-doc-pbib.docx"
+
 
 def find_pbip_components(pbip_path: str) -> tuple[str | None, str | None]:
     """Identifie les dossiers SemanticModel et Report depuis un .pbip."""
@@ -107,7 +109,9 @@ def main() -> None:
     print("  Étape 4 — Génération du document")
     print("─" * 65)
     word_path = os.path.join(output_dir, f"documentation_{pbip_name}.docx")
-    result = generate_word_documentation(report, all_measures, word_path)
+    result = generate_word_documentation(
+        report, all_measures, word_path, template_path=template_file
+    )
     print(f"  {result}")
     print()
     print("=" * 65)
