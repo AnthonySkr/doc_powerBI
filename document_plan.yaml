@@ -1,0 +1,28 @@
+document_plan:
+  - id: intro
+    title: "Introduction au rapport Power BI"
+    level: 1
+    content_type: static # Ou 'dynamic_text', 'image', etc.
+    # Vous pourriez ajouter ici des informations sur le contenu attendu
+    # Par exemple, si une section doit afficher un KPI spécifique, etc.
+
+  - id: kpis_principaux
+    title: "Analyse des Indicateurs Clés de Performance"
+    level: 1
+    sections:
+      - id: ventes_mensuelles
+        title: "Évolution des ventes mensuelles"
+        level: 2
+        data_source: "ventes.tableau_1" # Référence à une donnée extraite du pbib
+        description: "Ce graphique présente les ventes agrégées par mois."
+
+      - id: marges_produit
+        title: "Marge par ligne de produit"
+        level: 2
+        data_source: "marges.graphique_a_barres"
+        description: "Ce diagramme illustre la contribution de chaque produit à la marge globale."
+
+  - id: conclusions
+    title: "Conclusions et Recommandations"
+    level: 1
+    # ...
