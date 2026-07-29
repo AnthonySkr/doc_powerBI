@@ -12,12 +12,13 @@ visual.json :
 
 import json
 import os
+
 from models.data_models import (
+    PowerBIReport,
     ReportPage,
     Visual,
     VisualElement,
     VisualFilter,
-    PowerBIReport,
 )
 
 EXCLUDED_VISUAL_TYPES = frozenset(
@@ -82,7 +83,7 @@ def _load_page_order(pages_dir: str) -> dict[str, int]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return {name: idx for idx, name in enumerate(data.get("pageOrder", []))}
-    except (json.JSONDecodeError, Exception):
+    except json.JSONDecodeError, Exception:
         return {}
 
 
@@ -215,7 +216,7 @@ def _parse_projection(proj: dict, role: str) -> VisualElement | None:
             table_name = hl["Expression"]["Hierarchy"]["Expression"]["PropertyVariationSource"][
                 "Expression"
             ]["SourceRef"]["Entity"]
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             table_name = ""
         prop_name = hl.get("Level", "")
 
@@ -251,7 +252,7 @@ def _extract_title(visual_node: dict) -> str | None:
             )
             if value:
                 return value.strip("'\"")
-    except (AttributeError, IndexError, KeyError):
+    except AttributeError, IndexError, KeyError:
         pass
     return None
 
@@ -335,7 +336,7 @@ def _field_name(field: dict) -> str:
         try:
             hierarchy = hl["Expression"]["Hierarchy"]["Hierarchy"]
             return f"{hierarchy}.{level}"
-        except (KeyError, TypeError):
+        except KeyError, TypeError:
             return level
 
     return "Champ inconnu"

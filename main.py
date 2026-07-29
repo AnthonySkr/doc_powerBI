@@ -3,13 +3,13 @@
 import os
 import sys
 
-from parsers.tmdl_parser import load_all_measures_from_model
-from parsers.report_parser import parse_report
+from generators.word_generator import generate_word_documentation
 from parsers.dependency_analyzer import (
     analyze_all_dependencies,
     get_measures_used_in_report,
 )
-from generators.word_generator import generate_word_documentation
+from parsers.report_parser import parse_report
+from parsers.tmdl_parser import load_all_measures_from_model
 
 template_file = "template-doc-pbib.docx"
 

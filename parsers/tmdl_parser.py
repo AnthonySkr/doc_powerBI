@@ -9,6 +9,7 @@ Gère :
 
 import os
 import re
+
 from models.data_models import DaxMeasure
 
 _BLOCK_KEYWORDS = frozenset(
@@ -83,7 +84,7 @@ def _read_file(path: str) -> str | None:
         try:
             with open(path, "r", encoding=encoding) as f:
                 return f.read()
-        except (UnicodeDecodeError, LookupError):
+        except UnicodeDecodeError, LookupError:
             continue
     print(f"  Impossible de lire '{path}'")
     return None

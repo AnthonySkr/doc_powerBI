@@ -1,10 +1,12 @@
 """Génération du document Word de documentation."""
 
-from docx import Document
-from docx.oxml.ns import qn
-from docx.oxml import OxmlElement
-from models.data_models import PowerBIReport, DaxMeasure
 import re
+
+from docx import Document
+from docx.oxml import OxmlElement
+from docx.oxml.ns import qn
+
+from models.data_models import DaxMeasure, PowerBIReport
 
 # ==============================================================================
 #  MAPPING DES STYLES WORD
@@ -132,9 +134,7 @@ def generate_word_documentation(
                 p_elements = doc.add_paragraph(style=STYLE_NORMAL)
                 p_elements.add_run("Éléments de données :").bold = True
 
-                for e in sorted(
-                    visual.elements, key=lambda x: (x.role, x.display_name)
-                ):
+                for e in sorted(visual.elements, key=lambda x: (x.role, x.display_name)):
                     p_item = doc.add_paragraph(style=STYLE_PUCE)
 
                     if e.type_category == "Mesure":
@@ -144,14 +144,14 @@ def generate_word_documentation(
                         add_hyperlink(p_item, e.display_name, bookmark)
                         p_item.add_run(f" (Rôle : {e.role}, Type : Mesure)")
                     else:
-                        p_item.text = f"{e.display_name} (Rôle : {e.role}, Type : {e.type_category})"
+                        p_item.text = (
+                            f"{e.display_name} (Rôle : {e.role}, Type : {e.type_category})"
+                        )
 
             if visual.filters:
                 p_filtres = doc.add_paragraph(style=STYLE_NORMAL)
                 p_filtres.add_run("Filtres appliqués : ").bold = True
-                p_filtres.add_run(
-                    " ; ".join(sorted(set(f.to_string() for f in visual.filters)))
-                )
+                p_filtres.add_run(" ; ".join(sorted(set(f.to_string() for f in visual.filters))))
 
             doc.add_paragraph()
 
@@ -197,7 +197,7 @@ def _organize_measures(
     organized: dict[str, dict[str, list[str]]] = {}
     for name in sorted(list(measures_keys)):
         measure = all_measures[name]
-        organized.setdefault(measure.table_name, {}).setdefault(
-            measure.display_folder, []
-        ).append(name)
+        organized.setdefault(measure.table_name, {}).setdefault(measure.display_folder, []).append(
+            name
+        )
     return organized

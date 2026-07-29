@@ -1,6 +1,7 @@
 """Analyse des dépendances transitives entre mesures DAX."""
 
 import re
+
 from models.data_models import DaxMeasure
 
 
