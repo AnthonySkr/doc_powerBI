@@ -1,0 +1,533 @@
+# =============================================================================
+#  config_doc_pbi.yaml
+#  Plan de génération de la documentation Power BI (.docx)
+# =============================================================================
+#  Ce fichier décrit *quoi* écrire et *dans quel ordre*. Le script se contente
+#  de le parcourir : aucune structure de document ne doit être codée en dur.
+#
+#  ── Vocabulaire ────────────────────────────────────────────────────────────
+#  section : un titre (h1/h2/h3) + une liste de `blocks` + des `sections` filles
+#  block   : un élément de contenu. Types disponibles :
+#     paragraph        texte fixe (éventuellement proposé à l'édition)
+#     image            emplacement réservé pour une capture (texte descriptif)
+#     user_fill        zone laissée vide, à compléter par l'utilisateur ensuite
+#     table            tableau construit à partir des données extraites
+#     property         libellé (sous-titre) + valeur, ou liste de valeurs
+#     loop             répétition d'un sous-plan sur une collection de données
+#
+#  ── Substitutions ──────────────────────────────────────────────────────────
+#  Les chaînes acceptent des variables `{{ ... }}` :
+#     {{ report.name }}         nom du rapport
+#     {{ inputs.<id> }}         réponse à une question posée à l'utilisateur
+#     {{ styles.<clé> }}        style déclaré dans la section `styles`
+#     {{ page.* }} {{ visual.* }} {{ table.* }} {{ measure.* }} {{ ref.* }}
+#                               item courant à l'intérieur d'une `loop`
+#
+#  ── Conditions ─────────────────────────────────────────────────────────────
+#  `when` est évalué avant d'écrire une section ou un bloc. Formes admises :
+#     when: inputs.pages_secondaires          (vrai si la valeur est vraie)
+#     when: "!inputs.pages_secondaires"       (négation)
+#     when: "ref.kind == mesure"              (égalité, valeur non quotée)
+#  Absence de `when` = toujours écrit.
+# =============================================================================
+
+version: 1
+
+# =============================================================================
+#  1. DOCUMENT — template, sortie, page de garde
+# =============================================================================
+document:
+  template: "template-doc-pbib.docx"
+  output_dir: "output"
+  output_name: "documentation_{{ report.name }}.docx"
+
+  # Le template contient déjà la partie "Initialisation" : on écrit toujours
+  # à la suite du contenu existant, jamais en écrasant le document.
+  write_mode: append
+
+  # Page de garde : le paragraphe contenant ce texte est remplacé.
+  cover:
+    placeholder: "Titre du document"
+    text: "Documentation du Rapport\n{{ inputs.nom_rapport }}"
+    bold: true
+
+  # Propriétés du fichier .docx
+  properties:
+    title: "Documentation Rapport Power BI : {{ inputs.nom_rapport }}"
+    subject: "Documentation technique Power BI"
+    category: "Documentation"
+
+# =============================================================================
+#  2. STYLES — correspondance avec les styles du template
+# =============================================================================
+#  ATTENTION : seuls les styles réellement présents dans template-doc-pbib.docx
+#  peuvent être utilisés (python-docx lève une erreur sinon). Styles connus :
+#  Normal, Title, Heading 1..9, Sous-titre 3, Code DAX, List Bullet,
+#  List Bullet 2/3, Liste à puces1, List Paragraph, List Number, Normal Table.
+# =============================================================================
+styles:
+  heading_1: "Heading 1"
+  heading_2: "Heading 2"
+  heading_3: "Heading 3"
+  heading_4: "Heading 4"
+  subtitle: "Sous-titre 3"     # sous-titres internes (Paramètres, Code DAX...)
+  normal: "Normal"
+  bullet: "List Bullet"
+  code: "Code DAX"
+  image: "Normal"              # paragraphe portant le texte de réservation
+  caption: "Normal"            # légende sous l'emplacement d'image
+  table: "Normal Table"
+  fallback: "Normal"           # utilisé si un style ci-dessus est introuvable
+
+# =============================================================================
+#  3. RENDU — mise en forme commune à tous les blocs
+# =============================================================================
+rendering:
+  # Un titre 1 démarre toujours sur une nouvelle page (cf. plan).
+  page_break_before_heading_1: true
+
+  # Emplacements d'images : le script n'insère aucune image, il réserve la
+  # place et décrit la capture attendue. L'utilisateur remplace ensuite.
+  image_placeholder:
+    text_format: "[IMAGE] {description}"
+    caption_format: "Figure {n} — {description}"
+    show_caption: false        # true = ajoute une légende numérotée sous l'emplacement
+    numbering: true            # numérotation continue des figures du document
+    empty_paragraph_after: true
+
+  # Zones laissées vides pour rédaction manuelle après génération.
+  user_fill:
+    placeholder_text: "[À compléter]"
+    show_placeholder: true     # false = laisse un paragraphe vide sans texte
+
+  # Liens hypertextes internes (visuel → définition de la mesure).
+  links:
+    enabled: true
+    style: "Hyperlink"
+    bookmark_prefix: ""        # préfixe optionnel des signets générés
+
+  # Bloc `property` : le libellé est un sous-titre, la valeur suit en dessous.
+  property:
+    label_style: "{{ styles.subtitle }}"
+    value_style: "{{ styles.normal }}"
+    empty_paragraph_after: false
+
+# =============================================================================
+#  4. DONNÉES — filtrage / tri de ce qui est extrait du .pbip
+# =============================================================================
+data:
+  pages:
+    exclude_hidden: true
+    exclude_names: []          # noms d'affichage de pages à ignorer
+    sort_by: report_order      # report_order | name
+
+  visuals:
+    # Types Power BI non documentés (habillage, navigation...)
+    exclude_types:
+      - actionButton
+      - pageNavigator
+      - image
+      - shape
+      - basicShape
+      - textbox
+    exclude_titles: []
+    only_with_measures: false  # true = ne documenter que les visuels avec mesures
+    sort_by: title             # title | position
+
+  tables:
+    exclude_hidden: true
+    exclude_names: []          # tables techniques à ne pas documenter
+    sort_by: name
+    # Mise en forme d'une étape Power Query : {name} et {expression}
+    step_format: "{name}"
+
+  measures:
+    scope: used_in_report      # all | used_in_report (mesures + dépendances)
+    include_hidden: false
+    group_by: table            # table | display_folder
+    sort_by: name
+
+# =============================================================================
+#  5. INPUTS — questions posées à l'utilisateur au lancement du script
+# =============================================================================
+#  type : confirm (oui/non) | text (une ligne) | choice | textarea
+#  Règle retenue : on ne demande que des réponses courtes ou des choix qui
+#  pilotent la structure. Tout ce qui relève d'un paragraphe rédigé est laissé
+#  vide dans le document (bloc `user_fill`).
+# =============================================================================
+inputs:
+  - id: nom_rapport
+    type: text
+    label: "Nom du rapport à afficher sur la page de garde"
+    default: "{{ report.name }}"
+
+  - id: pages_secondaires
+    type: confirm
+    label: "Le rapport comporte-t-il des pages secondaires (pages de détail) ?"
+    default: true
+
+  - id: volet_filtre
+    type: confirm
+    label: "Le rapport utilise-t-il un volet de filtre ouvert par un bouton ?"
+    default: true
+
+  - id: editer_textes
+    type: confirm
+    label: "Souhaitez-vous relire et modifier les textes types avant écriture ?"
+    default: true
+
+# =============================================================================
+#  6. PLAN DU DOCUMENT
+# =============================================================================
+sections:
+
+  # ---------------------------------------------------------------------------
+  #  INITIALISATION — déjà présente dans le template, on n'y touche pas
+  # ---------------------------------------------------------------------------
+  - id: initialisation
+    title: "Initialisation"
+    level: 1
+    source: template          # le contenu vient du template
+    generate: false           # aucune écriture : ni titre, ni contenu
+    preserve: true            # interdit toute suppression du contenu existant
+
+  # ---------------------------------------------------------------------------
+  #  ORGANISATION GRAPHIQUE
+  # ---------------------------------------------------------------------------
+  - id: organisation_graphique
+    title: "Organisation Graphique"
+    level: 1
+    page_break_before: true
+    blocks:
+      - type: paragraph
+        id: og_intro
+        editable: true
+        prompt: "Description générale de l'organisation des pages"
+        text: >-
+          Chaque page du rapport est organisée de la même manière. L'en-tête permet
+          de contrôler le comportement du rapport à travers un système de filtre,
+          un sélecteur de navigation et un rappel du contexte.
+
+      - type: image
+        id: og_capture_page
+        description: "Capture d'une page principale du rapport, en-tête visible"
+
+      - type: paragraph
+        id: og_types_pages
+        when: inputs.pages_secondaires
+        editable: true
+        prompt: "Description des pages principales / secondaires"
+        text: >-
+          Le rapport est composé de pages principales et de pages secondaires.
+          Les pages principales font état des indicateurs suivis par sous-processus.
+          Les pages secondaires donnent des détails ou listent les enregistrements
+          comptabilisés dans le calcul des indicateurs.
+
+      # Variante sans pages secondaires
+      - type: paragraph
+        id: og_types_pages_simple
+        when: "!inputs.pages_secondaires"
+        editable: true
+        prompt: "Description des pages du rapport"
+        text: >-
+          Le rapport est composé de pages principales qui font état des indicateurs
+          suivis par sous-processus.
+
+    sections:
+
+      # ---- Navigation -----------------------------------------------------
+      - id: navigation
+        title: "Navigation"
+        level: 2
+        blocks:
+          # Rapport sans pages secondaires : pas de titre 3, la présentation
+          # du sélecteur est écrite directement sous le titre 2.
+          - type: paragraph
+            id: nav_simple
+            prompt: "Présentation du sélecteur de navigation"
+            when: "!inputs.pages_secondaires"
+            editable: true
+            text: >-
+              Le sélecteur de navigation permet de naviguer entre chaque page
+              du rapport.
+          - type: image
+            id: nav_simple_capture
+            when: "!inputs.pages_secondaires"
+            description: "Capture du sélecteur de navigation"
+
+        sections:
+          - id: pages_principales
+            title: "Pages principales"
+            level: 3
+            when: inputs.pages_secondaires
+            blocks:
+              - type: paragraph
+                id: nav_principales_texte
+                editable: true
+                prompt: "Présentation du sélecteur de navigation (pages principales)"
+                text: >-
+                  Le sélecteur de navigation permet de naviguer entre chaque page
+                  "principale". A partir des pages principales nous pouvons naviguer
+                  vers les pages de détails des indicateurs.
+              - type: image
+                id: nav_principales_capture
+                description: "Capture du sélecteur de navigation entre pages principales"
+
+          - id: pages_secondaires
+            title: "Pages secondaires"
+            level: 3
+            when: inputs.pages_secondaires
+            blocks:
+              - type: paragraph
+                id: nav_secondaires_aller
+                editable: true
+                prompt: "Navigation vers une page secondaire"
+                text: >-
+                  Pour naviguer vers un affichage secondaire il suffit de cliquer sur
+                  les flèches matérialisées à côté d'une information.
+              - type: image
+                id: nav_secondaires_aller_capture
+                description: "Visualisation des étapes de navigation vers les onglets secondaires"
+              - type: paragraph
+                id: nav_secondaires_retour
+                editable: true
+                prompt: "Retour vers une page principale"
+                text: >-
+                  Pour retourner vers un affichage principal, il vous suffit de cliquer
+                  sur la flèche symbolisant un retour en arrière, en haut à droite de
+                  l'entête de l'affichage.
+              - type: image
+                id: nav_secondaires_retour_capture
+                description: "Visualisation des étapes de navigation pour retourner vers un onglet principal"
+
+      # ---- Filtre ---------------------------------------------------------
+      - id: filtre
+        title: "Filtre"
+        level: 2
+        sections:
+          - id: volet_de_filtre
+            title: "Volet de filtre"
+            level: 3
+            when: inputs.volet_filtre
+            blocks:
+              - type: paragraph
+                id: filtre_ouverture
+                editable: true
+                prompt: "Ouverture du volet de filtre"
+                text: >-
+                  Pour ouvrir le volet de sélection de filtre, un bouton « filtre » se
+                  trouve dans l'en-tête de chaque onglet principal. En cliquant dessus
+                  le volet de filtre apparaîtra.
+              - type: image
+                id: filtre_ouverture_capture
+                description: "Visuel explicatif ouverture volet filtre"
+              - type: paragraph
+                id: filtre_fermeture
+                editable: true
+                prompt: "Fermeture du volet de filtre"
+                text: >-
+                  Pour le fermer, cliquez sur la croix en haut à droite du volet.
+              - type: image
+                id: filtre_fermeture_capture
+                description: "Visuel explicatif fermeture volet filtre"
+
+  # ---------------------------------------------------------------------------
+  #  ACQUISITION DES DONNÉES — rédigée manuellement après génération
+  # ---------------------------------------------------------------------------
+  - id: acquisition_donnees
+    title: "Acquisition des données"
+    level: 1
+    page_break_before: true
+    blocks:
+      - type: user_fill
+        id: acquisition_contenu
+        hint: "Décrire l'origine et le mode d'acquisition des données"
+
+  # ---------------------------------------------------------------------------
+  #  VISUELS — une h2 par page, une h3 par visuel
+  # ---------------------------------------------------------------------------
+  - id: visuels
+    title: "Visuels"
+    level: 1
+    page_break_before: true
+    blocks:
+      - type: paragraph
+        id: visuels_intro
+        editable: false
+        text: >-
+          Cette partie est organisée de la même manière que le livrable. Pour chaque
+          section, une nomenclature est affectée à chaque visuel pour être détaillée
+          par la suite, en faisant référence au numéro assigné. Les visuels sont
+          construits à partir de colonnes du jeu de données, de mesures et de concepts
+          liés au projet. Chaque référence est identifiée et renvoie, par un clic, vers
+          la définition via un lien hypertexte.
+
+      - type: loop
+        id: boucle_pages
+        over: report.pages          # filtrée par data.pages
+        item: page
+        section:
+          title: "{{ page.display_name }}"
+          level: 2
+          blocks:
+            - type: image
+              id: page_capture
+              description: "Capture complète de la page « {{ page.display_name }} »"
+
+            - type: loop
+              id: boucle_visuels
+              over: page.visuals    # filtrée par data.visuals
+              item: visual
+              section:
+                title: "{{ visual.title }}"
+                level: 3
+                blocks:
+                  - type: image
+                    id: visuel_capture
+                    description: >-
+                      Capture du visuel « {{ visual.title }} » avec les numéros de
+                      référence reportés sur l'image
+
+                  # Tableau des références du visuel : le numéro de la première
+                  # colonne est reporté à la main sur la capture ci-dessus.
+                  - type: table
+                    id: visuel_references
+                    over: visual.references
+                    item: ref
+                    style: "{{ styles.table }}"
+                    header: false
+                    header_labels: ["N°", "Élément"]
+                    autofit: false
+                    columns:
+                      - id: numero
+                        width_cm: 1.5
+                        value: "{{ ref.number }}"
+                      - id: libelle
+                        width_cm: 14.0
+                        value: "{{ ref.label }}"
+                        # Lien vers la définition de la mesure (partie 8)
+                        hyperlink:
+                          when: "ref.kind == mesure"
+                          target: "measure:{{ ref.name }}"
+                          text: "{{ ref.name }}"
+
+    # --- Construction des références de visuel -------------------------------
+    options:
+      references:
+        numbering:
+          start: 1
+          scope: visual            # visual | page | document
+          format: "{n}"
+        # Ordre de constitution des lignes du tableau
+        order: [mesure, colonne, hierarchie, filtre]
+        # Libellés par nature d'élément. {name} = nom affiché,
+        # {role} = rôle traduit, {expression} = expression du filtre.
+        labels:
+          mesure: "Formule appliquée : {name}"
+          colonne: "{role} : {name}"
+          hierarchie: "{role} : {name}"
+          filtre: "Filtre appliqué : {expression}"
+          defaut: "{name}"
+        # Traduction des rôles Power BI utilisés dans {role}
+        roles:
+          Values: "Valeur"
+          Y: "Axe Y"
+          Y2: "Axe Y secondaire"
+          X: "Axe X"
+          Category: "Axe X"
+          Series: "Légende"
+          Legend: "Légende"
+          Rows: "Lignes"
+          Columns: "Colonnes"
+          Tooltips: "Info-bulle"
+          Size: "Taille"
+          Details: "Détail"
+          defaut: "Champ"
+
+  # ---------------------------------------------------------------------------
+  #  TABLE DE DONNÉES
+  # ---------------------------------------------------------------------------
+  - id: table_de_donnees
+    title: "Table de données"
+    level: 1
+    page_break_before: true
+    sections:
+
+      - id: source_donnees
+        title: "Source"
+        level: 2
+        blocks:
+          - type: user_fill
+            id: source_contenu
+            hint: "Décrire la ou les sources de données du modèle"
+
+      - id: tables
+        title: "Tables"
+        level: 2
+        blocks:
+          - type: loop
+            id: boucle_tables
+            over: model.tables       # filtrée par data.tables
+            item: table
+            section:
+              title: "{{ table.name }}"
+              level: 3
+              blocks:
+                - type: property
+                  id: table_parametres
+                  label: "Paramètres"
+                  value: "{{ table.source }}"
+                  fallback: "[À compléter]"
+
+                - type: property
+                  id: table_traitement
+                  label: "Synthétisation du traitement"
+                  # Étapes de transformation (Power Query) listées à la suite
+                  value_list: "{{ table.transformation_steps }}"
+                  value_style: "{{ styles.bullet }}"
+                  fallback: "[À compléter]"
+
+  # ---------------------------------------------------------------------------
+  #  DÉFINITION DES MESURES — cible des liens hypertextes des visuels
+  # ---------------------------------------------------------------------------
+  - id: definition_mesures
+    title: "Définition des mesures"
+    level: 1
+    page_break_before: true
+    blocks:
+      - type: loop
+        id: boucle_tables_mesures
+        over: model.tables_with_measures   # tables ayant au moins une mesure DAX
+        item: table
+        section:
+          title: "{{ table.name }}"
+          level: 2
+          blocks:
+            - type: loop
+              id: boucle_mesures
+              over: table.measures         # filtrée par data.measures
+              item: measure
+              section:
+                title: "{{ measure.name }}"
+                level: 3
+                bookmark: "measure:{{ measure.name }}"   # cible des liens
+                blocks:
+                  - type: property
+                    id: mesure_code
+                    label: "Code DAX"
+                    value: "{{ measure.expression }}"
+                    value_style: "{{ styles.code }}"
+
+                  - type: property
+                    id: mesure_description
+                    label: "Description"
+                    value: "{{ measure.description }}"
+                    fallback: "[À compléter]"
+
+                  - type: property
+                    id: mesure_sources
+                    label: "Source utilisée"
+                    # Colonnes et mesures référencées par l'expression DAX
+                    value_list: "{{ measure.used_columns + measure.dependent_measures }}"
+                    value_style: "{{ styles.bullet }}"
+                    fallback: "[À compléter]"

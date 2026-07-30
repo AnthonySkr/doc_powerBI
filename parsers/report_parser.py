@@ -21,16 +21,6 @@ from models.data_models import (
     VisualFilter,
 )
 
-EXCLUDED_VISUAL_TYPES = frozenset(
-    [
-        "image",
-        "shape",
-        "textbox",
-        "actionButton",
-        "basicShape",
-    ]
-)
-
 
 def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> PowerBIReport:
     """
@@ -83,7 +73,7 @@ def _load_page_order(pages_dir: str) -> dict[str, int]:
         with open(path, "r", encoding="utf-8") as f:
             data = json.load(f)
         return {name: idx for idx, name in enumerate(data.get("pageOrder", []))}
-    except json.JSONDecodeError, Exception:
+    except json.JSONDecodeError, OSError:
         return {}
 
 
@@ -109,6 +99,7 @@ def _parse_page(page_path: str, folder_name: str, page_order: dict[str, int]) ->
         name=folder_name,
         display_name=data.get("displayName", folder_name),
         order=page_order.get(folder_name, data.get("ordinal", 999)),  # type: ignore
+        is_hidden=str(data.get("visibility", "")).lower().startswith("hidden"),
     )
 
     page.filters = _parse_filter_list(data.get("filters", []))
@@ -142,8 +133,8 @@ def _parse_visual(visual_json_path: str, folder_name: str) -> Visual | None:
     visual_node = data.get("visual", {})
     visual_type = visual_node.get("visualType", "unknown")
 
-    if visual_type.lower() in EXCLUDED_VISUAL_TYPES:
-        return None
+    # Les visuels à ignorer sont définis dans config_doc_pbi.yaml
+    # (data.visuals.exclude_types) : ici on parse tout.
     if visual_node.get("visualGroup"):
         return None
 
@@ -154,6 +145,8 @@ def _parse_visual(visual_json_path: str, folder_name: str) -> Visual | None:
     filter_config = data.get("filterConfig", {})
     filters = _parse_filter_list(filter_config.get("filters", []))
 
+    position = data.get("position", {})
+
     return Visual(
         id=folder_name,
         visual_type=visual_type,
@@ -161,6 +154,8 @@ def _parse_visual(visual_json_path: str, folder_name: str) -> Visual | None:
         elements=elements,
         filters=filters,
         has_measures=has_measures,
+        pos_x=float(position.get("x", 0) or 0),
+        pos_y=float(position.get("y", 0) or 0),
     )
 
 
