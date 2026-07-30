@@ -5,12 +5,14 @@ description = "Générateur automatique de documentation Power BI (.pbip)"
 requires-python = ">=3.14"
 dependencies = [
     "python-docx>=1.2.0",
+    "pyyaml>=6.0.2",
     "taskipy>=1.14.1",
     "ruff>=0.16.0",
 ]
 
 # Commandes rapides
 [tool.taskipy.tasks]
+install = "pip install -e ."
 run = "python main.py"
 lint = "ruff check ."
 format = "ruff format ."

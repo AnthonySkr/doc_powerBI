@@ -138,6 +138,8 @@ data:
     exclude_hidden: true
     exclude_names: []          # tables techniques à ne pas documenter
     sort_by: name
+    # Mise en forme d'une étape Power Query : {name} et {expression}
+    step_format: "{name}"
 
   measures:
     scope: used_in_report      # all | used_in_report (mesures + dépendances)
@@ -242,6 +244,7 @@ sections:
           # du sélecteur est écrite directement sous le titre 2.
           - type: paragraph
             id: nav_simple
+            prompt: "Présentation du sélecteur de navigation"
             when: "!inputs.pages_secondaires"
             editable: true
             text: >-
@@ -261,6 +264,7 @@ sections:
               - type: paragraph
                 id: nav_principales_texte
                 editable: true
+                prompt: "Présentation du sélecteur de navigation (pages principales)"
                 text: >-
                   Le sélecteur de navigation permet de naviguer entre chaque page
                   "principale". A partir des pages principales nous pouvons naviguer
@@ -277,6 +281,7 @@ sections:
               - type: paragraph
                 id: nav_secondaires_aller
                 editable: true
+                prompt: "Navigation vers une page secondaire"
                 text: >-
                   Pour naviguer vers un affichage secondaire il suffit de cliquer sur
                   les flèches matérialisées à côté d'une information.
@@ -286,6 +291,7 @@ sections:
               - type: paragraph
                 id: nav_secondaires_retour
                 editable: true
+                prompt: "Retour vers une page principale"
                 text: >-
                   Pour retourner vers un affichage principal, il vous suffit de cliquer
                   sur la flèche symbolisant un retour en arrière, en haut à droite de
@@ -307,6 +313,7 @@ sections:
               - type: paragraph
                 id: filtre_ouverture
                 editable: true
+                prompt: "Ouverture du volet de filtre"
                 text: >-
                   Pour ouvrir le volet de sélection de filtre, un bouton « filtre » se
                   trouve dans l'en-tête de chaque onglet principal. En cliquant dessus
@@ -317,6 +324,7 @@ sections:
               - type: paragraph
                 id: filtre_fermeture
                 editable: true
+                prompt: "Fermeture du volet de filtre"
                 text: >-
                   Pour le fermer, cliquez sur la croix en haut à droite du volet.
               - type: image
