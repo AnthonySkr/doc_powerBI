@@ -29,11 +29,15 @@ Options :
 | --- | --- |
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
+| `-n`, `--dry-run` | Afficher les nouveautés et les changements sans toucher au document |
+| `-f`, `--force` | Régénérer le document depuis le template (le contenu rédigé est perdu) |
 
 Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.pbip`.
 
 ## Ce que fait le script
 
+0. Si le document de sortie existe déjà, bascule en mise à jour : il est
+   complété, jamais réécrit (voir plus bas).
 1. Lit le modèle sémantique (`.SemanticModel`) : mesures DAX, tables, sources
    et étapes de transformation Power Query.
 2. Analyse les dépendances entre mesures (mesures et colonnes utilisées).
@@ -145,6 +149,66 @@ inverse des liens précédents :
 - **Utilisée par** — les mesures dont l'expression DAX appelle celle-ci ; ces
   noms sont liés automatiquement vers leur propre définition.
 
+## Mise à jour d'un document déjà rédigé
+
+Une documentation livrée est complétée à la main : descriptions, sources,
+parties laissées vides. **Si le fichier de sortie existe déjà, le script ne le
+réécrit pas** : il compare le document à ce qu'il produirait aujourd'hui et n'y
+reporte que les différences.
+
+```
+Nouveautés (1) :
+  - mesure « Panier moyen » — nouveau
+Changements (2) :
+  - visuel « CA du mois » — modifié (les champs du visuel)
+  - mesure « Chiffre d'affaires » — modifié (le code DAX, les sources utilisées)
+Disparus (1) :
+  - « Nb jours » — absent du rapport
+```
+
+Ce qui est fait, et ce qui ne l'est pas :
+
+| Situation | Traitement |
+| --- | --- |
+| Item absent du document (mesure, visuel, page, table) | Inséré à sa place dans le plan |
+| Bloc `track:` dont le contenu a changé (code DAX, champs d'un visuel…) | Remplacé par la version à jour |
+| Bloc `review:` (description) ou zone « à compléter » rédigée | **Jamais réécrit** — surligné en rouge, avec une note à supprimer une fois relu |
+| Item disparu du rapport | Signalé par une note, **jamais supprimé** |
+| Reste du document | Intact |
+
+Une copie de sauvegarde (`documentation_x.bak.docx`) est écrite avant toute
+modification, y compris avec `--force`. Relancer le script sans changement de
+modèle ne touche pas au fichier.
+
+### Comment le script s'y retrouve
+
+Le générateur pose un signet Word sur le titre de chaque item (`bookmark:` du
+plan) et autour de chaque bloc déclaré `track:` ou `review:`. Ces signets
+survivent aux modifications faites dans Word : c'est par eux que la mise à jour
+retrouve, dans le document livré, ce qu'elle doit comparer ou remplacer.
+
+```yaml
+- type: property
+  id: mesure_code
+  value: "{{ measure.expression }}"
+  track: true          # piloté par le script : remplacé si le modèle change
+- type: property
+  id: mesure_description
+  value: "{{ measure.description }}"
+  review: true         # rédigé par l'utilisateur : jamais réécrit
+```
+
+### Réglages — `rendering.update`
+
+| Clé | Effet |
+| --- | --- |
+| `enabled` | `false` : le script refuse d'écrire sur un document existant |
+| `backup` / `backup_suffix` | Copie de sauvegarde avant écriture |
+| `highlight` | Couleur de surlignage des textes à relire (`red` par défaut) |
+| `note_style` | Style des notes de suivi |
+| `notes.changed` / `notes.removed` | Texte des notes (`{date}`, `{changes}`) |
+| `block_labels` / `labels` | Libellés lisibles des blocs et des natures d'items |
+
 ## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
@@ -195,6 +259,9 @@ src/
       data_context.py         filtres/tris et données exposées au plan
       word_generator.py       écriture du .docx en parcourant le plan
       measure_links.py        repérage des mentions de mesures dans les textes
+      docx_index.py           relecture d'un document par ses signets
+      doc_updater.py          comparaison et report des seuls changements
+      update_runner.py        enchaînement du mode « mise à jour »
   parsers/
       tmdl_parser.py          mesures DAX, tables, sources et étapes Power Query
       report_parser.py        pages, visuels, champs et filtres du rapport

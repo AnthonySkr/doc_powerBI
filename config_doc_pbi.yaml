@@ -113,6 +113,42 @@ rendering:
     numbering: true            # numérotation continue des figures du document
     empty_paragraph_after: false
 
+  # Mise à jour d'un document déjà rédigé. Si le fichier de sortie existe, le
+  # script ne le réécrit pas : il compare, insère les nouveautés et remplace
+  # les blocs `track:` dont le contenu a changé. Les blocs `review:` (rédigés
+  # par l'utilisateur) ne sont jamais réécrits, seulement surlignés.
+  update:
+    enabled: true
+    backup: true               # copie de sauvegarde avant écriture
+    backup_suffix: ".bak"
+    highlight: red             # surlignage des textes à relire
+    note_style: "{{ styles.todo }}"
+    # Libellés lisibles des blocs suivis, repris dans le bilan et les notes
+    block_labels:
+      mesure_code: "le code DAX"
+      mesure_sources: "les sources utilisées"
+      mesure_utilisee_dans: "les visuels qui l'utilisent"
+      mesure_utilisee_par: "les mesures qui l'utilisent"
+      visuel_references: "les champs du visuel"
+      table_parametres: "la source de la table"
+      table_traitement: "les étapes de transformation"
+
+    # Nature des items, d'après le préfixe de leur signet, pour le bilan console
+    labels:
+      page: "page"
+      visual: "visuel"
+      measure: "mesure"
+      table: "table"
+      groupe-mesures: "table"
+    notes:
+      # {date} = date du jour, {changes} = blocs modifiés
+      changed: >-
+        ⚠ Mise à jour du {date} : {changes} — vérifier que le texte ci-dessus
+        est toujours exact, puis supprimer cette note.
+      removed: >-
+        ⚠ Mise à jour du {date} : cet élément n'existe plus dans le rapport.
+        Le conserver ou supprimer cette partie.
+
   # Table des matières du template (page 2). Les numéros de page dépendent de
   # la mise en page : seul Word sait les calculer. Le champ est donc marqué
   # « à recalculer », ce que Word applique à l'ouverture du document.
@@ -419,6 +455,7 @@ sections:
         section:
           title: "{{ page.display_name }}"
           level: 2
+          bookmark: "page:{{ page.name }}"
           blocks:
             - type: image
               id: page_capture
@@ -447,6 +484,7 @@ sections:
                   # colonne est reporté à la main sur la capture ci-dessus.
                   - type: table
                     id: visuel_references
+                    track: true          # remplacé si les champs du visuel changent
                     over: visual.references
                     item: ref
                     style: "{{ styles.table }}"
@@ -548,12 +586,14 @@ sections:
             section:
               title: "{{ table.name }}"
               level: 3
+              bookmark: "table:{{ table.name }}"
               blocks:
                 - type: property
                   id: table_parametres
                   label: "Paramètres"
                   value: "{{ table.source }}"
                   fallback: "[À compléter]"
+                  track: true
 
                 - type: property
                   id: table_traitement
@@ -562,6 +602,7 @@ sections:
                   value_list: "{{ table.transformation_steps }}"
                   value_style: "{{ styles.bullet }}"
                   fallback: "[À compléter]"
+                  track: true
 
   # ---------------------------------------------------------------------------
   #  DÉFINITION DES MESURES — cible des liens hypertextes des visuels
@@ -578,6 +619,7 @@ sections:
         section:
           title: "{{ table.name }}"
           level: 2
+          bookmark: "groupe-mesures:{{ table.name }}"
           blocks:
             - type: loop
               id: boucle_mesures
@@ -593,12 +635,14 @@ sections:
                     label: "Code DAX"
                     value: "{{ measure.expression }}"
                     value_style: "{{ styles.code }}"
+                    track: true          # remplacé si la formule change
 
                   - type: property
                     id: mesure_description
                     label: "Description"
                     value: "{{ measure.description }}"
                     fallback: "[À compléter]"
+                    review: true         # rédigé par l'utilisateur : jamais réécrit
 
                   - type: property
                     id: mesure_sources
@@ -607,6 +651,7 @@ sections:
                     value_list: "{{ measure.used_columns + measure.dependent_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "[À compléter]"
+                    track: true
 
                   # Chemin inverse des liens : d'ici on remonte aux visuels
                   # qui affichent la mesure, puis aux mesures qui l'appellent.
@@ -616,6 +661,7 @@ sections:
                     value_list: "{{ measure.usages }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "Aucun visuel n'affiche directement cette mesure."
+                    track: true
 
                   - type: property
                     id: mesure_utilisee_par
@@ -624,3 +670,4 @@ sections:
                     value_list: "{{ measure.used_by_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "Aucune autre mesure ne l'utilise."
+                    track: true

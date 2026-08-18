@@ -71,15 +71,11 @@ def generate_word_documentation(
         text_provider: callback optionnel permettant à l'utilisateur de
             modifier les textes des blocs `editable`
     """
-    template_path = render(config.document.get("template"), context)
-
     try:
-        doc = Document(template_path)
-    except Exception as e:  # noqa: BLE001
+        doc, _, _ = build_document(config, context, text_provider)
+    except OSError as e:
+        template_path = render(config.document.get("template"), context)
         return f"ERREUR : Impossible de charger le template '{template_path}'. Détails : {e}"
-
-    builder = _DocumentBuilder(doc, config, context, text_provider)
-    builder.build()
 
     try:
         doc.save(output_path)
@@ -90,6 +86,28 @@ def generate_word_documentation(
         print(f"  {refresh_fields_with_word(output_path)}")
 
     return f"Documentation Word générée : '{output_path}'"
+
+
+def build_document(
+    config: DocConfig,
+    context: dict[str, Any],
+    text_provider: TextProvider | None = None,
+) -> tuple[Any, dict[str, str], dict[str, str]]:
+    """
+    Construit le document en mémoire, sans l'écrire.
+
+    Le mode « mise à jour » compare ce document fraîchement généré au fichier
+    déjà présent, pour n'y reporter que les nouveautés et les changements.
+
+    Returns:
+        (document, signets des blocs suivis -> id du bloc,
+         signets d'items -> valeur brute du signet)
+    """
+    template_path = render(config.document.get("template"), context)
+    doc = Document(template_path)
+    builder = _DocumentBuilder(doc, config, context, text_provider)
+    builder.build()
+    return doc, builder.tracked_blocks, builder.item_bookmarks
 
 
 def refresh_fields_with_word(path: str) -> str:
@@ -163,6 +181,14 @@ class _DocumentBuilder:
         self._bookmarks: set[str] = set()
         self._anchors: dict[str, int] = {}
 
+        # Signet de la section en cours : préfixe des signets de blocs suivis.
+        self._current_item: str = ""
+        # Signets posés autour des blocs suivis : nom de signet -> id du bloc.
+        self.tracked_blocks: dict[str, str] = {}
+        # Signets d'items : nom de signet -> valeur brute (« measure:CA »).
+        self.item_bookmarks: dict[str, str] = {}
+
+        self._update = self.config.rendering.get("update") or {}
         self._links = self.config.rendering["links"]
         self._auto = self._links.get("auto") or {}
         self.linker = self._build_linker()
@@ -292,6 +318,8 @@ class _DocumentBuilder:
         if self._needs_page_break(section):
             self.doc.add_page_break()
 
+        previous_item = self._current_item
+
         title = render(section.get("title"), context)
         if title:
             level = int(section.get("level", 1))
@@ -299,13 +327,19 @@ class _DocumentBuilder:
             self._add_title_suffix(paragraph, section, context)
             bookmark = section.get("bookmark")
             if bookmark:
-                self._add_bookmark(paragraph, render(bookmark, context))
+                self._current_item = render(bookmark, context)
+                name = self._bookmark_for(self._current_item)
+                if name:
+                    self.item_bookmarks[name] = self._current_item
+                self._add_bookmark(paragraph, self._current_item)
 
         for block in section.get("blocks") or []:
             self._write_block(block, context)
 
         for child in section.get("sections") or []:
             self._write_section(child, context)
+
+        self._current_item = previous_item
 
     def _add_title_suffix(
         self, paragraph, section: dict[str, Any], context: dict[str, Any]
@@ -340,7 +374,22 @@ class _DocumentBuilder:
         if writer is None:
             print(f"  Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
+
+        if not self._tracks(block):
+            writer(block, context)
+            return
+
+        # Le bloc est repérable dans le document : la mise à jour saura le
+        # retrouver pour le comparer, le remplacer ou le signaler.
+        # `before` garde une référence sur chaque élément : sans elle, lxml
+        # recycle ses objets Python et la comparaison devient fausse.
+        body = self.doc.element.body
+        before = list(body)
         writer(block, context)
+        written = [child for child in body if not any(child is known for known in before)]
+        name = self._wrap_bookmark(written, block_bookmark(self._current_item, block["id"]))
+        if name:
+            self.tracked_blocks[name] = block["id"]
 
     def _write_paragraph_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         text = render(block.get("text"), context)
@@ -703,6 +752,33 @@ class _DocumentBuilder:
         prefix = self._links.get("bookmark_prefix", "") or ""
         return _bookmark_name(prefix + (raw_name or ""))
 
+    def _tracks(self, block: dict[str, Any]) -> bool:
+        """Un bloc suivi porte un signet, pour être comparé d'une exécution à l'autre."""
+        if not self._update.get("enabled", True) or not block.get("id"):
+            return False
+        if not self._current_item:
+            return False
+        return bool(block.get("track") or block.get("review"))
+
+    def _wrap_bookmark(self, elements: list[Any], raw_name: str) -> str:
+        """Encadre une suite d'éléments par un signet (début avant, fin après)."""
+        name = self._bookmark_for(raw_name)
+        if not name or not elements or name in self._bookmarks:
+            return ""
+
+        self._bookmarks.add(name)
+        self._bookmark_id += 1
+
+        start = OxmlElement("w:bookmarkStart")
+        start.set(qn("w:id"), str(self._bookmark_id))
+        start.set(qn("w:name"), name)
+        elements[0].addprevious(start)
+
+        end = OxmlElement("w:bookmarkEnd")
+        end.set(qn("w:id"), str(self._bookmark_id))
+        elements[-1].addnext(end)
+        return name
+
     def _add_bookmark(self, paragraph, raw_name: str) -> None:
         name = self._bookmark_for(raw_name)
         if not name or name in self._bookmarks:
@@ -1026,6 +1102,39 @@ def _set_update_fields(settings) -> None:
             return
 
     settings.append(element)
+
+
+def style_id(doc, config: DocConfig, key: str) -> str:
+    """Identifiant du style Word correspondant à une clé de configuration."""
+    name = config.styles.get(key, key)
+    for style in doc.styles:
+        if style.name == name:
+            return style.style_id
+    return ""
+
+
+def heading_style_levels(doc, config: DocConfig) -> dict[str, int]:
+    """
+    Identifiant de style de titre -> niveau (« Titre2 » -> 2).
+
+    Les titres du document portent l'identifiant du style, pas son nom : la
+    relecture d'un document a besoin de la correspondance pour reconstituer
+    la hiérarchie des sections.
+    """
+    ids = {style.name: style.style_id for style in doc.styles}
+    levels: dict[str, int] = {}
+    for key, name in config.styles.items():
+        if not key.startswith("heading_"):
+            continue
+        style_id = ids.get(name)
+        if style_id:
+            levels[style_id] = int(key.split("_")[1])
+    return levels
+
+
+def block_bookmark(item_bookmark: str, block_id: str) -> str:
+    """Nom brut du signet encadrant un bloc suivi d'un item."""
+    return f"{item_bookmark}#{block_id}"
 
 
 def _bookmark_name(name: str) -> str:

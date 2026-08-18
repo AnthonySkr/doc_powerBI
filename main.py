@@ -12,6 +12,8 @@ from typing import Any
 
 from src.doc_config import DEFAULT_CONFIG_PATH, DocConfig, load_config, render
 from src.generators.data_context import build_context
+from src.generators.doc_updater import backup_document
+from src.generators.update_runner import update_existing_documentation
 from src.generators.word_generator import generate_word_documentation
 from src.parsers.dependency_analyzer import (
     analyze_all_dependencies,
@@ -174,6 +176,18 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Ne pose aucune question : utilise les valeurs par défaut du YAML",
     )
+    parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Régénère le document même s'il existe déjà (le contenu rédigé est perdu)",
+    )
+    parser.add_argument(
+        "-n",
+        "--dry-run",
+        action="store_true",
+        help="Affiche les nouveautés et les changements sans modifier le document",
+    )
     return parser.parse_args()
 
 
@@ -275,7 +289,25 @@ def main() -> None:
         not args.no_input and bool(inputs.get("editer_textes", False))
     )
 
-    result = generate_word_documentation(config, context, word_path, text_provider)
+    if os.path.isfile(word_path) and not args.force:
+        result = update_existing_documentation(
+            config, context, word_path, text_provider, dry_run=args.dry_run
+        )
+    elif os.path.isfile(word_path) and args.dry_run:
+        result = f"Simulation : '{word_path}' serait régénéré (--force)"
+    elif os.path.isfile(word_path):
+        # Régénération demandée : le contenu rédigé est perdu, d'où la copie.
+        saved = backup_document(
+            word_path, (config.rendering.get("update") or {}).get("backup_suffix", ".bak")
+        )
+        if saved:
+            print(f"  Sauvegarde de la version précédente : '{saved}'")
+        result = generate_word_documentation(config, context, word_path, text_provider)
+    elif args.dry_run:
+        result = f"Document absent : il serait créé ('{word_path}')"
+    else:
+        result = generate_word_documentation(config, context, word_path, text_provider)
+
     print(f"  {result}")
     print()
     print("=" * 65)

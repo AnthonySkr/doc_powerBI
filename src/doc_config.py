@@ -63,6 +63,39 @@ _DEFAULTS: dict[str, Any] = {
             "show_placeholder": True,
             "style": "{{ styles.todo }}",
         },
+        "update": {
+            "enabled": True,
+            "backup": True,
+            "backup_suffix": ".bak",
+            "highlight": "red",
+            "note_style": "{{ styles.todo }}",
+            "block_labels": {
+                "mesure_code": "le code DAX",
+                "mesure_sources": "les sources utilisées",
+                "mesure_utilisee_dans": "les visuels qui l'utilisent",
+                "mesure_utilisee_par": "les mesures qui l'utilisent",
+                "visuel_references": "les champs du visuel",
+                "table_parametres": "la source de la table",
+                "table_traitement": "les étapes de transformation",
+            },
+            "labels": {
+                "page": "page",
+                "visual": "visuel",
+                "measure": "mesure",
+                "table": "table",
+                "groupe-mesures": "table",
+            },
+            "notes": {
+                "changed": (
+                    "⚠ Mise à jour du {date} : {changes} — vérifier que le texte "
+                    "ci-dessus est toujours exact, puis supprimer cette note."
+                ),
+                "removed": (
+                    "⚠ Mise à jour du {date} : cet élément n'existe plus dans le "
+                    "rapport. Le conserver ou supprimer cette partie."
+                ),
+            },
+        },
         "table_of_contents": {
             "update": True,
             "update_all_fields": False,
@@ -155,6 +188,32 @@ class DocConfig:
     def find_section(self, section_id: str) -> dict[str, Any] | None:
         """Retourne une section du plan par son id (recherche récursive)."""
         return _find_section(self.sections, section_id)
+
+    def iter_blocks(self) -> list[dict[str, Any]]:
+        """Tous les blocs du plan, y compris ceux imbriqués dans les boucles."""
+        blocks: list[dict[str, Any]] = []
+        for section in self.sections:
+            _collect_blocks(section, blocks)
+        return blocks
+
+    def tracked_block_ids(self) -> tuple[set[str], set[str]]:
+        """
+        Identifiants des blocs suivis d'une exécution à l'autre.
+
+        Returns:
+            (blocs pilotés par le script, blocs rédigés par l'utilisateur)
+        """
+        tracked: set[str] = set()
+        review: set[str] = set()
+        for block in self.iter_blocks():
+            block_id = block.get("id")
+            if not block_id:
+                continue
+            if block.get("review"):
+                review.add(block_id)
+            if block.get("track"):
+                tracked.add(block_id)
+        return tracked, review
 
     def section_options(self, section_id: str) -> dict[str, Any]:
         """Retourne le bloc `options` d'une section, ou {} s'il n'existe pas."""
@@ -328,6 +387,19 @@ def _merge_defaults(value: dict[str, Any], defaults: dict[str, Any]) -> dict[str
         else:
             merged[key] = val
     return merged
+
+
+def _collect_blocks(section: dict[str, Any], blocks: list[dict[str, Any]]) -> None:
+    """Ajoute les blocs d'une section et de ses descendants."""
+    for block in section.get("blocks") or []:
+        blocks.append(block)
+        if block.get("type") == "loop":
+            if block.get("section"):
+                _collect_blocks(block["section"], blocks)
+            for inner in block.get("blocks") or []:
+                blocks.append(inner)
+    for child in section.get("sections") or []:
+        _collect_blocks(child, blocks)
 
 
 def _find_section(sections: list[dict[str, Any]], section_id: str) -> dict[str, Any] | None:
