@@ -25,6 +25,7 @@ _DEFAULTS: dict[str, Any] = {
         "output_name": "documentation_{{ report.name }}.docx",
         "write_mode": "append",
         "cover": {"placeholder": "", "text": "", "bold": True},
+        "header_footer": {"replacements": []},
         "properties": {},
     },
     "styles": {
@@ -51,6 +52,12 @@ _DEFAULTS: dict[str, Any] = {
             "empty_paragraph_after": True,
         },
         "user_fill": {"placeholder_text": "[À compléter]", "show_placeholder": True},
+        "table_of_contents": {
+            "update": True,
+            "update_all_fields": False,
+            "update_with_word": False,
+            "levels": "",
+        },
         "links": {
             "enabled": True,
             "style": "Hyperlink",

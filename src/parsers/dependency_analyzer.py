@@ -65,6 +65,12 @@ def analyze_all_dependencies(all_measures: dict[str, DaxMeasure]) -> None:
         measure.dependent_measures = visited - {name}
         measure.used_columns = all_columns
 
+    # Relation inverse : quelles mesures appellent directement celle-ci.
+    for name, measure in all_measures.items():
+        measure.used_by_measures = {
+            other for other, deps in direct_deps.items() if name in deps and other != name
+        }
+
 
 def get_measures_used_in_report(report, all_measures: dict[str, DaxMeasure]) -> set[str]:
     """

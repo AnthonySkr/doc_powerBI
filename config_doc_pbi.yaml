@@ -49,6 +49,21 @@ document:
     text: "Documentation du Rapport\n{{ inputs.nom_rapport }}"
     bold: true
 
+  # En-têtes et pieds de page du template : le texte placé à droite est
+  # remplacé par la réponse à `titre_entete` (le nom du rapport par défaut).
+  # `scope` : header | footer | all (défaut : all).
+  header_footer:
+    replacements:
+      - placeholder: "Titre intercalaire 1"
+        text: "{{ inputs.titre_entete }}"
+        scope: header
+      - placeholder: "Ne pas oublier"
+        text: "{{ inputs.titre_entete }}"
+        scope: header
+      - placeholder: "Titre du document"
+        text: "{{ inputs.titre_entete }}"
+        scope: footer
+
   # Propriétés du fichier .docx
   properties:
     title: "Documentation Rapport Power BI : {{ inputs.nom_rapport }}"
@@ -87,6 +102,17 @@ rendering:
     show_caption: false        # true = ajoute une légende numérotée sous l'emplacement
     numbering: true            # numérotation continue des figures du document
     empty_paragraph_after: true
+
+  # Table des matières du template (page 2). Les numéros de page dépendent de
+  # la mise en page : seul Word sait les calculer. Le champ est donc marqué
+  # « à recalculer », ce que Word applique à l'ouverture du document.
+  table_of_contents:
+    update: true
+    update_all_fields: false  # true = Word recalcule aussi les autres champs
+    # true = pilote Word en fin de script pour livrer un document déjà à jour
+    # (Windows, Word installé et paquet pywin32 ; sinon l'option est ignorée).
+    update_with_word: false
+    levels: ""                # ex. "1-3" pour inclure les visuels et les mesures
 
   # Zones laissées vides pour rédaction manuelle après génération.
   user_fill:
@@ -169,6 +195,11 @@ inputs:
     type: text
     label: "Nom du rapport à afficher sur la page de garde"
     default: "{{ report.name }}"
+
+  - id: titre_entete
+    type: text
+    label: "Texte à afficher en haut à droite de chaque page (en-tête)"
+    default: "{{ inputs.nom_rapport }}"
 
   - id: pages_secondaires
     type: confirm
@@ -390,6 +421,8 @@ sections:
               section:
                 title: "{{ visual.title }}"
                 level: 3
+                # Cible des liens « Utilisée dans » de la définition des mesures
+                bookmark: "visual:{{ page.name }}:{{ visual.id }}"
                 blocks:
                   - type: image
                     id: visuel_capture
@@ -424,6 +457,12 @@ sections:
 
     # --- Construction des références de visuel -------------------------------
     options:
+      # Liens retour : depuis la définition d'une mesure vers les visuels qui
+      # l'utilisent. `target` doit reprendre le `bookmark:` du titre du visuel.
+      usages:
+        target: "visual:{{ page.name }}:{{ visual.id }}"
+        label: "{{ page.display_name }} — {{ visual.title }}"
+
       references:
         numbering:
           start: 1
@@ -544,3 +583,20 @@ sections:
                     value_list: "{{ measure.used_columns + measure.dependent_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "[À compléter]"
+
+                  # Chemin inverse des liens : d'ici on remonte aux visuels
+                  # qui affichent la mesure, puis aux mesures qui l'appellent.
+                  - type: property
+                    id: mesure_utilisee_dans
+                    label: "Utilisée dans"
+                    value_list: "{{ measure.usages }}"
+                    value_style: "{{ styles.bullet }}"
+                    fallback: "Aucun visuel n'affiche directement cette mesure."
+
+                  - type: property
+                    id: mesure_utilisee_par
+                    label: "Utilisée par"
+                    # Mesures dont l'expression appelle celle-ci (liens auto)
+                    value_list: "{{ measure.used_by_measures }}"
+                    value_style: "{{ styles.bullet }}"
+                    fallback: "Aucune autre mesure ne l'utilise."

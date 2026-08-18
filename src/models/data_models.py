@@ -2,6 +2,17 @@ from dataclasses import dataclass, field
 
 
 @dataclass
+class DocLink:
+    """Texte pointant vers un signet du document (lien interne)."""
+
+    text: str
+    target: str
+
+    def __str__(self) -> str:
+        return self.text
+
+
+@dataclass
 class DaxMeasure:
     """Représente une mesure DAX du modèle sémantique."""
 
@@ -14,6 +25,10 @@ class DaxMeasure:
     is_hidden: bool = False
     dependent_measures: set = field(default_factory=set)
     used_columns: set = field(default_factory=set)
+    # Mesures dont l'expression fait directement appel à celle-ci.
+    used_by_measures: set = field(default_factory=set)
+    # Visuels où la mesure est utilisée (DocLink vers le titre du visuel).
+    usages: list = field(default_factory=list)
 
     def __hash__(self):
         return hash(self.name)
