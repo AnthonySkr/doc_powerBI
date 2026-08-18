@@ -40,6 +40,45 @@ class VisualFilter:
 
 
 @dataclass
+class ModelTable:
+    """Représente une table du modèle sémantique."""
+
+    name: str
+    source: str = ""
+    transformation_steps: list = field(default_factory=list)
+    is_hidden: bool = False
+    measures: list = field(default_factory=list)
+
+
+@dataclass
+class VisualReference:
+    """Ligne du tableau des références d'un visuel (numéro + libellé)."""
+
+    number: str
+    kind: str  # "mesure", "colonne", "hierarchie", "filtre"
+    name: str
+    label: str
+    role: str = ""
+    expression: str = ""
+
+
+@dataclass
+class MeasureGroup:
+    """Regroupement de mesures (par table ou par dossier d'affichage)."""
+
+    name: str
+    measures: list = field(default_factory=list)
+
+
+@dataclass
+class SemanticModel:
+    """Vue du modèle sémantique exposée au plan de documentation."""
+
+    tables: list = field(default_factory=list)
+    tables_with_measures: list = field(default_factory=list)
+
+
+@dataclass
 class VisualElement:
     """Représente un champ de données utilisé dans un visuel."""
 
@@ -62,6 +101,9 @@ class Visual:
     elements: list = field(default_factory=list)
     filters: list = field(default_factory=list)
     has_measures: bool = False
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    references: list = field(default_factory=list)
 
     @property
     def measures(self) -> list:
@@ -79,6 +121,7 @@ class ReportPage:
     name: str
     display_name: str
     order: int = 0
+    is_hidden: bool = False
     filters: list = field(default_factory=list)
     visuals: list = field(default_factory=list)
 
@@ -89,5 +132,6 @@ class PowerBIReport:
 
     name: str
     pages: list = field(default_factory=list)
+    tables: list = field(default_factory=list)
     all_measures: dict = field(default_factory=dict)
     measures_used_in_report: set = field(default_factory=set)

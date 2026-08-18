@@ -10,7 +10,7 @@ Gère :
 import os
 import re
 
-from models.data_models import DaxMeasure
+from src.models.data_models import DaxMeasure, ModelTable
 
 _BLOCK_KEYWORDS = frozenset(
     [
@@ -61,6 +61,209 @@ def load_all_measures_from_model(semantic_model_path: str) -> dict[str, DaxMeasu
 
     print(f"  {len(all_measures)} mesures chargées")
     return all_measures
+
+
+def load_all_tables_from_model(semantic_model_path: str) -> list[ModelTable]:
+    """
+    Charge les tables du modèle sémantique avec leur source et leurs étapes
+    de transformation Power Query (partie « Table de données » de la doc).
+
+    Args:
+        semantic_model_path: Chemin vers le dossier .SemanticModel/
+
+    Returns:
+        Liste de ModelTable
+    """
+    tables: list[ModelTable] = []
+
+    tables_dir = os.path.join(semantic_model_path, "definition", "tables")
+    if not os.path.isdir(tables_dir):
+        return tables
+
+    for file_name in sorted(os.listdir(tables_dir)):
+        if not file_name.endswith(".tmdl"):
+            continue
+        content = _read_file(os.path.join(tables_dir, file_name))
+        if content is None:
+            continue
+        tables.append(_parse_table(content))
+
+    print(f"  {len(tables)} tables chargées")
+    return tables
+
+
+def _parse_table(content: str) -> ModelTable:
+    """Construit un ModelTable depuis le contenu d'un fichier .tmdl."""
+    name = _extract_table_name(content)
+    m_code = _extract_partition_source(content)
+    steps = _parse_m_steps(m_code)
+
+    return ModelTable(
+        name=name,
+        source=_extract_source_expression(steps, m_code),
+        transformation_steps=steps,
+        is_hidden=_is_table_hidden(content),
+    )
+
+
+def _is_table_hidden(content: str) -> bool:
+    """Détecte `isHidden` au niveau de la table (avant le premier sous-bloc)."""
+    for line in content.splitlines():
+        stripped = line.strip()
+        if not stripped:
+            continue
+        first_token = stripped.split()[0].lower().rstrip(":")
+        if first_token in _BLOCK_KEYWORDS and first_token != "table":
+            return False
+        if stripped.lower() == "ishidden":
+            return True
+    return False
+
+
+def _extract_partition_source(content: str) -> str:
+    """Extrait le code M du bloc `partition ... source = ...`."""
+    lines = content.splitlines()
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not re.match(r"^source\s*=", stripped):
+            continue
+
+        inline = stripped.split("=", 1)[1].strip()
+        if inline and inline != "```":
+            return inline
+
+        # Expression multi-lignes : on collecte tant que l'indentation
+        # reste supérieure à celle de la ligne `source =`.
+        indent = len(line) - len(line.lstrip())
+        collected: list[str] = []
+        for next_line in lines[i + 1 :]:
+            if not next_line.strip():
+                collected.append("")
+                continue
+            if next_line.strip() == "```":
+                break
+            if (len(next_line) - len(next_line.lstrip())) <= indent:
+                break
+            collected.append(next_line)
+        return "\n".join(collected).strip()
+
+    return ""
+
+
+def _parse_m_steps(m_code: str) -> list[dict[str, str]]:
+    """
+    Découpe un script Power Query `let ... in ...` en étapes.
+
+    Returns:
+        Liste de {"name": nom de l'étape, "expression": expression associée}
+    """
+    if not m_code:
+        return []
+
+    body = _let_body(m_code)
+    if body is None:
+        return []
+
+    steps: list[dict[str, str]] = []
+    for chunk in _split_top_level(body, ","):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        name, _, expression = _split_first_top_level(chunk, "=")
+        if not name:
+            continue
+        steps.append(
+            {
+                "name": _clean_m_identifier(name),
+                "expression": " ".join(expression.split()),
+            }
+        )
+    return steps
+
+
+def _let_body(m_code: str) -> str | None:
+    """Isole le corps entre `let` et le `in` final (hors chaînes/parenthèses)."""
+    match = re.search(r"\blet\b", m_code)
+    if not match:
+        return None
+
+    body = m_code[match.end() :]
+    last_in = None
+    for token in re.finditer(r"\bin\b", body):
+        if _depth_at(body, token.start()) == 0:
+            last_in = token.start()
+
+    return body[:last_in] if last_in is not None else body
+
+
+def _depth_at(text: str, index: int) -> int:
+    """Profondeur de parenthésage à une position, en ignorant les chaînes."""
+    depth = 0
+    in_string = False
+    i = 0
+    while i < index and i < len(text):
+        char = text[i]
+        if char == '"':
+            in_string = not in_string
+        elif not in_string:
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+        i += 1
+    return depth
+
+
+def _split_top_level(text: str, separator: str) -> list[str]:
+    """Découpe une chaîne sur un séparateur situé au niveau 0."""
+    parts: list[str] = []
+    current: list[str] = []
+    depth = 0
+    in_string = False
+
+    for char in text:
+        if char == '"':
+            in_string = not in_string
+        elif not in_string:
+            if char in "([{":
+                depth += 1
+            elif char in ")]}":
+                depth -= 1
+            elif char == separator and depth == 0:
+                parts.append("".join(current))
+                current = []
+                continue
+        current.append(char)
+
+    parts.append("".join(current))
+    return parts
+
+
+def _split_first_top_level(text: str, separator: str) -> tuple[str, bool, str]:
+    """Sépare `text` au premier séparateur de niveau 0."""
+    parts = _split_top_level(text, separator)
+    if len(parts) < 2:
+        return "", False, text
+    return parts[0].strip(), True, separator.join(parts[1:]).strip()
+
+
+def _clean_m_identifier(name: str) -> str:
+    """Nettoie un identifiant Power Query : #"Lignes filtrées" → Lignes filtrées"""
+    name = name.strip()
+    if name.startswith('#"') and name.endswith('"'):
+        return name[2:-1]
+    return name.strip('"')
+
+
+def _extract_source_expression(steps: list[dict[str, str]], m_code: str) -> str:
+    """Détermine la source de la table (paramètres de connexion)."""
+    for step in steps:
+        if step["name"].lower() in ("source", "src"):
+            return step["expression"]
+    if steps:
+        return steps[0]["expression"]
+    return " ".join(m_code.split())[:500]
 
 
 # ─────────────────────────────────────────────────────────────
@@ -156,7 +359,7 @@ def _parse_block(block_lines: list[str], table_name: str) -> DaxMeasure | None:
         return None
 
     first_line = block_lines[0].strip()
-    name, inline_expr = _parse_header(first_line)
+    name, inline_expr, opens_fence = _parse_header(first_line)
     if not name:
         return None
 
@@ -167,7 +370,7 @@ def _parse_block(block_lines: list[str], table_name: str) -> DaxMeasure | None:
     expression_lines: list[str] = []
 
     mode = "expression"
-    in_backtick = False
+    in_backtick = opens_fence
 
     if inline_expr is not None:
         expression_lines.append(inline_expr)
@@ -234,25 +437,44 @@ def _parse_block(block_lines: list[str], table_name: str) -> DaxMeasure | None:
 # ─────────────────────────────────────────────────────────────
 
 
-def _parse_header(first_line: str) -> tuple[str | None, str | None]:
+def _parse_header(first_line: str) -> tuple[str | None, str | None, bool]:
     """
     Parse : measure NomOuQuote = [expression]
-    Retourne (nom, expression_inline_ou_None).
+
+    Les apostrophes internes d'un nom quoté sont doublées en TMDL
+    (measure 'Chiffre d''affaires').
+
+    Retourne (nom, expression_inline_ou_None, ouverture_bloc_backticks).
     """
     pattern = re.match(
-        r"^measure\s+(?:'([^']+)'|\"([^\"]+)\"|(\S+))\s*=\s*(.*)?$",
+        r"^measure\s+(?:'((?:[^']|'')+)'|\"((?:[^\"]|\"\")+)\"|(\S+))\s*=\s*(.*)?$",
         first_line.strip(),
     )
     if not pattern:
-        return None, None
+        return None, None, False
 
-    name = (pattern.group(1) or pattern.group(2) or pattern.group(3) or "").strip()
+    quoted_single, quoted_double, bare = (
+        pattern.group(1),
+        pattern.group(2),
+        pattern.group(3),
+    )
+    if quoted_single is not None:
+        name = quoted_single.replace("''", "'").strip()
+    elif quoted_double is not None:
+        name = quoted_double.replace('""', '"').strip()
+    else:
+        name = (bare or "").strip()
+
     rest = (pattern.group(4) or "").strip()
 
-    if not rest or rest.startswith("```"):
-        return name, None
+    if rest.startswith("```"):
+        # Le bloc d'expression s'ouvre sur la ligne du `measure`.
+        return name, None, True
 
-    return name, rest
+    if not rest:
+        return name, None, False
+
+    return name, rest, False
 
 
 def _detect_property(stripped: str) -> str | None:

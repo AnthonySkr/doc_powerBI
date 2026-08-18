@@ -2,7 +2,7 @@
 
 import re
 
-from models.data_models import DaxMeasure
+from src.models.data_models import DaxMeasure
 
 
 def extract_dax_identifiers(
@@ -48,22 +48,22 @@ def analyze_all_dependencies(all_measures: dict[str, DaxMeasure]) -> None:
         direct_deps[name] = measures_found
         direct_cols[name] = columns_found
 
-    for name in all_measures:
+    def dfs(current: str, visited: set[str], columns: set[str]) -> None:
+        if current in visited:
+            return
+        visited.add(current)
+        columns.update(direct_cols.get(current, set()))
+        for dep in direct_deps.get(current, set()):
+            dfs(dep, visited, columns)
+
+    for name, measure in all_measures.items():
         visited: set[str] = set()
         all_columns: set[str] = set()
+        dfs(name, visited, all_columns)
 
-        def dfs(current: str) -> None:
-            if current in visited:
-                return
-            visited.add(current)
-            all_columns.update(direct_cols.get(current, set()))
-            for dep in direct_deps.get(current, set()):
-                dfs(dep)
-
-        dfs(name)
-
-        all_measures[name].dependent_measures = visited
-        all_measures[name].used_columns = all_columns
+        # `visited` contient la mesure elle-même : on ne garde que ses dépendances.
+        measure.dependent_measures = visited - {name}
+        measure.used_columns = all_columns
 
 
 def get_measures_used_in_report(report, all_measures: dict[str, DaxMeasure]) -> set[str]:
@@ -82,11 +82,9 @@ def get_measures_used_in_report(report, all_measures: dict[str, DaxMeasure]) -> 
                     measure_name = parts[-1] if parts else element.display_name
                     directly_used.add(measure_name)
 
-    all_used: set[str] = set()
+    all_used: set[str] = set(directly_used)
     for name in directly_used:
         if name in all_measures:
             all_used.update(all_measures[name].dependent_measures)
-        else:
-            all_used.add(name)
 
     return all_used
