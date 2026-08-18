@@ -67,14 +67,19 @@ class ModelTable:
 
 @dataclass
 class VisualReference:
-    """Ligne du tableau des références d'un visuel (numéro + libellé)."""
+    """Ligne du tableau des références d'un visuel."""
 
     number: str
     kind: str  # "mesure", "colonne", "hierarchie", "filtre"
     name: str
-    label: str
-    role: str = ""
+    label: str  # libellé complet, en une seule colonne
+    role: str = ""  # rôle traduit, colonne « Rôle » du tableau
     expression: str = ""
+
+    @property
+    def value(self) -> str:
+        """Colonne « Élément référencé » : le nom, ou l'expression du filtre."""
+        return self.expression if self.kind == "filtre" else self.name
 
 
 @dataclass

@@ -36,7 +36,7 @@ version: 1
 #  1. DOCUMENT — template, sortie, page de garde
 # =============================================================================
 document:
-  template: "template-doc-pbib.docx"
+  template: "template-doc-pbib-v2.docx"
   output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 
@@ -82,9 +82,19 @@ styles:
   normal: "Normal"
   bullet: "List Bullet"
   code: "Code DAX"
-  image: "Normal"              # paragraphe portant le texte de réservation
-  caption: "Normal"            # légende sous l'emplacement d'image
-  table: "Normal Table"
+
+  # Styles apportés par le template v2
+  image: "Image Placeholder"   # encadré pointillé réservant la capture
+  caption: "Legende"           # légende sous l'emplacement d'image
+  todo: "A completer"          # zones à rédiger après génération
+  table: "Tableau Reference"   # tableau des références d'un visuel
+  table_data: "Tableau Donnees"  # tableau neutre (autres tableaux du plan)
+  ref_header: "Ref Entete"     # ligne d'en-tête du tableau des références
+  ref_number: "Ref Numero"     # colonne N°
+  ref_role: "Ref Role"         # colonne Rôle
+  ref_value: "Ref Valeur"      # colonne Élément référencé
+  technical_id: "Id technique" # type et identifiant à côté d'un titre
+
   fallback: "Normal"           # utilisé si un style ci-dessus est introuvable
 
 # =============================================================================
@@ -97,11 +107,11 @@ rendering:
   # Emplacements d'images : le script n'insère aucune image, il réserve la
   # place et décrit la capture attendue. L'utilisateur remplace ensuite.
   image_placeholder:
-    text_format: "[IMAGE] {description}"
+    text_format: "🖼  {description}"
     caption_format: "Figure {n} — {description}"
-    show_caption: false        # true = ajoute une légende numérotée sous l'emplacement
+    show_caption: true         # légende numérotée sous l'emplacement (style Legende)
     numbering: true            # numérotation continue des figures du document
-    empty_paragraph_after: true
+    empty_paragraph_after: false
 
   # Table des matières du template (page 2). Les numéros de page dépendent de
   # la mise en page : seul Word sait les calculer. Le champ est donc marqué
@@ -420,6 +430,9 @@ sections:
               item: visual
               section:
                 title: "{{ visual.title }}"
+                # Type du visuel, en gris discret à la suite du titre
+                title_suffix: "{{ visual.visual_type }}"
+                title_suffix_style: "{{ styles.technical_id }}"
                 level: 3
                 # Cible des liens « Utilisée dans » de la définition des mesures
                 bookmark: "visual:{{ page.name }}:{{ visual.id }}"
@@ -437,23 +450,30 @@ sections:
                     over: visual.references
                     item: ref
                     style: "{{ styles.table }}"
-                    header: false
-                    header_labels: ["N°", "Élément"]
+                    header: true
+                    header_labels: ["N°", "Rôle", "Élément référencé"]
+                    header_style: "{{ styles.ref_header }}"
+                    layout: fixed        # largeurs respectées par Word
+                    repeat_header: true  # en-tête répété à chaque page
+                    cant_split: true     # une ligne n'est jamais coupée
+                    vertical_align: center
                     autofit: false
                     columns:
                       - id: numero
-                        width_cm: 1.5
+                        width_cm: 1.25
+                        style: "{{ styles.ref_number }}"
                         value: "{{ ref.number }}"
-                      - id: libelle
-                        width_cm: 14.0
-                        value: "{{ ref.label }}"
-                        # Le nom des mesures présentes dans le libellé est lié
-                        # automatiquement (voir rendering.links.auto). `hyperlink`
-                        # reste disponible pour forcer une cible particulière.
-                        hyperlink:
-                          when: "ref.kind == mesure"
-                          target: "measure:{{ ref.name }}"
-                          text: "{{ ref.name }}"
+                      - id: role
+                        width_cm: 3.5
+                        style: "{{ styles.ref_role }}"
+                        value: "{{ ref.role }}"
+                      - id: valeur
+                        width_cm: 11.25
+                        style: "{{ styles.ref_value }}"
+                        # Nom de la mesure / colonne, ou expression du filtre.
+                        # Les mesures sont liées automatiquement à leur
+                        # définition (voir rendering.links.auto).
+                        value: "{{ ref.value }}"
 
     # --- Construction des références de visuel -------------------------------
     options:
@@ -470,10 +490,12 @@ sections:
           format: "{n}"
         # Ordre de constitution des lignes du tableau
         order: [mesure, colonne, hierarchie, filtre]
-        # Libellés par nature d'élément. {name} = nom dans le modèle (celui qui
-        # porte le lien vers la définition), {display} = nom affiché dans le
-        # visuel (alias éventuel), {role} = rôle traduit,
-        # {expression} = expression du filtre.
+        # Libellés d'une référence sur une seule ligne. Le tableau du template
+        # v2 utilise plutôt `ref.role` et `ref.value` (deux colonnes) ; ces
+        # libellés restent disponibles via `ref.label`.
+        # {name} = nom dans le modèle (celui qui porte le lien vers la
+        # définition), {display} = nom affiché dans le visuel (alias éventuel),
+        # {role} = rôle traduit, {expression} = expression du filtre.
         labels:
           mesure: "Formule appliquée : {name}"
           colonne: "{role} : {name}"
@@ -481,7 +503,9 @@ sections:
           filtre: "Filtre appliqué : {expression}"
           defaut: "{name}"
         # Traduction des rôles Power BI utilisés dans {role}
+        # Colonne « Rôle » du tableau. `filtre` s'applique aux lignes de filtre.
         roles:
+          filtre: "Filtre"
           Values: "Valeur"
           Y: "Axe Y"
           Y2: "Axe Y secondaire"

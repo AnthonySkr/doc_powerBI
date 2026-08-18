@@ -1,7 +1,7 @@
 # Documentation automatique Power BI
 
 Génère la documentation Word d'un rapport Power BI (`.pbip`) à partir du
-template `template-doc-pbib.docx` et d'un plan décrit en YAML.
+template `template-doc-pbib-v2.docx` et d'un plan décrit en YAML.
 
 Le script ne contient aucune structure de document : **tout le plan est dans
 `config_doc_pbi.yaml`**. Pour documenter un rapport différemment, on modifie le
@@ -53,7 +53,7 @@ capture correspondante une fois le document généré.
 | Bloc | Rôle |
 | --- | --- |
 | `document` | Template, dossier et nom de sortie, page de garde, en-tête / pied de page, propriétés du fichier |
-| `styles` | Correspondance avec les styles du template (`Heading 1`, `Sous-titre 3`, `Code DAX`…) |
+| `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, tables et mesures |
 | `inputs` | Questions posées à l'utilisateur au lancement |
@@ -182,6 +182,50 @@ recalculer les champs à la fin du script, pour livrer un document déjà à jou
 Si Word ou `pywin32` sont absents, le script le signale et s'en tient au
 marquage du champ.
 
+## Template
+
+Le plan pointe sur `template-doc-pbib-v2.docx`, qui apporte des styles nommés
+repris par la configuration :
+
+| Clé `styles` | Style du template | Usage |
+| --- | --- | --- |
+| `table` | `Tableau Reference` | Tableau des références d'un visuel (en-tête bleu, lignes alternées) |
+| `table_data` | `Tableau Donnees` | Tableau neutre, disponible pour d'autres tableaux du plan |
+| `ref_header` / `ref_number` / `ref_role` / `ref_value` | `Ref Entete` / `Ref Numero` / `Ref Role` / `Ref Valeur` | Les quatre styles de ce tableau |
+| `image` | `Image Placeholder` | Encadré pointillé réservant la capture |
+| `caption` | `Legende` | Légende numérotée sous l'emplacement |
+| `todo` | `A completer` | Zones à rédiger après génération |
+| `technical_id` | `Id technique` | Type du visuel affiché en gris à la suite du titre |
+
+Pour revenir à l'ancien template, il suffit de changer `document.template` et
+les valeurs de `styles:` : un style absent est remplacé par `fallback` et
+signalé une fois dans la console.
+
+### Tableaux
+
+Un bloc `table` accepte, en plus de ses colonnes :
+
+| Clé | Effet |
+| --- | --- |
+| `header` / `header_labels` / `header_style` | Ligne d'en-tête et son style |
+| `layout` | `fixed` (défaut) : Word respecte les largeurs déclarées |
+| `repeat_header` | Répète l'en-tête en haut de chaque page |
+| `cant_split` | Empêche une ligne d'être coupée par un saut de page |
+| `vertical_align` | Alignement vertical des cellules (`center` par défaut) |
+
+Chaque colonne peut porter `width_cm`, `style` (style de paragraphe de la
+cellule) et `header_style`.
+
+### Titres
+
+Un titre de section peut être suivi d'une mention technique discrète :
+
+```yaml
+title: "{{ visual.title }}"
+title_suffix: "{{ visual.visual_type }}"
+title_suffix_style: "{{ styles.technical_id }}"
+```
+
 ## Structure du projet
 
 ```
@@ -205,7 +249,7 @@ template-doc-pbib.docx      template Word
 ## Notes
 
 - Les styles déclarés dans `styles:` doivent exister dans le template : sinon
-  le script bascule sur `fallback` et le signale dans la console.
+  le script bascule sur `fallback` et le signale une fois dans la console.
 - Si la table des matières n'apparaît pas à jour (visionneuse autre que Word,
   mise à jour refusée), la sélectionner dans Word puis « Mettre à jour les
   champs » (F9).
