@@ -17,6 +17,7 @@ from collections.abc import Callable
 from typing import Any
 
 from docx import Document
+from docx.enum.style import WD_STYLE_TYPE
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
@@ -152,6 +153,8 @@ class _DocumentBuilder:
 
         self._available_styles = {s.name for s in doc.styles}
         self._style_ids = {s.name: s.style_id for s in doc.styles}
+        self._character_styles = {s.name for s in doc.styles if s.type == WD_STYLE_TYPE.CHARACTER}
+        self._missing_styles: set[str] = set()
         self._bookmark_id = 0
         self._figure_number = 0
 
@@ -293,6 +296,7 @@ class _DocumentBuilder:
         if title:
             level = int(section.get("level", 1))
             paragraph = self.doc.add_paragraph(title, style=self._style(f"heading_{level}"))
+            self._add_title_suffix(paragraph, section, context)
             bookmark = section.get("bookmark")
             if bookmark:
                 self._add_bookmark(paragraph, render(bookmark, context))
@@ -302,6 +306,23 @@ class _DocumentBuilder:
 
         for child in section.get("sections") or []:
             self._write_section(child, context)
+
+    def _add_title_suffix(
+        self, paragraph, section: dict[str, Any], context: dict[str, Any]
+    ) -> None:
+        """
+        Complète un titre par une information technique discrète (type du
+        visuel, identifiant...), dans un style de caractère dédié.
+        """
+        suffix = render(section.get("title_suffix"), context)
+        if not suffix:
+            return
+
+        separator = section.get("title_suffix_separator", "   ")
+        run = paragraph.add_run(f"{separator}{suffix}")
+        style = self._character_style(section.get("title_suffix_style") or "technical_id")
+        if style:
+            run.style = style
 
     def _needs_page_break(self, section: dict[str, Any]) -> bool:
         if "page_break_before" in section:
@@ -360,7 +381,8 @@ class _DocumentBuilder:
                 block.get("placeholder_text") or options.get("placeholder_text"),
                 context,
             )
-        self.doc.add_paragraph(text, style=self._style(block.get("style") or "normal"))
+        style = block.get("style") or options.get("style") or "todo"
+        self.doc.add_paragraph(text, style=self._style(style))
 
     def _write_property_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         options = self.config.rendering["property"]
@@ -375,6 +397,9 @@ class _DocumentBuilder:
         value_style = self._style(block.get("value_style") or options.get("value_style"))
         links = self._links_allowed(block, value_style)
         fallback = render(block.get("fallback"), context)
+        fallback_style = self._style(
+            block.get("fallback_style") or options.get("fallback_style") or "todo"
+        )
 
         if "value_list" in block:
             values = self._resolve_value_list(block.get("value_list"), context)
@@ -383,14 +408,14 @@ class _DocumentBuilder:
                     paragraph = self.doc.add_paragraph(style=value_style)
                     self._write_value(paragraph, value, context, links=links)
             elif fallback:
-                self.doc.add_paragraph(fallback, style=self._style("normal"))
+                self.doc.add_paragraph(fallback, style=fallback_style)
         else:
             value = render(block.get("value"), context)
             if value:
                 paragraph = self.doc.add_paragraph(style=value_style)
                 self._write_rich_text(paragraph, value, context, links=links)
             elif fallback:
-                self.doc.add_paragraph(fallback, style=self._style("normal"))
+                self.doc.add_paragraph(fallback, style=fallback_style)
 
         if options.get("empty_paragraph_after"):
             self.doc.add_paragraph()
@@ -433,20 +458,34 @@ class _DocumentBuilder:
         self._apply_table_style(table, render(block.get("style"), context))
         table.autofit = bool(block.get("autofit", False))
 
+        # Largeurs fixes : Word suit la grille du tableau, pas les cellules.
+        if block.get("layout", "fixed") == "fixed":
+            _set_fixed_layout(table, [_column_width(c) for c in columns])
+        _set_table_look(table, first_row=bool(block.get("header")))
+
+        vertical_align = block.get("vertical_align", "center")
+
         if block.get("header"):
             labels = block.get("header_labels") or [c.get("id", "") for c in columns]
-            header_cells = table.add_row().cells
-            for cell, label in zip(header_cells, labels):
-                cell.text = render(label, context)
-                for paragraph in cell.paragraphs:
-                    for run in paragraph.runs:
-                        run.bold = True
+            header_row = table.add_row()
+            if block.get("repeat_header", True):
+                _repeat_header_row(header_row)
+            for cell, label, column in zip(header_row.cells, labels, columns):
+                _set_vertical_align(cell, vertical_align)
+                style = column.get("header_style") or block.get("header_style")
+                paragraph = cell.paragraphs[0]
+                if style:
+                    paragraph.style = self._style(style)
+                paragraph.add_run(render(label, context))
 
         item_name = block.get("item") or "item"
         for row_item in rows:
             row_context = {**context, item_name: row_item}
-            cells = table.add_row().cells
-            for cell, column in zip(cells, columns):
+            row = table.add_row()
+            if block.get("cant_split", True):
+                _keep_row_together(row)
+            for cell, column in zip(row.cells, columns):
+                _set_vertical_align(cell, vertical_align)
                 self._fill_table_cell(cell, column, row_context)
 
         self._set_column_widths(table, columns)
@@ -455,6 +494,9 @@ class _DocumentBuilder:
     def _fill_table_cell(self, cell, column: dict[str, Any], context: dict[str, Any]) -> None:
         text = render(column.get("value"), context)
         paragraph = cell.paragraphs[0]
+
+        if column.get("style"):
+            paragraph.style = self._style(column.get("style"))
 
         # Lien explicite déclaré dans le plan : il prime sur la détection
         # automatique lorsque son texte est présent dans la cellule.
@@ -503,29 +545,52 @@ class _DocumentBuilder:
         if not key:
             key = "normal"
 
-        name = render(key, self.context) if "{{" in str(key) else self.config.styles.get(key, key)
+        name = self._style_name(key)
         if name in self._available_styles:
             return name
 
         fallback = self.config.styles.get("fallback", "Normal")
-        if name and name != fallback:
+        if name and name != fallback and name not in self._missing_styles:
+            self._missing_styles.add(name)
             print(f"  Style '{name}' absent du template — remplacé par '{fallback}'")
         return fallback if fallback in self._available_styles else "Normal"
 
+    def _style_name(self, key: str | None) -> str:
+        """Nom du style Word correspondant à une clé de configuration."""
+        if not key:
+            return ""
+        return render(key, self.context) if "{{" in str(key) else self.config.styles.get(key, key)
+
+    def _character_style(self, key: str | None) -> str | None:
+        """Style de caractère existant, ou None (un style de paragraphe ne convient pas)."""
+        name = self._style_name(key)
+        if name in self._character_styles:
+            return name
+        if name and name not in self._missing_styles:
+            self._missing_styles.add(name)
+            print(f"  Style de caractère '{name}' absent du template — ignoré")
+        return None
+
     def _apply_table_style(self, table, style_name: str) -> None:
-        if style_name and style_name in self._available_styles:
-            try:
-                table.style = style_name
-            except (KeyError, ValueError) as e:
-                print(f"  Style de tableau '{style_name}' non applicable : {e}")
+        if not style_name:
+            return
+        if style_name not in self._available_styles:
+            if style_name not in self._missing_styles:
+                self._missing_styles.add(style_name)
+                print(f"  Style de tableau '{style_name}' absent du template — ignoré")
+            return
+        try:
+            table.style = style_name
+        except (KeyError, ValueError) as e:
+            print(f"  Style de tableau '{style_name}' non applicable : {e}")
 
     def _set_column_widths(self, table, columns: list[dict[str, Any]]) -> None:
         for index, column in enumerate(columns):
-            width = column.get("width_cm")
-            if not width:
+            width = _column_width(column)
+            if width is None:
                 continue
             for row in table.rows:
-                row.cells[index].width = Cm(float(width))
+                row.cells[index].width = Cm(width)
 
     def _write_rich_text(
         self,
@@ -759,6 +824,84 @@ def render_list_of_items(expression: Any, context: dict[str, Any]) -> list[Any]:
     if isinstance(value, dict):
         return list(value.values())
     return [value]
+
+
+def _column_width(column: dict[str, Any]) -> float | None:
+    """Largeur d'une colonne en centimètres (`width_cm`)."""
+    width = column.get("width_cm")
+    return float(width) if width else None
+
+
+def _set_fixed_layout(table, widths: list[float | None]) -> None:
+    """
+    Fige la mise en page du tableau et reporte les largeurs sur la grille.
+
+    Word se fie à `w:tblGrid` : sans lui, les largeurs de cellules sont
+    ignorées et les colonnes se répartissent au prorata du contenu.
+    """
+    properties = table._tbl.tblPr
+    layout = properties.find(qn("w:tblLayout"))
+    if layout is None:
+        layout = OxmlElement("w:tblLayout")
+        properties.append(layout)
+    layout.set(qn("w:type"), "fixed")
+
+    grid = table._tbl.find(qn("w:tblGrid"))
+    if grid is None:
+        return
+    for column, width in zip(grid.findall(qn("w:gridCol")), widths):
+        if width is not None:
+            column.set(qn("w:w"), str(int(round(Cm(width).twips))))
+
+
+def _set_table_look(table, first_row: bool) -> None:
+    """
+    Active la mise en forme conditionnelle du style de tableau : ligne
+    d'en-tête colorée et lignes alternées, sans bandes verticales.
+    """
+    properties = table._tbl.tblPr
+    look = properties.find(qn("w:tblLook"))
+    if look is None:
+        look = OxmlElement("w:tblLook")
+        properties.append(look)
+
+    values = {
+        "firstRow": "1" if first_row else "0",
+        "lastRow": "0",
+        "firstColumn": "0",
+        "lastColumn": "0",
+        "noHBand": "0",
+        "noVBand": "1",
+    }
+    look.set(qn("w:val"), "0620" if first_row else "0420")
+    for key, value in values.items():
+        look.set(qn("w:" + key), value)
+
+
+def _repeat_header_row(row) -> None:
+    """Répète la ligne d'en-tête en haut de chaque page."""
+    properties = row._tr.get_or_add_trPr()
+    if properties.find(qn("w:tblHeader")) is None:
+        properties.append(OxmlElement("w:tblHeader"))
+
+
+def _keep_row_together(row) -> None:
+    """Empêche une ligne d'être coupée par un saut de page."""
+    properties = row._tr.get_or_add_trPr()
+    if properties.find(qn("w:cantSplit")) is None:
+        properties.append(OxmlElement("w:cantSplit"))
+
+
+def _set_vertical_align(cell, alignment: str) -> None:
+    """Alignement vertical du contenu d'une cellule."""
+    if not alignment:
+        return
+    properties = cell._tc.get_or_add_tcPr()
+    element = properties.find(qn("w:vAlign"))
+    if element is None:
+        element = OxmlElement("w:vAlign")
+        properties.append(element)
+    element.set(qn("w:val"), alignment)
 
 
 def _replace_in_part(part, placeholder: str, value: str) -> int:

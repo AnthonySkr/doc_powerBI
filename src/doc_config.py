@@ -20,7 +20,7 @@ _VAR_PATTERN = re.compile(r"\{\{\s*(.+?)\s*\}\}")
 # Valeurs utilisées lorsque la clé est absente du fichier de configuration.
 _DEFAULTS: dict[str, Any] = {
     "document": {
-        "template": "template-doc-pbib.docx",
+        "template": "template-doc-pbib-v2.docx",
         "output_dir": "output",
         "output_name": "documentation_{{ report.name }}.docx",
         "write_mode": "append",
@@ -37,9 +37,16 @@ _DEFAULTS: dict[str, Any] = {
         "normal": "Normal",
         "bullet": "List Bullet",
         "code": "Code DAX",
-        "image": "Normal",
-        "caption": "Normal",
-        "table": "Normal Table",
+        "image": "Image Placeholder",
+        "caption": "Legende",
+        "todo": "A completer",
+        "table": "Tableau Reference",
+        "table_data": "Tableau Donnees",
+        "ref_header": "Ref Entete",
+        "ref_number": "Ref Numero",
+        "ref_role": "Ref Role",
+        "ref_value": "Ref Valeur",
+        "technical_id": "Id technique",
         "fallback": "Normal",
     },
     "rendering": {
@@ -51,7 +58,11 @@ _DEFAULTS: dict[str, Any] = {
             "numbering": True,
             "empty_paragraph_after": True,
         },
-        "user_fill": {"placeholder_text": "[À compléter]", "show_placeholder": True},
+        "user_fill": {
+            "placeholder_text": "[À compléter]",
+            "show_placeholder": True,
+            "style": "{{ styles.todo }}",
+        },
         "table_of_contents": {
             "update": True,
             "update_all_fields": False,
@@ -77,6 +88,7 @@ _DEFAULTS: dict[str, Any] = {
         "property": {
             "label_style": "{{ styles.subtitle }}",
             "value_style": "{{ styles.normal }}",
+            "fallback_style": "{{ styles.todo }}",
             "empty_paragraph_after": False,
         },
     },

@@ -174,6 +174,7 @@ def build_references(
             )
         )
 
+    filter_role = roles.get("filtre", labels.get("filtre_role", "Filtre"))
     for filter_item in sorted(visual.filters, key=lambda f: f.field_name):
         expression = filter_item.to_string()
         by_kind.setdefault("filtre", []).append(
@@ -181,11 +182,12 @@ def build_references(
                 number="",
                 kind="filtre",
                 name=filter_item.field_name,
+                role=filter_role,
                 label=_format_label(
                     labels,
                     "filtre",
                     name=filter_item.field_name,
-                    role="",
+                    role=filter_role,
                     expression=expression,
                     display=filter_item.field_name,
                 ),
