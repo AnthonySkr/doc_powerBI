@@ -10,15 +10,15 @@ import os
 import sys
 from typing import Any
 
-from doc_config import DEFAULT_CONFIG_PATH, DocConfig, load_config, render
-from generators.data_context import build_context
-from generators.word_generator import generate_word_documentation
-from parsers.dependency_analyzer import (
+from src.doc_config import DEFAULT_CONFIG_PATH, DocConfig, load_config, render
+from src.generators.data_context import build_context
+from src.generators.word_generator import generate_word_documentation
+from src.parsers.dependency_analyzer import (
     analyze_all_dependencies,
     get_measures_used_in_report,
 )
-from parsers.report_parser import parse_report
-from parsers.tmdl_parser import (
+from src.parsers.report_parser import parse_report
+from src.parsers.tmdl_parser import (
     load_all_measures_from_model,
     load_all_tables_from_model,
 )

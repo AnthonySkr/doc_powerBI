@@ -9,8 +9,8 @@ prépare les collections référencées par les boucles du plan :
 
 from typing import Any
 
-from doc_config import DocConfig
-from models.data_models import (
+from src.doc_config import DocConfig
+from src.models.data_models import (
     DaxMeasure,
     MeasureGroup,
     ModelTable,
@@ -68,14 +68,8 @@ def build_context(
 
 def _filter_pages(pages: list[ReportPage], config: DocConfig) -> list[ReportPage]:
     options = config.data["pages"]
-    excluded = {name.lower() for name in options.get("exclude_names") or []}
 
-    kept = [
-        page
-        for page in pages
-        if not (options.get("exclude_hidden") and page.is_hidden)
-        and page.display_name.lower() not in excluded
-    ]
+    kept = [page for page in pages]
 
     if options.get("sort_by") == "name":
         kept.sort(key=lambda p: p.display_name.lower())
@@ -160,7 +154,11 @@ def build_references(
             element.query_ref.split(".")[-1] if kind == "mesure" else element.display_name
         ) or element.display_name
         label = _format_label(
-            labels, kind, name=element.display_name, role=role, expression=element.query_ref
+            labels,
+            kind,
+            name=element.display_name,
+            role=role,
+            expression=element.query_ref,
         )
         by_kind.setdefault(kind, []).append(
             VisualReference(

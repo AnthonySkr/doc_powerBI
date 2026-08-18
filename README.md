@@ -11,7 +11,7 @@ YAML, pas le code.
 
 ```bash
 python -m venv .venv
-.venv\Scripts\activate        # Windows
+.venv\Scripts\Activate.ps1        # Windows
 pip install taskipy
 task install
 ```
@@ -30,7 +30,7 @@ Options :
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
 
-Le document est écrit dans `output/documentation_<rapport>.docx`, à côté du `.pbip`.
+Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.pbip`.
 
 ## Ce que fait le script
 
@@ -38,7 +38,7 @@ Le document est écrit dans `output/documentation_<rapport>.docx`, à côté du 
    et étapes de transformation Power Query.
 2. Analyse les dépendances entre mesures (mesures et colonnes utilisées).
 3. Lit le rapport (`.Report`) : pages, visuels, champs et filtres.
-4. Pose les questions déclarées dans `inputs:` (voir plus bas).
+4. Pose les questions déclarées dans `inputs:`.
 5. Écrit le document en suivant le plan `sections:` du YAML, à la suite du
    contenu déjà présent dans le template.
 
@@ -107,15 +107,16 @@ hyperlink:
 
 ```
 main.py                     orchestration (lecture .pbip, questions, génération)
-doc_config.py               chargement du YAML, variables {{ }}, conditions when
-generators/
-    data_context.py         filtres/tris et données exposées au plan
-    word_generator.py       écriture du .docx en parcourant le plan
-parsers/
-    tmdl_parser.py          mesures DAX, tables, sources et étapes Power Query
-    report_parser.py        pages, visuels, champs et filtres du rapport
-    dependency_analyzer.py  dépendances transitives entre mesures
-models/data_models.py       structures de données
+src/
+  doc_config.py               chargement du YAML, variables {{ }}, conditions when
+  generators/
+      data_context.py         filtres/tris et données exposées au plan
+      word_generator.py       écriture du .docx en parcourant le plan
+  parsers/
+      tmdl_parser.py          mesures DAX, tables, sources et étapes Power Query
+      report_parser.py        pages, visuels, champs et filtres du rapport
+      dependency_analyzer.py  dépendances transitives entre mesures
+  models/data_models.py       structures de données
 config_doc_pbi.yaml         plan du document
 template-doc-pbib.docx      template Word
 ```
@@ -124,7 +125,6 @@ template-doc-pbib.docx      template Word
 
 - Les styles déclarés dans `styles:` doivent exister dans le template : sinon
   le script bascule sur `fallback` et le signale dans la console.
-- Le projet requiert **Python 3.14** (`pyproject.toml`).
 
 ## Commandes utiles
 

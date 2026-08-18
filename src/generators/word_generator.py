@@ -15,7 +15,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Cm
 
-from doc_config import DocConfig, evaluate, render, render_list, resolve
+from src.doc_config import DocConfig, evaluate, render, render_list, resolve
 
 TextProvider = Callable[[dict[str, Any], str], str]
 
@@ -40,7 +40,7 @@ def generate_word_documentation(
 
     try:
         doc = Document(template_path)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return f"ERREUR : Impossible de charger le template '{template_path}'. Détails : {e}"
 
     builder = _DocumentBuilder(doc, config, context, text_provider)
@@ -49,7 +49,7 @@ def generate_word_documentation(
     try:
         doc.save(output_path)
         return f"Documentation Word générée : '{output_path}'"
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return f"Erreur lors de la sauvegarde du document : {e}"
 
 
@@ -188,7 +188,10 @@ class _DocumentBuilder:
         options = self.config.rendering["user_fill"]
         text = ""
         if options.get("show_placeholder"):
-            text = render(block.get("placeholder_text") or options.get("placeholder_text"), context)
+            text = render(
+                block.get("placeholder_text") or options.get("placeholder_text"),
+                context,
+            )
         self.doc.add_paragraph(text, style=self._style(block.get("style") or "normal"))
 
     def _write_property_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:

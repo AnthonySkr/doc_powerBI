@@ -2,7 +2,7 @@
 
 import re
 
-from models.data_models import DaxMeasure
+from src.models.data_models import DaxMeasure
 
 
 def extract_dax_identifiers(

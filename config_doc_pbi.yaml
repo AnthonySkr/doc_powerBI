@@ -1,5 +1,4 @@
 # =============================================================================
-#  config_doc_pbi.yaml
 #  Plan de génération de la documentation Power BI (.docx)
 # =============================================================================
 #  Ce fichier décrit *quoi* écrire et *dans quel ordre*. Le script se contente
@@ -38,11 +37,10 @@ version: 1
 # =============================================================================
 document:
   template: "template-doc-pbib.docx"
-  output_dir: "output"
+  output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 
-  # Le template contient déjà la partie "Initialisation" : on écrit toujours
-  # à la suite du contenu existant, jamais en écrasant le document.
+  # Le template contient déjà la partie "Initialisation" : on écrit à la suite du contenu existant.
   write_mode: append
 
   # Page de garde : le paragraphe contenant ce texte est remplacé.
@@ -59,11 +57,6 @@ document:
 
 # =============================================================================
 #  2. STYLES — correspondance avec les styles du template
-# =============================================================================
-#  ATTENTION : seuls les styles réellement présents dans template-doc-pbib.docx
-#  peuvent être utilisés (python-docx lève une erreur sinon). Styles connus :
-#  Normal, Title, Heading 1..9, Sous-titre 3, Code DAX, List Bullet,
-#  List Bullet 2/3, Liste à puces1, List Paragraph, List Number, Normal Table.
 # =============================================================================
 styles:
   heading_1: "Heading 1"
@@ -83,7 +76,7 @@ styles:
 #  3. RENDU — mise en forme commune à tous les blocs
 # =============================================================================
 rendering:
-  # Un titre 1 démarre toujours sur une nouvelle page (cf. plan).
+  # Un titre 1 démarre toujours sur une nouvelle page.
   page_break_before_heading_1: true
 
   # Emplacements d'images : le script n'insère aucune image, il réserve la
@@ -117,7 +110,7 @@ rendering:
 # =============================================================================
 data:
   pages:
-    exclude_hidden: true
+    exclude_hidden: false
     exclude_names: []          # noms d'affichage de pages à ignorer
     sort_by: report_order      # report_order | name
 
@@ -151,9 +144,6 @@ data:
 #  5. INPUTS — questions posées à l'utilisateur au lancement du script
 # =============================================================================
 #  type : confirm (oui/non) | text (une ligne) | choice | textarea
-#  Règle retenue : on ne demande que des réponses courtes ou des choix qui
-#  pilotent la structure. Tout ce qui relève d'un paragraphe rédigé est laissé
-#  vide dans le document (bloc `user_fill`).
 # =============================================================================
 inputs:
   - id: nom_rapport
@@ -182,7 +172,7 @@ inputs:
 sections:
 
   # ---------------------------------------------------------------------------
-  #  INITIALISATION — déjà présente dans le template, on n'y touche pas
+  #  INITIALISATION
   # ---------------------------------------------------------------------------
   - id: initialisation
     title: "Initialisation"

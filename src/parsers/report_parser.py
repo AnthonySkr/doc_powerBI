@@ -13,7 +13,7 @@ visual.json :
 import json
 import os
 
-from models.data_models import (
+from src.models.data_models import (
     PowerBIReport,
     ReportPage,
     Visual,

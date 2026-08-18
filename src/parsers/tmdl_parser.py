@@ -10,7 +10,7 @@ Gère :
 import os
 import re
 
-from models.data_models import DaxMeasure, ModelTable
+from src.models.data_models import DaxMeasure, ModelTable
 
 _BLOCK_KEYWORDS = frozenset(
     [
@@ -453,7 +453,11 @@ def _parse_header(first_line: str) -> tuple[str | None, str | None, bool]:
     if not pattern:
         return None, None, False
 
-    quoted_single, quoted_double, bare = pattern.group(1), pattern.group(2), pattern.group(3)
+    quoted_single, quoted_double, bare = (
+        pattern.group(1),
+        pattern.group(2),
+        pattern.group(3),
+    )
     if quoted_single is not None:
         name = quoted_single.replace("''", "'").strip()
     elif quoted_double is not None:
