@@ -224,6 +224,7 @@ def _parse_projection(proj: dict, role: str) -> VisualElement | None:
         type_category=type_category,
         role=role,
         table_name=table_name,
+        property_name=prop_name,
     )
 
 

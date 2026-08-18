@@ -93,15 +93,43 @@ when: "ref.kind == mesure"          # égalité
 
 ### Liens internes
 
-Un titre peut déclarer un signet, une cellule de tableau peut pointer dessus :
+Le titre d'une mesure déclare un signet :
 
 ```yaml
 bookmark: "measure:{{ measure.name }}"          # sur le titre de la mesure
-hyperlink:
-  when: "ref.kind == mesure"
-  target: "measure:{{ ref.name }}"              # depuis le tableau du visuel
-  text: "{{ ref.name }}"
 ```
+
+**Toute mention d'une mesure renvoie ensuite vers ce signet**, sans avoir à la
+déclarer : le générateur reconnaît les noms de mesures dans tous les textes
+qu'il écrit — libellés du tableau des références d'un visuel, code DAX,
+« Source utilisée », descriptions, paragraphes du plan — et les transforme en
+liens. Les titres (h1/h2/h3) en sont exclus pour ne pas perturber le sommaire,
+ainsi que la mesure en cours de définition (pas de lien vers soi-même).
+
+Le comportement se règle dans `rendering.links.auto` :
+
+| Clé | Effet |
+| --- | --- |
+| `enabled` | Désactive la détection automatique |
+| `source` | Collection des mesures documentées (cibles possibles) |
+| `target` | Gabarit de la cible ; doit reprendre le `bookmark:` du plan |
+| `in_code` | Liens à l'intérieur des blocs de code DAX |
+| `skip_self` | Pas de lien d'une mesure vers elle-même |
+| `first_occurrence_only` | Une seule mention liée par paragraphe |
+| `case_sensitive` | Respect de la casse dans la reconnaissance des noms |
+| `min_length` | Longueur minimale d'un nom pris en compte |
+| `exclude` | Mesures à ne jamais lier (nom trop courant, mesure technique) |
+
+Un bloc peut refuser les liens avec `links: false`.
+
+`hyperlink:` reste disponible sur une colonne de tableau pour forcer une cible
+particulière ; il est ignoré si le signet visé n'existe pas dans le document.
+
+Pour qu'aucun lien ne pointe dans le vide, une mesure référencée par un visuel
+ou par une autre mesure est documentée même si les filtres de `data.measures`
+l'écartaient (`include_referenced: true`). En fin de génération, le script
+indique le nombre de liens créés et signale les mesures mentionnées qui ne sont
+pas documentées.
 
 ## Structure du projet
 
@@ -112,11 +140,13 @@ src/
   generators/
       data_context.py         filtres/tris et données exposées au plan
       word_generator.py       écriture du .docx en parcourant le plan
+      measure_links.py        repérage des mentions de mesures dans les textes
   parsers/
       tmdl_parser.py          mesures DAX, tables, sources et étapes Power Query
       report_parser.py        pages, visuels, champs et filtres du rapport
       dependency_analyzer.py  dépendances transitives entre mesures
   models/data_models.py       structures de données
+tests/                      tests unitaires (liens internes, noms de signets)
 config_doc_pbi.yaml         plan du document
 template-doc-pbib.docx      template Word
 ```
@@ -125,11 +155,14 @@ template-doc-pbib.docx      template Word
 
 - Les styles déclarés dans `styles:` doivent exister dans le template : sinon
   le script bascule sur `fallback` et le signale dans la console.
+- Le sommaire du template n'est pas recalculé : dans Word, sélectionner le
+  sommaire puis « Mettre à jour les champs » pour y voir les titres générés.
 
 ## Commandes utiles
 
 ```bash
 task run        # lancer la génération
+task test       # tests unitaires
 task check      # format + lint (ruff)
 task clean      # nettoyer les caches
 ```

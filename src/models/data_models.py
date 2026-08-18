@@ -89,6 +89,14 @@ class VisualElement:
     role: str  # "Values", "Category", "Y", "Y2", etc.
     table_name: str = ""
     display_folder: str = "Racine"
+    # Nom du champ dans le modèle (`Property` du visual.json). Le nom affiché
+    # peut être un alias : c'est ce nom-ci qui identifie la mesure.
+    property_name: str = ""
+
+    @property
+    def model_name(self) -> str:
+        """Nom de la mesure/colonne tel qu'il existe dans le modèle."""
+        return self.property_name or self.query_ref.split(".")[-1] or self.display_name
 
 
 @dataclass

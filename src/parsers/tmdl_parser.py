@@ -545,10 +545,10 @@ def _clean_expression(lines: list[str]) -> str:
     if not lines:
         return ""
 
-    non_empty = [l for l in lines if l.strip()]
+    non_empty = [line for line in lines if line.strip()]
     if not non_empty:
         return ""
 
-    min_indent = min(len(l) - len(l.lstrip()) for l in non_empty)
-    cleaned = [l[min_indent:] if len(l) >= min_indent else l for l in lines]
+    min_indent = min(len(line) - len(line.lstrip()) for line in non_empty)
+    cleaned = [line[min_indent:] if len(line) >= min_indent else line for line in lines]
     return "\n".join(cleaned).strip()
