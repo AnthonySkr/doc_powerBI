@@ -9,9 +9,10 @@ prépare les collections référencées par les boucles du plan :
 
 from typing import Any
 
-from src.doc_config import DocConfig
+from src.doc_config import DocConfig, render
 from src.models.data_models import (
     DaxMeasure,
+    DocLink,
     MeasureGroup,
     ModelTable,
     PowerBIReport,
@@ -52,6 +53,7 @@ def build_context(
             visual.references = build_references(visual, reference_options, counter)
 
     model = _build_model(report, all_measures, config)
+    _index_usages(report, all_measures, reference_options)
 
     return {
         "report": report,
@@ -198,6 +200,39 @@ def build_references(
             references.append(reference)
 
     return references
+
+
+def _index_usages(
+    report: PowerBIReport, all_measures: dict[str, DaxMeasure], options: dict[str, Any]
+) -> None:
+    """
+    Renseigne `measure.usages` : les visuels où chaque mesure est utilisée.
+
+    C'est le chemin inverse des liens vers les définitions — depuis la
+    définition d'une mesure, on remonte aux visuels qui l'affichent.
+    """
+    usages = options.get("usages") or {}
+    target_template = usages.get("target") or "visual:{{ page.name }}:{{ visual.id }}"
+    label_template = usages.get("label") or "{{ page.display_name }} — {{ visual.title }}"
+
+    for measure in all_measures.values():
+        measure.usages = []
+
+    for page in report.pages:
+        for visual in page.visuals:
+            context = {"page": page, "visual": visual}
+            target = render(target_template, context)
+            label = render(label_template, context)
+
+            for name in sorted(
+                {e.model_name for e in visual.elements if e.type_category == "Mesure"}
+            ):
+                measure = all_measures.get(name)
+                if measure is None:
+                    continue
+                if any(link.target == target for link in measure.usages):
+                    continue
+                measure.usages.append(DocLink(text=label, target=target))
 
 
 def _format_label(

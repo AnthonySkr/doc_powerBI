@@ -41,6 +41,8 @@ Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.p
 4. Pose les questions déclarées dans `inputs:`.
 5. Écrit le document en suivant le plan `sections:` du YAML, à la suite du
    contenu déjà présent dans le template.
+6. Remplace les textes de l'en-tête et du pied de page du template, puis marque
+   la table des matières comme à recalculer.
 
 Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
@@ -50,9 +52,9 @@ capture correspondante une fois le document généré.
 
 | Bloc | Rôle |
 | --- | --- |
-| `document` | Template, dossier et nom de sortie, page de garde, propriétés du fichier |
+| `document` | Template, dossier et nom de sortie, page de garde, en-tête / pied de page, propriétés du fichier |
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Sous-titre 3`, `Code DAX`…) |
-| `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes |
+| `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, tables et mesures |
 | `inputs` | Questions posées à l'utilisateur au lancement |
 | `sections` | Le plan du document |
@@ -131,6 +133,55 @@ l'écartaient (`include_referenced: true`). En fin de génération, le script
 indique le nombre de liens créés et signale les mesures mentionnées qui ne sont
 pas documentées.
 
+### Liens retour : où une mesure est-elle utilisée ?
+
+La définition d'une mesure liste aussi les endroits qui l'emploient, en sens
+inverse des liens précédents :
+
+- **Utilisée dans** — un lien par visuel affichant la mesure, qui renvoie au
+  titre du visuel (`bookmark: "visual:{{ page.name }}:{{ visual.id }}"`).
+  Les libellés et les cibles se règlent dans `options.usages` de la section
+  `visuels`.
+- **Utilisée par** — les mesures dont l'expression DAX appelle celle-ci ; ces
+  noms sont liés automatiquement vers leur propre définition.
+
+## En-tête et pied de page
+
+Le texte placé à droite de l'en-tête du template est remplacé par la réponse à
+la question `titre_entete` (le nom du rapport par défaut) :
+
+```yaml
+document:
+  header_footer:
+    replacements:
+      - placeholder: "Titre intercalaire 1"
+        text: "{{ inputs.titre_entete }}"
+        scope: header          # header | footer | all
+```
+
+Le remplacement ne touche qu'au texte : logo, tabulations et mise en forme du
+template sont conservés.
+
+## Table des matières
+
+Les numéros de page dépendent de la mise en page : seul Word sait les calculer.
+Le script marque donc le champ de la table des matières (page 2 du template)
+comme « à recalculer », ce que Word applique à l'ouverture du document.
+
+```yaml
+rendering:
+  table_of_contents:
+    update: true
+    update_all_fields: false  # true = Word recalcule aussi les autres champs
+    update_with_word: false   # true = pilote Word en fin de script (Windows)
+    levels: ""                # ex. "1-3" pour inclure les visuels et les mesures
+```
+
+`update_with_word: true` demande à Word (via `pywin32`, Windows uniquement) de
+recalculer les champs à la fin du script, pour livrer un document déjà à jour.
+Si Word ou `pywin32` sont absents, le script le signale et s'en tient au
+marquage du champ.
+
 ## Structure du projet
 
 ```
@@ -155,8 +206,9 @@ template-doc-pbib.docx      template Word
 
 - Les styles déclarés dans `styles:` doivent exister dans le template : sinon
   le script bascule sur `fallback` et le signale dans la console.
-- Le sommaire du template n'est pas recalculé : dans Word, sélectionner le
-  sommaire puis « Mettre à jour les champs » pour y voir les titres générés.
+- Si la table des matières n'apparaît pas à jour (visionneuse autre que Word,
+  mise à jour refusée), la sélectionner dans Word puis « Mettre à jour les
+  champs » (F9).
 
 ## Commandes utiles
 

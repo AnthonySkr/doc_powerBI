@@ -10,6 +10,7 @@ transformées en liens internes vers la définition de la mesure.
 """
 
 import hashlib
+import os
 import re
 import unicodedata
 from collections.abc import Callable
@@ -22,6 +23,7 @@ from docx.shared import Cm
 
 from src.doc_config import DocConfig, evaluate, render, render_list, resolve
 from src.generators.measure_links import MeasureLinker, collect_measures
+from src.models.data_models import DocLink
 
 TextProvider = Callable[[dict[str, Any], str], str]
 
@@ -30,6 +32,26 @@ _LINK_FALLBACK_COLOR = "0563C1"
 
 # Longueur maximale d'un nom de signet accepté par Word.
 _BOOKMARK_MAX_LENGTH = 40
+
+# Un champ de table des matières commence par le mot-clé TOC.
+_TOC_FIELD = re.compile(r"^\s*TOC\b")
+
+# Éléments de settings.xml devant suivre `w:updateFields` (ordre du schéma).
+_SETTINGS_AFTER_UPDATE_FIELDS = (
+    "w:hdrShapeDefaults",
+    "w:footnotePr",
+    "w:endnotePr",
+    "w:compat",
+    "w:docVars",
+    "w:rsids",
+    "w:mathPr",
+    "w:attachedSchema",
+    "w:themeFontLang",
+    "w:clrSchemeMapping",
+    "w:shapeDefaults",
+    "w:decimalSymbol",
+    "w:listSeparator",
+)
 
 
 def generate_word_documentation(
@@ -60,9 +82,54 @@ def generate_word_documentation(
 
     try:
         doc.save(output_path)
-        return f"Documentation Word générée : '{output_path}'"
     except Exception as e:  # noqa: BLE001
         return f"Erreur lors de la sauvegarde du document : {e}"
+
+    if (config.rendering.get("table_of_contents") or {}).get("update_with_word"):
+        print(f"  {refresh_fields_with_word(output_path)}")
+
+    return f"Documentation Word générée : '{output_path}'"
+
+
+def refresh_fields_with_word(path: str) -> str:
+    """
+    Recalcule les champs du document en pilotant Word (Windows uniquement).
+
+    Sans cela, la table des matières est simplement marquée « à recalculer » et
+    Word s'en charge à l'ouverture du fichier. Cette étape n'est utile que pour
+    obtenir un document déjà à jour sans l'ouvrir — elle exige Word installé et
+    le paquet `pywin32`.
+    """
+    try:
+        import win32com.client  # type: ignore[import-not-found]
+    except ImportError:
+        return (
+            "Word non piloté (pywin32 absent) : la table des matières sera "
+            "recalculée à l'ouverture du document"
+        )
+
+    word = None
+    document = None
+    try:
+        word = win32com.client.DispatchEx("Word.Application")
+        word.Visible = False
+        word.DisplayAlerts = False
+        document = word.Documents.Open(os.path.abspath(path))
+        document.Fields.Update()
+        for toc in document.TablesOfContents:
+            toc.Update()
+        document.Save()
+        return "Table des matières recalculée par Word"
+    except Exception as e:  # noqa: BLE001
+        return f"Word n'a pas pu recalculer les champs ({e}) — mise à jour à l'ouverture"
+    finally:
+        try:
+            if document is not None:
+                document.Close(False)
+            if word is not None:
+                word.Quit()
+        except Exception:  # noqa: BLE001
+            pass
 
 
 # ==============================================================================
@@ -111,8 +178,10 @@ class _DocumentBuilder:
     def build(self) -> None:
         self._write_cover()
         self._write_properties()
+        self._write_header_footer()
         for section in self.config.sections:
             self._write_section(section, self.context)
+        self._update_table_of_contents()
         self._report_links()
 
     # ── Page de garde et propriétés ───────────────────────────────
@@ -141,6 +210,74 @@ class _DocumentBuilder:
         for key, value in properties.items():
             if hasattr(self.doc.core_properties, key):
                 setattr(self.doc.core_properties, key, render(value, self.context))
+
+    # ── En-têtes et pieds de page du template ─────────────────────
+    def _write_header_footer(self) -> None:
+        """
+        Remplace dans les en-têtes / pieds de page du template les textes
+        déclarés dans `document.header_footer.replacements`.
+        """
+        rules = (self.config.document.get("header_footer") or {}).get("replacements") or []
+        if not rules:
+            return
+
+        replaced = 0
+        for section in self.doc.sections:
+            containers = {
+                "header": (
+                    section.header,
+                    section.first_page_header,
+                    section.even_page_header,
+                ),
+                "footer": (
+                    section.footer,
+                    section.first_page_footer,
+                    section.even_page_footer,
+                ),
+            }
+            for scope, parts in containers.items():
+                for part in parts:
+                    # Un en-tête « lié au précédent » n'a pas de contenu propre :
+                    # y toucher créerait une partie vide dans le document.
+                    if part is None or part.is_linked_to_previous:
+                        continue
+                    for rule in rules:
+                        if rule.get("scope", "all") not in ("all", scope):
+                            continue
+                        placeholder = render(rule.get("placeholder"), self.context)
+                        value = render(rule.get("text"), self.context)
+                        if not placeholder or not value:
+                            continue
+                        replaced += _replace_in_part(part, placeholder, value)
+
+        if replaced:
+            print(f"  En-tête / pied de page : {replaced} texte(s) remplacé(s)")
+
+    # ── Table des matières ────────────────────────────────────────
+    def _update_table_of_contents(self) -> None:
+        """
+        Demande à Word de recalculer la table des matières du template.
+
+        Les numéros de page dépendent de la mise en page : seul Word peut les
+        calculer. Le champ TOC est donc marqué « à recalculer » (`w:dirty`),
+        ce que Word applique à l'ouverture du document.
+        """
+        options = self.config.rendering.get("table_of_contents") or {}
+        if not options.get("update", True):
+            return
+
+        levels = render(options.get("levels"), self.context)
+        fields = _mark_toc_fields_dirty(self.doc.element.body, levels)
+
+        if not fields:
+            print("  Aucun champ de table des matières trouvé dans le template")
+            return
+
+        if options.get("update_all_fields"):
+            _set_update_fields(self.doc.settings.element)
+
+        detail = f" (niveaux {levels})" if levels else ""
+        print(f"  Table des matières{detail} : recalculée à l'ouverture dans Word")
 
     # ── Sections ──────────────────────────────────────────────────
     def _write_section(self, section: dict[str, Any], context: dict[str, Any]) -> None:
@@ -240,11 +377,11 @@ class _DocumentBuilder:
         fallback = render(block.get("fallback"), context)
 
         if "value_list" in block:
-            values = render_list(block.get("value_list"), context)
+            values = self._resolve_value_list(block.get("value_list"), context)
             if values:
                 for value in values:
                     paragraph = self.doc.add_paragraph(style=value_style)
-                    self._write_rich_text(paragraph, value, context, links=links)
+                    self._write_value(paragraph, value, context, links=links)
             elif fallback:
                 self.doc.add_paragraph(fallback, style=self._style("normal"))
         else:
@@ -257,6 +394,34 @@ class _DocumentBuilder:
 
         if options.get("empty_paragraph_after"):
             self.doc.add_paragraph()
+
+    def _resolve_value_list(self, expression: Any, context: dict[str, Any]) -> list[Any]:
+        """
+        Résout `value_list` en conservant les objets `DocLink`, qui portent
+        leur propre cible de lien (« Utilisée dans » d'une mesure).
+        """
+        if isinstance(expression, str) and "{{" in expression:
+            items = render_list_of_items(expression, context)
+        elif isinstance(expression, (list, tuple, set)):
+            items = list(expression)
+        else:
+            items = render_list(expression, context)
+
+        return [item for item in items if isinstance(item, DocLink) or render(item, context)]
+
+    def _write_value(
+        self, paragraph, value: Any, context: dict[str, Any], links: bool = True
+    ) -> None:
+        """Écrit une valeur de liste : lien vers un signet, ou texte enrichi."""
+        if isinstance(value, DocLink):
+            target = self._bookmark_for(value.target)
+            if links and self._links.get("enabled", True) and self._is_reachable(target):
+                self._add_hyperlink(paragraph, value.text, target)
+                return
+            self._write_rich_text(paragraph, value.text, context, links=links)
+            return
+
+        self._write_rich_text(paragraph, render(value, context), context, links=links)
 
     def _write_table_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         columns = block.get("columns") or []
@@ -547,7 +712,12 @@ class _DocumentBuilder:
             return
 
         total = sum(self._anchors.values())
-        print(f"  Liens internes : {total} vers {len(self._bookmarks)} mesures documentées")
+        measures = len(self._bookmarks & self._link_targets)
+        others = len(self._bookmarks) - measures
+        print(
+            f"  Liens internes : {total} — {measures} mesures et "
+            f"{others} autres emplacements atteignables"
+        )
 
         dangling = sorted(set(self._anchors) - self._bookmarks)
         if dangling:
@@ -589,6 +759,128 @@ def render_list_of_items(expression: Any, context: dict[str, Any]) -> list[Any]:
     if isinstance(value, dict):
         return list(value.values())
     return [value]
+
+
+def _replace_in_part(part, placeholder: str, value: str) -> int:
+    """Remplace un texte dans un en-tête ou un pied de page."""
+    replaced = 0
+    for paragraph in part.paragraphs:
+        replaced += _replace_in_paragraph(paragraph, placeholder, value)
+    for table in part.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    replaced += _replace_in_paragraph(paragraph, placeholder, value)
+    return replaced
+
+
+def _replace_in_paragraph(paragraph, placeholder: str, value: str) -> int:
+    """
+    Remplace un texte dans un paragraphe sans toucher au reste de sa mise en
+    forme : seuls les nœuds `w:t` sont réécrits, les tabulations et les images
+    qui les entourent (logo, alignement à droite de l'en-tête) sont conservées.
+    """
+    nodes = paragraph._p.findall(".//" + qn("w:t"))
+    if not nodes:
+        return 0
+
+    # Cas courant : le texte tient dans un seul nœud.
+    replaced = 0
+    for node in nodes:
+        text = node.text or ""
+        if placeholder in text:
+            replaced += text.count(placeholder)
+            _set_node_text(node, text.replace(placeholder, value))
+    if replaced:
+        return replaced
+
+    # Le texte est réparti sur plusieurs nœuds : on le regroupe sur le premier.
+    joined = "".join(node.text or "" for node in nodes)
+    if placeholder not in joined:
+        return 0
+
+    _set_node_text(nodes[0], joined.replace(placeholder, value))
+    for node in nodes[1:]:
+        _set_node_text(node, "")
+    return joined.count(placeholder)
+
+
+def _set_node_text(node, text: str) -> None:
+    node.text = text
+    if text != text.strip():
+        node.set(qn("xml:space"), "preserve")
+
+
+def _mark_toc_fields_dirty(body, levels: str = "") -> int:
+    r"""
+    Marque les champs TOC « à recalculer » et, si `levels` est renseigné,
+    ajuste les niveaux de titres repris (`\o "1-3"`).
+
+    Retourne le nombre de champs traités.
+    """
+    fields = 0
+
+    # Champ complet : w:fldChar(begin) ... w:instrText ... w:fldChar(end)
+    last_begin = None
+    for element in body.iter(qn("w:fldChar"), qn("w:instrText")):
+        if element.tag == qn("w:fldChar"):
+            if element.get(qn("w:fldCharType")) == "begin":
+                last_begin = element
+            continue
+
+        if not _TOC_FIELD.match(element.text or ""):
+            continue
+
+        if levels:
+            element.text = _set_toc_levels(element.text or "", levels)
+        if last_begin is not None:
+            last_begin.set(qn("w:dirty"), "true")
+        fields += 1
+
+    # Forme condensée : w:fldSimple w:instr="TOC ..."
+    for element in body.iter(qn("w:fldSimple")):
+        instruction = element.get(qn("w:instr")) or ""
+        if not _TOC_FIELD.match(instruction):
+            continue
+        if levels:
+            element.set(qn("w:instr"), _set_toc_levels(instruction, levels))
+        element.set(qn("w:dirty"), "true")
+        fields += 1
+
+    return fields
+
+
+def _set_toc_levels(instruction: str, levels: str) -> str:
+    r"""
+    Remplace les niveaux repris par le champ TOC (`\\o "1-2"` → `\\o "1-3"`).
+
+    Le remplacement passe par une fonction : la chaîne contient un antislash,
+    que `re.sub` interpréterait comme une séquence d'échappement.
+    """
+    return re.sub(r'\\o\s*"[^"]*"', lambda _: f'\\o "{levels}"', instruction)
+
+
+def _set_update_fields(settings) -> None:
+    """
+    Ajoute `<w:updateFields w:val="true"/>` : Word recalcule alors tous les
+    champs du document à son ouverture. L'élément doit respecter l'ordre du
+    schéma, sans quoi Word considère le fichier comme corrompu.
+    """
+    existing = settings.find(qn("w:updateFields"))
+    if existing is not None:
+        existing.set(qn("w:val"), "true")
+        return
+
+    element = OxmlElement("w:updateFields")
+    element.set(qn("w:val"), "true")
+
+    for tag in _SETTINGS_AFTER_UPDATE_FIELDS:
+        successor = settings.find(qn(tag))
+        if successor is not None:
+            successor.addprevious(element)
+            return
+
+    settings.append(element)
 
 
 def _bookmark_name(name: str) -> str:
