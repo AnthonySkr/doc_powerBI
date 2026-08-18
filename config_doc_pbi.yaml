@@ -93,11 +93,26 @@ rendering:
     placeholder_text: "[À compléter]"
     show_placeholder: true     # false = laisse un paragraphe vide sans texte
 
-  # Liens hypertextes internes (visuel → définition de la mesure).
+  # Liens hypertextes internes (toute mention d'une mesure → sa définition).
   links:
     enabled: true
-    style: "Hyperlink"
+    style: "Hyperlink"         # style de caractère du template appliqué aux liens
     bookmark_prefix: ""        # préfixe optionnel des signets générés
+
+    # Détection automatique : chaque fois qu'un nom de mesure apparaît dans un
+    # texte écrit par le script (libellé de visuel, code DAX, source utilisée,
+    # paragraphe...), il devient un lien vers la définition de la mesure.
+    auto:
+      enabled: true
+      source: model.tables_with_measures  # mesures documentées = cibles possibles
+      # Doit reprendre le `bookmark:` posé sur le titre de la mesure (partie 8).
+      target: "measure:{{ measure.name }}"
+      in_code: true             # false = pas de lien dans les blocs de code DAX
+      skip_self: true           # pas de lien d'une mesure vers elle-même
+      first_occurrence_only: false  # true = une seule mention liée par paragraphe
+      case_sensitive: false     # comme Power BI : la casse n'identifie pas la mesure
+      min_length: 2             # longueur minimale d'un nom pris en compte
+      exclude: []               # mesures à ne jamais lier (nom trop courant...)
 
   # Bloc `property` : le libellé est un sous-titre, la valeur suit en dessous.
   property:
@@ -137,6 +152,10 @@ data:
   measures:
     scope: used_in_report      # all | used_in_report (mesures + dépendances)
     include_hidden: false
+    # Documente malgré tout les mesures référencées ailleurs (mesure masquée
+    # utilisée par une autre, dépendance d'une mesure documentée...) : sans
+    # elles, les liens internes correspondants pointeraient dans le vide.
+    include_referenced: true
     group_by: table            # table | display_folder
     sort_by: name
 
@@ -395,7 +414,9 @@ sections:
                       - id: libelle
                         width_cm: 14.0
                         value: "{{ ref.label }}"
-                        # Lien vers la définition de la mesure (partie 8)
+                        # Le nom des mesures présentes dans le libellé est lié
+                        # automatiquement (voir rendering.links.auto). `hyperlink`
+                        # reste disponible pour forcer une cible particulière.
                         hyperlink:
                           when: "ref.kind == mesure"
                           target: "measure:{{ ref.name }}"
@@ -410,8 +431,10 @@ sections:
           format: "{n}"
         # Ordre de constitution des lignes du tableau
         order: [mesure, colonne, hierarchie, filtre]
-        # Libellés par nature d'élément. {name} = nom affiché,
-        # {role} = rôle traduit, {expression} = expression du filtre.
+        # Libellés par nature d'élément. {name} = nom dans le modèle (celui qui
+        # porte le lien vers la définition), {display} = nom affiché dans le
+        # visuel (alias éventuel), {role} = rôle traduit,
+        # {expression} = expression du filtre.
         labels:
           mesure: "Formule appliquée : {name}"
           colonne: "{role} : {name}"

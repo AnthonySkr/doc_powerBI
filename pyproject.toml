@@ -14,6 +14,7 @@ dependencies = [
 [tool.taskipy.tasks]
 install = "pip install -e ."
 run = "python main.py"
+test = "python -m unittest discover -s tests -t ."
 lint = "ruff check ."
 format = "ruff format ."
 check = "task format && task lint"

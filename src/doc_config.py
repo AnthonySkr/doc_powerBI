@@ -51,7 +51,22 @@ _DEFAULTS: dict[str, Any] = {
             "empty_paragraph_after": True,
         },
         "user_fill": {"placeholder_text": "[À compléter]", "show_placeholder": True},
-        "links": {"enabled": True, "style": "Hyperlink", "bookmark_prefix": ""},
+        "links": {
+            "enabled": True,
+            "style": "Hyperlink",
+            "bookmark_prefix": "",
+            "auto": {
+                "enabled": True,
+                "source": "model.tables_with_measures",
+                "target": "measure:{{ measure.name }}",
+                "in_code": True,
+                "skip_self": True,
+                "first_occurrence_only": False,
+                "case_sensitive": False,
+                "min_length": 2,
+                "exclude": [],
+            },
+        },
         "property": {
             "label_style": "{{ styles.subtitle }}",
             "value_style": "{{ styles.normal }}",
@@ -75,6 +90,7 @@ _DEFAULTS: dict[str, Any] = {
         "measures": {
             "scope": "used_in_report",
             "include_hidden": False,
+            "include_referenced": True,
             "group_by": "table",
             "sort_by": "name",
         },

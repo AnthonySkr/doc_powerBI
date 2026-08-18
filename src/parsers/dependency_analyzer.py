@@ -76,11 +76,9 @@ def get_measures_used_in_report(report, all_measures: dict[str, DaxMeasure]) -> 
         for visual in page.visuals:
             for element in visual.elements:
                 if element.type_category == "Mesure":
-                    # Utiliser le Property (nom court de la mesure)
-                    # display_name peut être un alias, on cherche aussi query_ref
-                    parts = element.query_ref.split(".")
-                    measure_name = parts[-1] if parts else element.display_name
-                    directly_used.add(measure_name)
+                    # `display_name` peut être un alias défini dans le visuel :
+                    # seul le nom du modèle identifie la mesure.
+                    directly_used.add(element.model_name)
 
     all_used: set[str] = set(directly_used)
     for name in directly_used:

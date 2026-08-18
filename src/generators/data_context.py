@@ -150,15 +150,17 @@ def build_references(
     for element in sorted(visual.elements, key=lambda e: (e.role, e.display_name)):
         kind = _KIND_BY_CATEGORY.get(element.type_category, "colonne")
         role = roles.get(element.role, roles.get("defaut", element.role))
-        name = (
-            element.query_ref.split(".")[-1] if kind == "mesure" else element.display_name
-        ) or element.display_name
+        # Le libellé reprend le nom du modèle pour les mesures : c'est lui qui
+        # correspond au titre de la définition, donc à la cible du lien.
+        name = element.model_name if kind == "mesure" else element.display_name
+        name = name or element.display_name
         label = _format_label(
             labels,
             kind,
-            name=element.display_name,
+            name=name,
             role=role,
             expression=element.query_ref,
+            display=element.display_name,
         )
         by_kind.setdefault(kind, []).append(
             VisualReference(
@@ -183,6 +185,7 @@ def build_references(
                     name=filter_item.field_name,
                     role="",
                     expression=expression,
+                    display=filter_item.field_name,
                 ),
                 expression=expression,
             )
@@ -197,9 +200,24 @@ def build_references(
     return references
 
 
-def _format_label(labels: dict[str, str], kind: str, name: str, role: str, expression: str) -> str:
+def _format_label(
+    labels: dict[str, str],
+    kind: str,
+    name: str,
+    role: str,
+    expression: str,
+    display: str = "",
+) -> str:
+    """
+    Met en forme le libellé d'une référence.
+
+    `{name}` est le nom du modèle (celui qui porte le lien vers la définition),
+    `{display}` le nom affiché dans le visuel, qui peut être un alias.
+    """
     template = labels.get(kind) or labels.get("defaut") or "{name}"
-    return template.format(name=name, role=role, expression=expression).strip()
+    return template.format(
+        name=name, role=role, expression=expression, display=display or name
+    ).strip()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -262,6 +280,9 @@ def _group_measures(
         and (options.get("include_hidden") or not measure.is_hidden)
     ]
 
+    if options.get("include_referenced", True):
+        selected = _add_referenced_measures(selected, all_measures, used_in_report)
+
     if options.get("sort_by", "name") == "name":
         selected.sort(key=lambda m: m.name.lower())
 
@@ -283,3 +304,42 @@ def _group_measures(
             table.measures.append(measure)
 
     return [MeasureGroup(name=name, measures=grouped[name]) for name in sorted(grouped)]
+
+
+def _add_referenced_measures(
+    selected: list[DaxMeasure],
+    all_measures: dict[str, DaxMeasure],
+    used_in_report: set[str],
+) -> list[DaxMeasure]:
+    """
+    Complète la sélection avec toute mesure référencée mais écartée par les
+    filtres (mesure masquée, dépendance d'une mesure documentée...).
+
+    Sans cela, une mention pointerait vers une définition absente du document :
+    le lien interne serait mort.
+    """
+    kept = {measure.name: measure for measure in selected}
+    pending = [name for name in used_in_report if name not in kept]
+    pending += [
+        dependency
+        for measure in selected
+        for dependency in measure.dependent_measures
+        if dependency not in kept
+    ]
+
+    added = 0
+    while pending:
+        name = pending.pop()
+        if name in kept:
+            continue
+        measure = all_measures.get(name)
+        if measure is None:
+            continue
+        kept[name] = measure
+        added += 1
+        pending.extend(dep for dep in measure.dependent_measures if dep not in kept)
+
+    if added:
+        print(f"  {added} mesure(s) ajoutée(s) au document car référencée(s) ailleurs")
+
+    return list(kept.values())

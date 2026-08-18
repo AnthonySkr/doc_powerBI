@@ -3,10 +3,15 @@ Génération du document Word à partir du plan décrit dans config_doc_pbi.yaml
 
 Le générateur ne connaît aucune structure de document : il parcourt les
 `sections` / `blocks` de la configuration et écrit ce qu'elles décrivent.
+
+Les mentions de mesures rencontrées dans les textes écrits (libellés des
+visuels, code DAX, sources utilisées, paragraphes) sont automatiquement
+transformées en liens internes vers la définition de la mesure.
 """
 
 import hashlib
 import re
+import unicodedata
 from collections.abc import Callable
 from typing import Any
 
@@ -16,8 +21,15 @@ from docx.oxml.ns import qn
 from docx.shared import Cm
 
 from src.doc_config import DocConfig, evaluate, render, render_list, resolve
+from src.generators.measure_links import MeasureLinker, collect_measures
 
 TextProvider = Callable[[dict[str, Any], str], str]
+
+# Mise en forme appliquée aux liens si le style de caractère est introuvable.
+_LINK_FALLBACK_COLOR = "0563C1"
+
+# Longueur maximale d'un nom de signet accepté par Word.
+_BOOKMARK_MAX_LENGTH = 40
 
 
 def generate_word_documentation(
@@ -72,8 +84,19 @@ class _DocumentBuilder:
         self.text_provider = text_provider
 
         self._available_styles = {s.name for s in doc.styles}
+        self._style_ids = {s.name: s.style_id for s in doc.styles}
         self._bookmark_id = 0
         self._figure_number = 0
+
+        # Signets écrits et ancres visées, pour vérifier qu'aucun lien ne pointe
+        # dans le vide une fois le document terminé.
+        self._bookmarks: set[str] = set()
+        self._anchors: dict[str, int] = {}
+
+        self._links = self.config.rendering["links"]
+        self._auto = self._links.get("auto") or {}
+        self.linker = self._build_linker()
+        self._link_targets = set(self.linker.targets.values()) if self.linker else set()
 
         self._block_writers = {
             "paragraph": self._write_paragraph_block,
@@ -90,6 +113,7 @@ class _DocumentBuilder:
         self._write_properties()
         for section in self.config.sections:
             self._write_section(section, self.context)
+        self._report_links()
 
     # ── Page de garde et propriétés ───────────────────────────────
     def _write_cover(self) -> None:
@@ -103,7 +127,13 @@ class _DocumentBuilder:
             if placeholder in paragraph.text:
                 for run in list(paragraph.runs):
                     run._element.getparent().remove(run._element)
-                self._write_multiline_runs(paragraph, text, bold=bool(cover.get("bold", True)))
+                self._write_rich_text(
+                    paragraph,
+                    text,
+                    self.context,
+                    bold=bool(cover.get("bold", True)),
+                    links=False,
+                )
                 return
 
     def _write_properties(self) -> None:
@@ -160,8 +190,9 @@ class _DocumentBuilder:
             text = self.text_provider(block, text)
         if not text:
             return
-        paragraph = self.doc.add_paragraph(style=self._style(block.get("style") or "normal"))
-        self._write_multiline_runs(paragraph, text)
+        style = self._style(block.get("style") or "normal")
+        paragraph = self.doc.add_paragraph(style=style)
+        self._write_rich_text(paragraph, text, context, links=self._links_allowed(block, style))
 
     def _write_image_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         options = self.config.rendering["image_placeholder"]
@@ -205,20 +236,22 @@ class _DocumentBuilder:
             )
 
         value_style = self._style(block.get("value_style") or options.get("value_style"))
+        links = self._links_allowed(block, value_style)
         fallback = render(block.get("fallback"), context)
 
         if "value_list" in block:
             values = render_list(block.get("value_list"), context)
             if values:
                 for value in values:
-                    self.doc.add_paragraph(value, style=value_style)
+                    paragraph = self.doc.add_paragraph(style=value_style)
+                    self._write_rich_text(paragraph, value, context, links=links)
             elif fallback:
                 self.doc.add_paragraph(fallback, style=self._style("normal"))
         else:
             value = render(block.get("value"), context)
             if value:
                 paragraph = self.doc.add_paragraph(style=value_style)
-                self._write_multiline_runs(paragraph, value)
+                self._write_rich_text(paragraph, value, context, links=links)
             elif fallback:
                 self.doc.add_paragraph(fallback, style=self._style("normal"))
 
@@ -258,26 +291,30 @@ class _DocumentBuilder:
         text = render(column.get("value"), context)
         paragraph = cell.paragraphs[0]
 
+        # Lien explicite déclaré dans le plan : il prime sur la détection
+        # automatique lorsque son texte est présent dans la cellule.
         hyperlink = column.get("hyperlink") or {}
         link_text = render(hyperlink.get("text"), context) if hyperlink else ""
-        links_enabled = self.config.rendering["links"].get("enabled", True)
+
+        target = self._bookmark_for(render(hyperlink.get("target"), context)) if hyperlink else ""
 
         if (
             hyperlink
-            and links_enabled
+            and self._links.get("enabled", True)
             and link_text
-            and evaluate(hyperlink.get("when"), context)
             and link_text in text
+            and self._is_reachable(target)
+            and evaluate(hyperlink.get("when"), context)
         ):
-            target = self._bookmark_for(render(hyperlink.get("target"), context))
             before, _, after = text.partition(link_text)
             if before:
-                paragraph.add_run(before)
+                self._write_rich_text(paragraph, before, context)
             self._add_hyperlink(paragraph, link_text, target)
             if after:
-                paragraph.add_run(after)
-        else:
-            paragraph.add_run(text)
+                self._write_rich_text(paragraph, after, context)
+            return
+
+        self._write_rich_text(paragraph, text, context, links=self._links_allowed(column, ""))
 
     def _write_loop_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         items = render_list_of_items(block.get("over"), context)
@@ -325,46 +362,150 @@ class _DocumentBuilder:
             for row in table.rows:
                 row.cells[index].width = Cm(float(width))
 
-    def _write_multiline_runs(self, paragraph, text: str, bold: bool = False) -> None:
-        """Écrit un texte en gérant les retours à la ligne."""
-        lines = text.split("\n")
+    def _write_rich_text(
+        self,
+        paragraph,
+        text: str,
+        context: dict[str, Any],
+        bold: bool = False,
+        links: bool = True,
+    ) -> None:
+        """Écrit un texte en gérant les retours à la ligne et les liens internes."""
+        lines = str(text).split("\n")
         for index, line in enumerate(lines):
-            run = paragraph.add_run(line)
-            run.bold = bold
+            for chunk, bookmark in self._segments(line, context, links):
+                if bookmark:
+                    self._add_hyperlink(paragraph, chunk, bookmark)
+                elif chunk:
+                    run = paragraph.add_run(chunk)
+                    run.bold = bold
             if index < len(lines) - 1:
-                run.add_break()
+                paragraph.add_run().add_break()
+
+    def _segments(
+        self, line: str, context: dict[str, Any], links: bool
+    ) -> list[tuple[str, str | None]]:
+        """Découpe une ligne en segments liés / non liés."""
+        if not line:
+            return []
+        if not links or self.linker is None or not self.linker.has_targets():
+            return [(line, None)]
+        return self.linker.split(line, skip_bookmark=self._self_bookmark(context))
+
+    def _self_bookmark(self, context: dict[str, Any]) -> str | None:
+        """Signet de la mesure en cours de documentation (pas d'auto-référence)."""
+        if not self._auto.get("skip_self", True):
+            return None
+        measure = context.get("measure")
+        name = getattr(measure, "name", None)
+        if not name or self.linker is None:
+            return None
+        return self.linker.targets.get(name)
+
+    def _is_reachable(self, bookmark: str) -> bool:
+        """
+        Un lien explicite n'est écrit que si sa cible est une mesure documentée.
+
+        Sans ce contrôle, une mesure absente du modèle (visuel pointant vers un
+        autre jeu de données, mesure supprimée...) produirait dans Word un lien
+        « Le signet n'existe pas ». Quand la détection automatique est
+        désactivée, le plan reste maître de ses cibles.
+        """
+        if not bookmark:
+            return False
+        if self.linker is None or not self.linker.has_targets():
+            return True
+        return bookmark in self._link_targets or bookmark in self._bookmarks
+
+    def _links_allowed(self, node: dict[str, Any], style_name: str) -> bool:
+        """Détermine si la détection automatique s'applique à ce contenu."""
+        if not self._links.get("enabled", True) or not self._auto.get("enabled", True):
+            return False
+        if node.get("links") is False or node.get("auto_links") is False:
+            return False
+        if not self._auto.get("in_code", True) and style_name == self._style("code"):
+            return False
+        return True
 
     # ── Signets et liens internes ─────────────────────────────────
+    def _build_linker(self) -> MeasureLinker | None:
+        """
+        Construit le répertoire « nom de mesure -> signet » à partir des mesures
+        effectivement documentées dans le document.
+        """
+        if not self._links.get("enabled", True) or not self._auto.get("enabled", True):
+            return None
+
+        source = self._auto.get("source") or "model.tables_with_measures"
+        target_template = self._auto.get("target") or "measure:{{ measure.name }}"
+
+        targets: dict[str, str] = {}
+        for measure in collect_measures(resolve(str(source).strip("{} "), self.context)):
+            name = getattr(measure, "name", "")
+            bookmark = self._bookmark_for(
+                render(target_template, {**self.context, "measure": measure})
+            )
+            if name and bookmark:
+                targets[name] = bookmark
+
+        known = self.context.get("report")
+        known_names = list(getattr(known, "all_measures", {}) or {})
+
+        # Mesures que l'on ne veut jamais lier automatiquement (nom trop
+        # courant, mesure technique...).
+        excluded = {str(name) for name in self._auto.get("exclude") or []}
+        for name in excluded:
+            targets.pop(name, None)
+        known_names = [name for name in known_names if name not in excluded]
+
+        return MeasureLinker(
+            targets=targets,
+            known_names=known_names,
+            case_sensitive=bool(self._auto.get("case_sensitive", False)),
+            min_length=int(self._auto.get("min_length", 2)),
+            first_occurrence_only=bool(self._auto.get("first_occurrence_only", False)),
+        )
+
     def _bookmark_for(self, raw_name: str) -> str:
         """Nom de signet d'une cible (`measure:Chiffre d'affaires` → signet Word)."""
-        prefix = self.config.rendering["links"].get("bookmark_prefix", "") or ""
+        prefix = self._links.get("bookmark_prefix", "") or ""
         return _bookmark_name(prefix + (raw_name or ""))
 
     def _add_bookmark(self, paragraph, raw_name: str) -> None:
         name = self._bookmark_for(raw_name)
-        if not name:
+        if not name or name in self._bookmarks:
             return
 
+        self._bookmarks.add(name)
         self._bookmark_id += 1
+
         start = OxmlElement("w:bookmarkStart")
         start.set(qn("w:id"), str(self._bookmark_id))
         start.set(qn("w:name"), name)
-        paragraph._p.insert(0, start)
+
+        # `w:pPr` doit rester le premier enfant du paragraphe.
+        properties = paragraph._p.find(qn("w:pPr"))
+        if properties is not None:
+            properties.addnext(start)
+        else:
+            paragraph._p.insert(0, start)
 
         end = OxmlElement("w:bookmarkEnd")
         end.set(qn("w:id"), str(self._bookmark_id))
         paragraph._p.append(end)
 
     def _add_hyperlink(self, paragraph, text: str, bookmark: str) -> None:
+        if not bookmark:
+            paragraph.add_run(text)
+            return
+
+        self._anchors[bookmark] = self._anchors.get(bookmark, 0) + 1
+
         hyperlink = OxmlElement("w:hyperlink")
         hyperlink.set(qn("w:anchor"), bookmark)
 
         run = OxmlElement("w:r")
-        run_properties = OxmlElement("w:rPr")
-        style = OxmlElement("w:rStyle")
-        style.set(qn("w:val"), self.config.rendering["links"].get("style", "Hyperlink"))
-        run_properties.append(style)
-        run.append(run_properties)
+        run.append(self._link_run_properties())
 
         text_element = OxmlElement("w:t")
         text_element.text = text
@@ -373,6 +514,53 @@ class _DocumentBuilder:
 
         hyperlink.append(run)
         paragraph._p.append(hyperlink)
+
+    def _link_run_properties(self):
+        """
+        Mise en forme du lien. `w:rStyle` attend l'identifiant du style, pas son
+        nom : dans un template français « Hyperlink » a pour identifiant
+        « Lienhypertexte ». Si le style est absent, la mise en forme est
+        appliquée directement pour que le lien reste visible.
+        """
+        properties = OxmlElement("w:rPr")
+        style_name = self._links.get("style", "Hyperlink")
+        style_id = self._style_ids.get(style_name)
+
+        if style_id:
+            style = OxmlElement("w:rStyle")
+            style.set(qn("w:val"), style_id)
+            properties.append(style)
+            return properties
+
+        color = OxmlElement("w:color")
+        color.set(qn("w:val"), _LINK_FALLBACK_COLOR)
+        underline = OxmlElement("w:u")
+        underline.set(qn("w:val"), "single")
+        properties.append(color)
+        properties.append(underline)
+        return properties
+
+    def _report_links(self) -> None:
+        """Bilan des liens internes, affiché en fin de génération."""
+        if self.linker is None:
+            print("  Liens internes désactivés")
+            return
+
+        total = sum(self._anchors.values())
+        print(f"  Liens internes : {total} vers {len(self._bookmarks)} mesures documentées")
+
+        dangling = sorted(set(self._anchors) - self._bookmarks)
+        if dangling:
+            print(
+                f"  {len(dangling)} lien(s) sans signet correspondant : {', '.join(dangling[:5])}"
+            )
+
+        if self.linker.unlinked:
+            names = sorted(self.linker.unlinked)
+            print(
+                f"  {len(names)} mesure(s) mentionnée(s) mais non documentée(s) "
+                f"(hors périmètre `data.measures`) : {', '.join(names[:5])}"
+            )
 
 
 # ==============================================================================
@@ -405,18 +593,27 @@ def render_list_of_items(expression: Any, context: dict[str, Any]) -> list[Any]:
 
 def _bookmark_name(name: str) -> str:
     """
-    Nom de signet valide pour Word : lettres, chiffres et underscores,
-    40 caractères maximum, ne commençant pas par un chiffre.
+    Nom de signet valide pour Word : lettres non accentuées, chiffres et
+    underscores, 40 caractères maximum, ne commençant pas par un chiffre.
 
-    Au-delà de 40 caractères le nom est tronqué et suffixé d'une empreinte,
-    pour que deux mesures au préfixe identique ne partagent pas le même signet.
+    Dès que le nettoyage perd de l'information (accents, espaces, ponctuation,
+    longueur), une empreinte du nom d'origine est ajoutée : sans elle
+    « Marge » et « Marge % » produiraient le même signet et les deux mesures
+    partageraient la même cible.
+
+    La fonction reste purement déterministe : la pose du signet et la
+    résolution des liens qui le visent aboutissent au même nom.
     """
-    cleaned = re.sub(r"\W+", "_", name or "", flags=re.UNICODE).strip("_")
+    raw = name or ""
+    ascii_name = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")
+    cleaned = re.sub(r"\W+", "_", ascii_name).strip("_")
     if not cleaned:
-        return ""
+        cleaned = "signet"
     if cleaned[0].isdigit():
         cleaned = f"_{cleaned}"
-    if len(cleaned) > 40:
-        digest = hashlib.md5(name.encode("utf-8")).hexdigest()[:7]
-        cleaned = f"{cleaned[:32]}_{digest}"
-    return cleaned
+
+    if cleaned == raw and len(cleaned) <= _BOOKMARK_MAX_LENGTH:
+        return cleaned
+
+    digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:6]
+    return f"{cleaned[: _BOOKMARK_MAX_LENGTH - len(digest) - 1]}_{digest}"
