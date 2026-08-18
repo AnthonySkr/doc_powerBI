@@ -36,7 +36,7 @@ version: 1
 #  1. DOCUMENT — template, sortie, page de garde
 # =============================================================================
 document:
-  template: "template-doc-pbib-v2.docx"
+  template: "template-doc-pbib.docx"
   output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 

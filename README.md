@@ -145,46 +145,9 @@ inverse des liens précédents :
 - **Utilisée par** — les mesures dont l'expression DAX appelle celle-ci ; ces
   noms sont liés automatiquement vers leur propre définition.
 
-## En-tête et pied de page
-
-Le texte placé à droite de l'en-tête du template est remplacé par la réponse à
-la question `titre_entete` (le nom du rapport par défaut) :
-
-```yaml
-document:
-  header_footer:
-    replacements:
-      - placeholder: "Titre intercalaire 1"
-        text: "{{ inputs.titre_entete }}"
-        scope: header          # header | footer | all
-```
-
-Le remplacement ne touche qu'au texte : logo, tabulations et mise en forme du
-template sont conservés.
-
-## Table des matières
-
-Les numéros de page dépendent de la mise en page : seul Word sait les calculer.
-Le script marque donc le champ de la table des matières (page 2 du template)
-comme « à recalculer », ce que Word applique à l'ouverture du document.
-
-```yaml
-rendering:
-  table_of_contents:
-    update: true
-    update_all_fields: false  # true = Word recalcule aussi les autres champs
-    update_with_word: false   # true = pilote Word en fin de script (Windows)
-    levels: ""                # ex. "1-3" pour inclure les visuels et les mesures
-```
-
-`update_with_word: true` demande à Word (via `pywin32`, Windows uniquement) de
-recalculer les champs à la fin du script, pour livrer un document déjà à jour.
-Si Word ou `pywin32` sont absents, le script le signale et s'en tient au
-marquage du champ.
-
 ## Template
 
-Le plan pointe sur `template-doc-pbib-v2.docx`, qui apporte des styles nommés
+Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
 repris par la configuration :
 
 | Clé `styles` | Style du template | Usage |
@@ -196,10 +159,6 @@ repris par la configuration :
 | `caption` | `Legende` | Légende numérotée sous l'emplacement |
 | `todo` | `A completer` | Zones à rédiger après génération |
 | `technical_id` | `Id technique` | Type du visuel affiché en gris à la suite du titre |
-
-Pour revenir à l'ancien template, il suffit de changer `document.template` et
-les valeurs de `styles:` : un style absent est remplacé par `fallback` et
-signalé une fois dans la console.
 
 ### Tableaux
 

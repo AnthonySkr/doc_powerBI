@@ -11,8 +11,9 @@ Ce module ne connaît que le texte : il découpe une chaîne en segments
 """
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Iterable
+from typing import Any
 
 # Un segment de texte : `bookmark` vaut None pour un texte sans lien.
 Segment = tuple[str, str | None]

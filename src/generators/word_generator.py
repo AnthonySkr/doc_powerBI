@@ -129,7 +129,7 @@ def refresh_fields_with_word(path: str) -> str:
                 document.Close(False)
             if word is not None:
                 word.Quit()
-        except Exception:  # noqa: BLE001
+        except Exception:  # noqa: BLE001, S110
             pass
 
 
@@ -653,7 +653,9 @@ class _DocumentBuilder:
             return False
         if node.get("links") is False or node.get("auto_links") is False:
             return False
-        if not self._auto.get("in_code", True) and style_name == self._style("code"):
+        if not self._auto.get(  # noqa: SIM103
+            "in_code", True
+        ) and style_name == self._style("code"):
             return False
         return True
 
@@ -851,7 +853,7 @@ def _set_fixed_layout(table, widths: list[float | None]) -> None:
         return
     for column, width in zip(grid.findall(qn("w:gridCol")), widths):
         if width is not None:
-            column.set(qn("w:w"), str(int(round(Cm(width).twips))))
+            column.set(qn("w:w"), str(int(round(Cm(width).twips))))  # noqa: RUF046
 
 
 def _set_table_look(table, first_row: bool) -> None:
