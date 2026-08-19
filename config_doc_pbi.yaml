@@ -183,7 +183,7 @@ data:
     step_format: "{name}"
 
   measures:
-    scope: used_in_report      # all | used_in_report (mesures + dépendances)
+    scope: all      # all | used_in_report (mesures + dépendances)
     include_hidden: false
     # Documente malgré tout les mesures référencées ailleurs (mesure masquée
     # utilisée par une autre, dépendance d'une mesure documentée...) : sans
