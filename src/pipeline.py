@@ -15,7 +15,7 @@ from src.cli import prompts
 from src.cli.arguments import Options
 from src.config import DocConfig, load_config, render
 from src.generators.context import build_context
-from src.generators.word import generate_word_documentation
+from src.generators.word import DocumentError, generate_word_documentation
 from src.models.data_models import PowerBIReport
 from src.parsers import dependencies
 from src.parsers.pbip import PbipProject
@@ -113,8 +113,14 @@ def _generate(
         interactive and bool(inputs.get("editer_textes", False))
     )
 
-    console.info(
-        generate_word_documentation(
+    try:
+        log = generate_word_documentation(
             config, context, os.path.join(output_dir, output_name), text_provider
         )
-    )
+    except DocumentError as e:
+        raise PipelineError(str(e)) from e
+
+    console.blank()
+    console.info(log.summary())
+    for line in log.details():
+        console.detail(line)

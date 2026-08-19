@@ -1,0 +1,64 @@
+Documentation automatique Power BI — version {version}
+=======================================================
+
+Ce dossier contient tout le nécessaire. Rien à installer.
+
+
+UTILISATION
+-----------
+
+1. Double-cliquez sur powerbi-doc.exe
+2. Collez le chemin du fichier .pbip de votre rapport, puis Entrée
+3. Répondez aux quelques questions
+4. Le document est écrit dans un sous-dossier « doc », à côté du .pbip
+
+Vous pouvez aussi glisser-déposer le fichier .pbip sur powerbi-doc.exe.
+
+
+APRES GENERATION
+----------------
+
+Le document réserve des emplacements « [IMAGE] ... » : remplacez-les par la
+capture d'écran correspondante. Les zones « [A completer] » sont à rédiger.
+
+La table des matières se met à jour à l'ouverture dans Word. Si ce n'est pas
+le cas : sélectionnez-la, puis touche F9.
+
+
+RELANCER SUR UN RAPPORT DEJA DOCUMENTE
+--------------------------------------
+
+Relancez simplement : le document existant est lu, et tout ce que vous y avez
+écrit est conservé. Seules les données venant de Power BI sont mises à jour.
+La version précédente est archivée dans le sous-dossier « .versions ».
+
+
+ADAPTER LE DOCUMENT
+-------------------
+
+config_doc_pbi.yaml décrit le plan du document : titres, ordre des parties,
+textes types, questions posées au lancement. Ouvrez-le dans un éditeur de
+texte, modifiez-le, relancez. Aucune reconstruction n'est nécessaire.
+
+template-doc-pbib.docx fournit la charte : styles, en-tête, pied de page,
+page de garde. Modifiez-le dans Word pour changer l'apparence.
+
+Ces deux fichiers doivent rester à côté de powerbi-doc.exe.
+
+
+EN CAS DE PROBLEME
+------------------
+
+La fenêtre reste ouverte à la fin : lisez le compte rendu, puis appuyez sur
+Entrée pour la fermer.
+
+
+« Fichier introuvable »        : vérifiez le chemin du .pbip (guillemets inclus)
+« Dossier SemanticModel ... »  : le .pbip doit être enregistré au format projet
+                                 Power BI (dossiers .SemanticModel et .Report
+                                 à côté du fichier .pbip)
+« Style ... absent du template » : le template a été modifié, un style nommé
+                                 manque ; le document est produit malgré tout
+« Template introuvable »       : template-doc-pbib.docx doit rester à côté de
+                                 powerbi-doc.exe ; le message indique les
+                                 emplacements consultés

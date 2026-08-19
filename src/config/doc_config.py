@@ -5,6 +5,7 @@ from typing import Any
 
 import yaml
 
+from src import paths
 from src.config.defaults import DEFAULT_CONFIG_PATH, DEFAULTS
 
 
@@ -33,6 +34,10 @@ class DocConfig:
         return self.raw["data"]
 
     @property
+    def merge(self) -> dict[str, Any]:
+        return self.raw["merge"]
+
+    @property
     def inputs(self) -> list[dict[str, Any]]:
         return self.raw["inputs"]
 
@@ -53,6 +58,7 @@ class DocConfig:
 
 def load_config(path: str = DEFAULT_CONFIG_PATH) -> DocConfig:
     """Charge le fichier YAML de configuration."""
+    path = paths.find(path)
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Fichier de configuration introuvable : '{path}'")
 

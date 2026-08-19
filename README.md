@@ -43,6 +43,8 @@ Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.p
    contenu déjà présent dans le template.
 6. Remplace les textes de l'en-tête et du pied de page du template, puis marque
    la table des matières comme à recalculer.
+7. Si une documentation existait déjà, en reprend tout ce que vous y avez
+   écrit et signale ce qui a changé (voir « Regénération » plus bas).
 
 Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
@@ -56,6 +58,7 @@ capture correspondante une fois le document généré.
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, tables et mesures |
+| `merge` | Regénération au-dessus d'une documentation existante |
 | `inputs` | Questions posées à l'utilisateur au lancement |
 | `sections` | Le plan du document |
 
@@ -145,7 +148,106 @@ inverse des liens précédents :
 - **Utilisée par** — les mesures dont l'expression DAX appelle celle-ci ; ces
   noms sont liés automatiquement vers leur propre définition.
 
-## Template
+## Regénération au-dessus d'une documentation existante
+
+Si le fichier de sortie existe déjà, il n'est pas écrasé : il est lu, comparé
+au rapport actuel, et un document neuf est écrit en reprenant tout ce que vous
+y avez mis.
+
+### Le contrat
+
+> **Le script est propriétaire de ses données, vous êtes propriétaire du
+> reste.**
+
+À chaque génération le script réécrit ce qu'il produit — formule DAX, tableau
+des champs d'un visuel, sources, mesures appelantes — pour qu'il soit toujours
+juste. Tout le reste vous appartient et est recopié tel quel :
+
+| Ce que vous faites dans Word | À la regénération |
+| --- | --- |
+| Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
+| Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
+| Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
+| Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
+| Changer une mise en forme, un style, ajouter un tableau | Conservés |
+
+Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
+paragraphe repère et en créer d'autres, le contenu est repris quand même.
+
+### Ce qui est signalé
+
+| Situation | Effet |
+| --- | --- |
+| La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
+| Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
+| Élément retiré du rapport | Simplement absent du nouveau document |
+| Bilan | Affiché **en console** en fin de génération |
+
+Le surlignage est retiré à la génération suivante : il signale ce qui a changé
+*depuis le document que vous aviez en main*, pas un état à cocher.
+
+### Comment le repérage fonctionne
+
+À la génération, le script pose dans le document des **marqueurs invisibles**
+(texte masqué Word, `w:vanish`) :
+
+| Marqueur | Rôle |
+| --- | --- |
+| `pbi::elem\|<id>\|<empreinte>` | Ancre un élément documenté et fige son état technique |
+| `pbi::gen\|<bloc>` … `pbi::endgen` | Encadrent un contenu produit par le script |
+
+Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
+encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
+aucune attente sur la forme de ce contenu.
+
+L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
+`visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
+des identifiants stables issus de Power BI ou du plan. L'empreinte est un
+condensé du `fingerprint:` déclaré à côté :
+
+```yaml
+bookmark: "measure:{{ measure.name }}"
+fingerprint: "{{ measure.expression }}"     # change → vos textes à revérifier
+```
+
+**Ne supprimez pas ces marqueurs.** Ils sont invisibles à l'écran et à
+l'impression ; on les voit en activant « Afficher tout » (¶). Un document sans
+marqueurs est simplement régénéré intégralement, sans erreur.
+
+### Quels blocs le script s'attribue
+
+Par défaut les blocs `property` et `table` — ceux qui n'affichent que des
+données du rapport. Les paragraphes, emplacements d'image et zones
+`user_fill` sont des **amorces** : écrites à la première génération, puis
+laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
+
+```yaml
+- type: paragraph
+  id: rappel_legal
+  generated: true      # toujours réécrit depuis le YAML
+```
+
+### Réglages — bloc `merge`
+
+| Clé | Effet |
+| --- | --- |
+| `enabled` | `false` : régénère toujours de zéro, sans lire l'existant |
+| `keep_user_text` | `false` : ignore le contenu du document précédent |
+| `backup` / `backup_dir` | Archive la version précédente avant d'écrire la nouvelle |
+| `highlight_changed` | Couleur des textes d'un élément qui a changé (`yellow`) |
+| `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
+
+### Limites connues
+
+- L'ordre suit le plan : si vous déplacez un élément **entier** ailleurs dans
+  le document, il revient à sa place. Vos remaniements *à l'intérieur* d'un
+  élément sont respectés.
+- Une mesure **renommée** dans Power BI est vue comme une suppression suivie
+  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom.
+- Ce qui précède la première ancre (page de garde, sommaire) vient du template
+  et est régénéré.
+
+## Template## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
 repris par la configuration :
@@ -185,6 +287,83 @@ title_suffix: "{{ visual.visual_type }}"
 title_suffix_style: "{{ styles.technical_id }}"
 ```
 
+## Distribuer aux utilisateurs Power BI
+
+Le script est empaqueté en un exécutable autonome : les utilisateurs n'ont ni
+Python ni dépendances à installer.
+
+```bash
+task package     # vérifie, construit, assemble et zippe
+```
+
+Résultat dans `dist/` :
+
+```
+powerbi-doc-1.0.0-windows.zip
+└── powerbi-doc-1.0.0-windows/
+    ├── powerbi-doc.exe          l'application, autonome
+    ├── config_doc_pbi.yaml      le plan du document, modifiable
+    ├── template-doc-pbib.docx   la charte Word, modifiable
+    └── LISEZMOI.txt             mode d'emploi
+```
+
+Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
+double-clique sur l'exe — ou y glisse-dépose son fichier `.pbip`.
+
+> **À construire sous Windows.** PyInstaller ne sait pas produire un `.exe`
+> depuis Linux ou macOS ; il construit pour le système sur lequel il tourne.
+> Le nom de l'archive rappelle la plateforme utilisée.
+
+### Configuration et template restent modifiables
+
+C'est le principe du projet : le plan est dans le YAML, pas dans le code. Les
+deux fichiers sont donc livrés **en clair à côté de l'exe**, pas seulement
+enfermés dedans. L'utilisateur les édite et relance — sans rien reconstruire.
+
+L'exécutable en embarque tout de même une copie, utilisée si les fichiers
+livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
+`src/paths.py` :
+
+1. le chemin donné (absolu, ou relatif au dossier courant) ;
+2. à côté de l'exécutable — le cas normal ;
+3. à l'intérieur de l'exécutable — copie de secours.
+
+### Comportement de l'exécutable chez l'utilisateur
+
+**La fenêtre reste ouverte à la fin.** Lancé par double-clic ou par
+glisser-déposer, l'exécutable obtient une console qui se refermerait aussitôt
+le travail terminé — emportant le compte rendu et les éventuelles erreurs. Il
+attend donc une touche avant de rendre la main, y compris lorsqu'il s'arrête
+sur une erreur. La condition est simple : l'attente a lieu dès lors que le
+programme tourne depuis l'exécutable, jamais en développement. `--no-pause` la
+désactive pour une exécution automatisée.
+
+**Le dossier courant n'est pas fiable.** Un glisser-déposer donne à
+l'exécutable un dossier courant sans rapport avec l'endroit où il est
+installé. La configuration et le template sont donc cherchés dans cet ordre
+(`src/paths.py`) :
+
+1. le chemin tel quel — utile en développement ;
+2. à côté du fichier qui le désigne : un template nommé dans une
+   configuration est cherché à côté de cette configuration ;
+3. à côté de l'exécutable — le cas normal en distribution ;
+4. à l'intérieur de l'exécutable — copie de secours.
+
+Si le template reste introuvable, le message d'erreur énumère les emplacements
+consultés.
+
+### Étapes séparées
+
+| Commande | Effet |
+| --- | --- |
+| `task build` | Construit seulement `dist/powerbi-doc.exe` (PyInstaller) |
+| `task package` | `lint` + `test` + `build`, puis assemble et zippe |
+| `task clean` | Supprime aussi `build/` et `dist/` |
+
+La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
+un fichier à embarquer, une icône (`icon=`) ou un module manquant
+(`hiddenimports`).
+
 ## Structure du projet
 
 Chaque module a une responsabilité unique ; les points d'entrée publics d'un
@@ -206,8 +385,18 @@ src/
       doc_config.py           chargement du YAML (DocConfig)
       expressions.py          variables {{ }}, listes `over:`, conditions `when`
 
+  paths.py                    localisation des fichiers livrés (exe compris)
+
   models/
       data_models.py          structures manipulées par le plan
+
+  merge/                      regénération au-dessus d'une doc existante
+      markers.py              marqueurs invisibles posés dans le document
+      blocks.py               découpage du corps en blocs ancrés
+      previous.py             relecture du document précédent
+      smart.py                fusion : données du script, reste de l'utilisateur
+      transplant.py           recopie d'un contenu et de ses images
+      changes.py              bilan des ajouts / modifications / retraits
 
   parsers/
       pbip.py                 localisation des dossiers d'un projet .pbip
@@ -227,7 +416,8 @@ src/
       references.py           tableau des références, « utilisée dans »
       measure_links.py        repérage des mentions de mesures dans un texte
       word/                   écriture du .docx
-          generator.py          ouverture du template, sauvegarde
+          generator.py          document précédent, écriture, archivage
+          merging.py            marqueurs, reprise des textes, surlignage
           document.py           parcours du plan et écriture du contenu
           styles.py             clés de style → styles du template
           links.py              signets et liens internes
@@ -235,7 +425,9 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (110)
+tests/                        tests unitaires (185)
+tools/package.py              assemblage du dossier distribué
+powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
 template-doc-pbib.docx        template Word
 ```
@@ -249,6 +441,7 @@ template-doc-pbib.docx        template Word
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
+| changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 
 ## Notes
 
@@ -264,5 +457,7 @@ template-doc-pbib.docx        template Word
 task run        # lancer la génération
 task test       # tests unitaires
 task check      # format + lint (ruff) + tests
-task clean      # nettoyer les caches
+task build      # construire l'exécutable
+task package    # construire le zip à distribuer
+task clean      # nettoyer les caches et les artefacts de construction
 ```
