@@ -333,10 +333,10 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 **La fenêtre reste ouverte à la fin.** Lancé par double-clic ou par
 glisser-déposer, l'exécutable obtient une console qui se refermerait aussitôt
 le travail terminé — emportant le compte rendu et les éventuelles erreurs. Il
-attend donc une touche avant de rendre la main. Lancé depuis un terminal déjà
-ouvert, il ne demande rien : la détection porte sur la console, pas sur le mode
-d'exécution (`src/cli/__init__.py`). `--no-pause` force le comportement
-silencieux pour une exécution automatisée.
+attend donc une touche avant de rendre la main, y compris lorsqu'il s'arrête
+sur une erreur. La condition est simple : l'attente a lieu dès lors que le
+programme tourne depuis l'exécutable, jamais en développement. `--no-pause` la
+désactive pour une exécution automatisée.
 
 **Le dossier courant n'est pas fiable.** Un glisser-déposer donne à
 l'exécutable un dossier courant sans rapport avec l'endroit où il est
