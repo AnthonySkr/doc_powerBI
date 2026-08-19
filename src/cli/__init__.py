@@ -52,7 +52,7 @@ def _finish(code: int, options) -> int:
     console.blank()
     try:
         input("Appuyez sur Entrée pour fermer cette fenêtre… ")
-    except Exception:  # noqa: BLE001
+    except Exception:  # noqa: BLE001, S110
         # Entrée absente ou fermée (tâche planifiée) : ne pas bloquer.
         pass
     return code
