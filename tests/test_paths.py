@@ -66,3 +66,63 @@ class AppDirTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class NearTest(unittest.TestCase):
+    """Le fichier est cherché à côté de celui qui le désigne."""
+
+    def setUp(self):
+        self._directory = tempfile.TemporaryDirectory()
+        self.addCleanup(self._directory.cleanup)
+        self.directory = self._directory.name
+
+    def test_trouve_a_cote_du_fichier_qui_le_designe(self):
+        path = os.path.join(self.directory, "template.docx")
+        with open(path, "wb") as f:
+            f.write(b"x")
+        with mock.patch.object(paths, "app_dir", return_value="/dossier/absent"):
+            self.assertEqual(paths.find("template.docx", near=self.directory), path)
+
+    def test_near_prioritaire_sur_l_executable(self):
+        near = os.path.join(self.directory, "config")
+        beside = os.path.join(self.directory, "exe")
+        for folder in (near, beside):
+            os.makedirs(folder)
+            with open(os.path.join(folder, "template.docx"), "wb") as f:
+                f.write(b"x")
+        with mock.patch.object(paths, "app_dir", return_value=beside):
+            self.assertEqual(
+                paths.find("template.docx", near=near), os.path.join(near, "template.docx")
+            )
+
+
+class CandidatesTest(unittest.TestCase):
+    """La liste des emplacements consultés alimente les messages d'erreur."""
+
+    def test_ordre_de_recherche(self):
+        with (
+            mock.patch.object(paths, "app_dir", return_value="/appli"),
+            mock.patch.object(paths, "bundled_dir", return_value="/bundle"),
+        ):
+            self.assertEqual(
+                paths.candidates("t.docx", near="/config"),
+                [
+                    "t.docx",
+                    os.path.join("/config", "t.docx"),
+                    os.path.join("/appli", "t.docx"),
+                    os.path.join("/bundle", "t.docx"),
+                ],
+            )
+
+    def test_sans_doublon(self):
+        with (
+            mock.patch.object(paths, "app_dir", return_value="/appli"),
+            mock.patch.object(paths, "bundled_dir", return_value="/appli"),
+        ):
+            self.assertEqual(len(paths.candidates("t.docx", near="/appli")), 2)
+
+    def test_hors_executable(self):
+        with mock.patch.object(paths, "app_dir", return_value="/appli"):
+            self.assertEqual(
+                paths.candidates("t.docx"), ["t.docx", os.path.join("/appli", "t.docx")]
+            )

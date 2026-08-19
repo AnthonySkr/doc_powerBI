@@ -7,7 +7,7 @@ from typing import Any
 
 from docx import Document
 
-from src import console
+from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
@@ -38,11 +38,12 @@ def generate_word_documentation(
     merge_options = config.merge
     previous = read_previous(output_path) if merge_options.get("enabled", True) else None
 
-    template_path = render(config.document.get("template"), context)
     try:
-        doc = Document(template_path)
+        doc = Document(_template_path(config, context))
+    except DocumentError:
+        raise
     except Exception as e:
-        raise DocumentError(f"Impossible de charger le template '{template_path}' — {e}") from e
+        raise DocumentError(f"Template illisible — {e}") from e
 
     # Le plan peut conditionner une section à `merge.is_update`.
     context = {**context, "merge": {"is_update": bool(previous and previous.exists)}}
@@ -77,6 +78,30 @@ def generate_word_documentation(
 
 class DocumentError(Exception):
     """Le document n'a pas pu être produit."""
+
+
+def _template_path(config: DocConfig, context: dict[str, Any]) -> str:
+    """
+    Localise le template Word désigné par la configuration.
+
+    Le nom déclaré est relatif : il est cherché à côté de la configuration qui
+    le nomme, puis à côté de l'exécutable. Le dossier courant ne suffit pas —
+    un exécutable ouvert par glisser-déposer en hérite d'un quelconque.
+    """
+    name = render(config.document.get("template"), context)
+    if not name:
+        raise DocumentError("Aucun template déclaré dans `document.template`.")
+
+    near = os.path.dirname(os.path.abspath(config.path)) if config.path else ""
+    path = paths.find(name, near=near)
+    if os.path.isfile(path):
+        return path
+
+    cherches = "\n".join(f"      {os.path.abspath(c)}" for c in paths.candidates(name, near))
+    raise DocumentError(
+        f"Template introuvable : '{name}'. Cherché ici :\n{cherches}\n"
+        f"      Placez-le à côté de {os.path.basename(config.path) or 'la configuration'}."
+    )
 
 
 def _archive(output_path: str, options: dict[str, Any]) -> str:

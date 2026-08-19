@@ -11,6 +11,7 @@ class Options:
     pbip_path: str
     config_path: str
     interactive: bool
+    pause: bool
 
 
 def parse_args(argv: list[str] | None = None) -> Options:
@@ -30,6 +31,11 @@ def parse_args(argv: list[str] | None = None) -> Options:
         action="store_true",
         help="Ne pose aucune question : utilise les valeurs par défaut du YAML",
     )
+    parser.add_argument(
+        "--no-pause",
+        action="store_true",
+        help="Ne pas attendre de touche à la fin (exécution automatisée)",
+    )
     args = parser.parse_args(argv)
 
     pbip = args.pbip or input("Chemin vers le fichier .pbip : ")
@@ -38,4 +44,5 @@ def parse_args(argv: list[str] | None = None) -> Options:
         pbip_path=pbip.strip().strip('"'),
         config_path=args.config,
         interactive=not args.no_input,
+        pause=not args.no_pause,
     )

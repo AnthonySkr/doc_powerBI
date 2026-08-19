@@ -49,9 +49,16 @@ Ces deux fichiers doivent rester à côté de powerbi-doc.exe.
 EN CAS DE PROBLEME
 ------------------
 
+La fenêtre reste ouverte à la fin : lisez le compte rendu, puis appuyez sur
+Entrée pour la fermer.
+
+
 « Fichier introuvable »        : vérifiez le chemin du .pbip (guillemets inclus)
 « Dossier SemanticModel ... »  : le .pbip doit être enregistré au format projet
                                  Power BI (dossiers .SemanticModel et .Report
                                  à côté du fichier .pbip)
 « Style ... absent du template » : le template a été modifié, un style nommé
                                  manque ; le document est produit malgré tout
+« Template introuvable »       : template-doc-pbib.docx doit rester à côté de
+                                 powerbi-doc.exe ; le message indique les
+                                 emplacements consultés
