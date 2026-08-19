@@ -7,7 +7,7 @@ from typing import Any
 
 from docx import Document
 
-from src import console
+from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider

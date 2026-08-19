@@ -287,6 +287,59 @@ title_suffix: "{{ visual.visual_type }}"
 title_suffix_style: "{{ styles.technical_id }}"
 ```
 
+## Distribuer aux utilisateurs Power BI
+
+Le script est empaqueté en un exécutable autonome : les utilisateurs n'ont ni
+Python ni dépendances à installer.
+
+```bash
+task package     # vérifie, construit, assemble et zippe
+```
+
+Résultat dans `dist/` :
+
+```
+powerbi-doc-1.0.0-windows.zip
+└── powerbi-doc-1.0.0-windows/
+    ├── powerbi-doc.exe          l'application, autonome
+    ├── config_doc_pbi.yaml      le plan du document, modifiable
+    ├── template-doc-pbib.docx   la charte Word, modifiable
+    └── LISEZMOI.txt             mode d'emploi
+```
+
+Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
+double-clique sur l'exe — ou y glisse-dépose son fichier `.pbip`.
+
+> **À construire sous Windows.** PyInstaller ne sait pas produire un `.exe`
+> depuis Linux ou macOS ; il construit pour le système sur lequel il tourne.
+> Le nom de l'archive rappelle la plateforme utilisée.
+
+### Configuration et template restent modifiables
+
+C'est le principe du projet : le plan est dans le YAML, pas dans le code. Les
+deux fichiers sont donc livrés **en clair à côté de l'exe**, pas seulement
+enfermés dedans. L'utilisateur les édite et relance — sans rien reconstruire.
+
+L'exécutable en embarque tout de même une copie, utilisée si les fichiers
+livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
+`src/paths.py` :
+
+1. le chemin donné (absolu, ou relatif au dossier courant) ;
+2. à côté de l'exécutable — le cas normal ;
+3. à l'intérieur de l'exécutable — copie de secours.
+
+### Étapes séparées
+
+| Commande | Effet |
+| --- | --- |
+| `task build` | Construit seulement `dist/powerbi-doc.exe` (PyInstaller) |
+| `task package` | `lint` + `test` + `build`, puis assemble et zippe |
+| `task clean` | Supprime aussi `build/` et `dist/` |
+
+La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
+un fichier à embarquer, une icône (`icon=`) ou un module manquant
+(`hiddenimports`).
+
 ## Structure du projet
 
 Chaque module a une responsabilité unique ; les points d'entrée publics d'un
@@ -307,6 +360,8 @@ src/
       defaults.py             valeurs par défaut de la configuration
       doc_config.py           chargement du YAML (DocConfig)
       expressions.py          variables {{ }}, listes `over:`, conditions `when`
+
+  paths.py                    localisation des fichiers livrés (exe compris)
 
   models/
       data_models.py          structures manipulées par le plan
@@ -346,7 +401,9 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (154)
+tests/                        tests unitaires (118)
+tools/package.py              assemblage du dossier distribué
+powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
 template-doc-pbib.docx        template Word
 ```
@@ -376,5 +433,7 @@ template-doc-pbib.docx        template Word
 task run        # lancer la génération
 task test       # tests unitaires
 task check      # format + lint (ruff) + tests
-task clean      # nettoyer les caches
+task build      # construire l'exécutable
+task package    # construire le zip à distribuer
+task clean      # nettoyer les caches et les artefacts de construction
 ```
