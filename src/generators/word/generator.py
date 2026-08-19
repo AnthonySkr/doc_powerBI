@@ -11,7 +11,7 @@ from src import console
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
-from src.merge import ChangeLog, read_previous
+from src.merge import ChangeLog, apply_merge, read_previous
 
 
 def generate_word_documentation(
@@ -36,11 +36,7 @@ def generate_word_documentation(
             modifier les textes des blocs `editable`
     """
     merge_options = config.merge
-    previous = (
-        read_previous(output_path, _placeholders(config))
-        if merge_options.get("enabled", True)
-        else None
-    )
+    previous = read_previous(output_path) if merge_options.get("enabled", True) else None
 
     template_path = render(config.document.get("template"), context)
     try:
@@ -55,6 +51,11 @@ def generate_word_documentation(
     builder.build()
 
     log = builder.merge.log
+    if previous is not None and previous.exists:
+        # Le document neuf porte ses ancres : il est maintenant recomposé en
+        # suivant l'ordre du document précédent, dont seuls les contenus
+        # produits par le script sont remplacés.
+        apply_merge(doc, previous, merge_options, log)
     archived = ""
     if previous is not None and previous.exists:
         log.removed = previous.removed(log.written_ids)
@@ -76,21 +77,6 @@ def generate_word_documentation(
 
 class DocumentError(Exception):
     """Le document n'a pas pu être produit."""
-
-
-def _placeholders(config: DocConfig) -> tuple[str, ...]:
-    """
-    Textes repères marquant une zone non rédigée.
-
-    Les retrouver dans le document précédent ne signifie pas qu'il y a quelque
-    chose à reprendre : la zone est simplement restée vide.
-    """
-    user_fill = config.rendering.get("user_fill") or {}
-    return tuple(
-        text
-        for text in (user_fill.get("placeholder_text"), "[À compléter]")
-        if isinstance(text, str) and text
-    )
 
 
 def _archive(output_path: str, options: dict[str, Any]) -> str:

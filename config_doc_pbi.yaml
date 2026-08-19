@@ -262,18 +262,6 @@ sections:
     generate: false           # aucune écriture : le contenu du template est conservé
 
   # ---------------------------------------------------------------------------
-  #  RÉSUMÉ DE MISE À JOUR — écrit uniquement lorsqu'une doc existait déjà
-  # ---------------------------------------------------------------------------
-  - id: resume_maj
-    title: "Mise à jour de la documentation"
-    level: 1
-    when: merge.is_update
-    page_break_before: false
-    blocks:
-      - type: change_summary
-        id: resume_changements
-
-  # ---------------------------------------------------------------------------
   #  ORGANISATION GRAPHIQUE
   # ---------------------------------------------------------------------------
   - id: organisation_graphique
@@ -451,6 +439,7 @@ sections:
         section:
           title: "{{ page.display_name }}"
           level: 2
+          bookmark: "page:{{ page.name }}"
           blocks:
             - type: image
               id: page_capture
@@ -474,9 +463,7 @@ sections:
                 blocks:
                   - type: image
                     id: visuel_capture
-                    description: >-
-                      Capture du visuel « {{ visual.title }} » avec les numéros de
-                      référence reportés sur l'image
+                    description: "Capture du visuel « {{ visual.title }} »"
 
                   # Tableau des références du visuel : le numéro de la première
                   # colonne est reporté à la main sur la capture ci-dessus.

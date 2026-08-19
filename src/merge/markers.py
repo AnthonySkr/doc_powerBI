@@ -1,14 +1,18 @@
 """
 Marqueurs invisibles posés dans le document généré.
 
-Ils sont ce qui permet de retrouver, lors d'une regénération, quel passage du
-document correspond à quel élément du rapport Power BI :
+Deux niveaux, et un principe : **le script est propriétaire de ses données,
+l'utilisateur du reste.**
 
-    pbi::elem|<identifiant>|<empreinte>   identité et état technique d'un élément
-    pbi::slot|<clé>                       début d'une zone rédigée par l'utilisateur
-    pbi::endslot                          fin de cette zone
+    pbi::elem|<identifiant>|<empreinte>   ancre un élément documenté
+    pbi::gen|<bloc>  ...  pbi::endgen     encadrent un contenu produit par le script
 
-Chaque marqueur occupe un paragraphe dont le texte porte l'attribut Word
+Tout ce qui se trouve entre deux ancres sans être encadré par `gen` appartient
+à l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
+À la régénération, seuls les contenus `gen` sont réécrits ; le reste est
+recopié tel quel.
+
+Les marqueurs occupent un paragraphe dont le texte porte l'attribut Word
 « masqué » (`w:vanish`) : Word ne l'affiche ni ne l'imprime, et le paragraphe
 ne prend aucune place tant que l'affichage du texte masqué est désactivé.
 """
@@ -21,23 +25,25 @@ from docx.oxml.ns import qn
 
 PREFIX = "pbi::"
 
-_ELEMENT = "elem"
-_SLOT = "slot"
-_SLOT_END = "endslot"
+ELEMENT = "elem"
+GENERATED = "gen"
+GENERATED_END = "endgen"
 
-# Séparateur des champs d'un marqueur. Les identifiants d'éléments contiennent
-# des « : » (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
+# Séparateur des champs. Les identifiants d'éléments contiennent des « : »
+# (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
 _SEPARATOR = "|"
 
 _FINGERPRINT_LENGTH = 10
+
+_TEXT = qn("w:t")
 
 
 @dataclass(frozen=True)
 class Marker:
     """Marqueur reconnu dans un document."""
 
-    kind: str  # "elem", "slot" ou "endslot"
-    value: str = ""  # identifiant d'élément, ou clé de zone
+    kind: str  # "elem", "gen" ou "endgen"
+    value: str = ""  # identifiant d'élément, ou identifiant de bloc du plan
     fingerprint: str = ""
 
 
@@ -47,15 +53,15 @@ class Marker:
 
 
 def element(element_id: str, fingerprint: str) -> str:
-    return f"{PREFIX}{_ELEMENT}{_SEPARATOR}{element_id}{_SEPARATOR}{fingerprint}"
+    return f"{PREFIX}{ELEMENT}{_SEPARATOR}{element_id}{_SEPARATOR}{fingerprint}"
 
 
-def slot(key: str) -> str:
-    return f"{PREFIX}{_SLOT}{_SEPARATOR}{key}"
+def generated(block_id: str) -> str:
+    return f"{PREFIX}{GENERATED}{_SEPARATOR}{block_id}"
 
 
-def slot_end() -> str:
-    return f"{PREFIX}{_SLOT_END}"
+def generated_end() -> str:
+    return f"{PREFIX}{GENERATED_END}"
 
 
 def fingerprint(text: str) -> str:
@@ -71,8 +77,7 @@ def fingerprint(text: str) -> str:
 def write(doc, text: str) -> None:
     """Ajoute au document un paragraphe masqué portant le marqueur."""
     paragraph = doc.add_paragraph()
-    run = paragraph.add_run(text)
-    hide(run)
+    hide(paragraph.add_run(text))
 
 
 def hide(run) -> None:
@@ -93,37 +98,20 @@ def parse(text: str) -> Marker | None:
     if not text.startswith(PREFIX):
         return None
 
-    body = text[len(PREFIX) :]
-    kind, _, rest = body.partition(_SEPARATOR)
+    kind, _, rest = text[len(PREFIX) :].partition(_SEPARATOR)
 
-    if kind == _SLOT_END:
-        return Marker(kind=_SLOT_END)
-    if kind == _SLOT and rest:
-        return Marker(kind=_SLOT, value=rest)
-    if kind == _ELEMENT and _SEPARATOR in rest:
+    if kind == GENERATED_END:
+        return Marker(kind=GENERATED_END)
+    if kind == GENERATED and rest:
+        return Marker(kind=GENERATED, value=rest)
+    if kind == ELEMENT and _SEPARATOR in rest:
         value, _, digest = rest.rpartition(_SEPARATOR)
-        return Marker(kind=_ELEMENT, value=value, fingerprint=digest)
+        return Marker(kind=ELEMENT, value=value, fingerprint=digest)
     return None
 
 
-def is_element(marker: Marker) -> bool:
-    return marker.kind == _ELEMENT
-
-
-def is_slot(marker: Marker) -> bool:
-    return marker.kind == _SLOT
-
-
-def is_slot_end(marker: Marker) -> bool:
-    return marker.kind == _SLOT_END
-
-
-def slot_key(element_id: str, block_id: str) -> str:
-    """
-    Clé d'une zone rédigée par l'utilisateur.
-
-    Elle est préfixée par l'élément qui la contient : le bloc `mesure_notes`
-    d'une mesure n'est pas celui d'une autre. Les zones situées hors de toute
-    boucle n'ont pas de préfixe.
-    """
-    return f"{element_id}#{block_id}" if element_id else f"#{block_id}"
+def of(node) -> Marker | None:
+    """Marqueur porté par un élément XML de corps de document (`w:p`), sinon None."""
+    if node.tag != qn("w:p"):
+        return None
+    return parse("".join(text.text or "" for text in node.iter(_TEXT)))

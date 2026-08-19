@@ -42,7 +42,6 @@ class DocumentBuilder:
         self.links = LinkIndex(config, context, self.styles.ids)
         self.merge = MergeWriter(doc, config, previous)
         self._figure_number = 0
-        self._summary_paragraph = None
 
         self._block_writers = {
             "paragraph": self._write_paragraph,
@@ -51,7 +50,6 @@ class DocumentBuilder:
             "property": self._write_property,
             "table": self._write_table,
             "loop": self._write_loop,
-            "change_summary": self._write_change_summary,
         }
 
     # ── Point d'entrée ────────────────────────────────────────────
@@ -62,7 +60,6 @@ class DocumentBuilder:
         for section in self.config.sections:
             self._write_section(section, self.context)
         self._update_table_of_contents()
-        self._fill_change_summary()
         self.links.report()
 
     # ── Éléments du template ──────────────────────────────────────
@@ -145,16 +142,16 @@ class DocumentBuilder:
         if self._needs_page_break(section):
             self.doc.add_page_break()
 
-        # Le marqueur précède le titre : à la relecture, tout ce qui suit
-        # appartient à cet élément jusqu'au marqueur suivant.
-        with self.merge.element(section, context):
-            self._write_title(section, context)
+        # L'ancre précède le titre : à la relecture, tout ce qui suit lui
+        # appartient jusqu'à l'ancre suivante.
+        self.merge.anchor(section, context)
+        self._write_title(section, context)
 
-            for block in section.get("blocks") or []:
-                self._write_block(block, context)
+        for block in section.get("blocks") or []:
+            self._write_block(block, context)
 
-            for child in section.get("sections") or []:
-                self._write_section(child, context)
+        for child in section.get("sections") or []:
+            self._write_section(child, context)
 
     def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         title = render(section.get("title"), context)
@@ -194,37 +191,20 @@ class DocumentBuilder:
         if writer is None:
             console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
-        writer(block, context)
+
+        with self.merge.owned(block):
+            writer(block, context)
 
     def _write_paragraph(self, block: dict[str, Any], context: dict[str, Any]) -> None:
-        editable = bool(block.get("editable"))
         text = render(block.get("text"), context)
-
-        # Un texte déjà relu dans le document précédent prime sur celui du plan ;
-        # la question posée à l'utilisateur porte alors sur ce texte-là.
-        restored = self.merge.restore(block) if editable else []
-        if restored:
-            text = "\n".join(restored)
-
-        if editable and self.text_provider is not None:
+        if block.get("editable") and self.text_provider is not None:
             text = self.text_provider(block, text)
         if not text:
             return
 
         style = self.styles.paragraph(block.get("style") or "normal")
-        links = self._links_allowed(block, style)
-
-        if not editable:
-            paragraph = self.doc.add_paragraph(style=style)
-            self._write_rich_text(paragraph, text, context, links=links)
-            return
-
-        with self.merge.slot(block):
-            for line in text.split("\n"):
-                paragraph = self.doc.add_paragraph(style=style)
-                self._write_rich_text(paragraph, line, context, links=links)
-                if restored:
-                    self.merge.highlight_restored(paragraph)
+        paragraph = self.doc.add_paragraph(style=style)
+        self._write_rich_text(paragraph, text, context, links=self._links_allowed(block, style))
 
     def _write_image(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Réserve l'emplacement d'une capture, avec sa description."""
@@ -252,11 +232,10 @@ class DocumentBuilder:
         """
         Zone à rédiger après génération.
 
-        Si le document précédent contenait déjà une rédaction, elle est reprise
-        telle quelle — et signalée si l'élément qui la porte a changé entre-temps.
+        Elle n'est écrite qu'à la première génération : ensuite, ce que
+        l'utilisateur y a mis est repris tel quel par la fusion.
         """
         options = self.config.rendering["user_fill"]
-        restored = self.merge.restore(block)
 
         label = render(block.get("label"), context)
         if label:
@@ -267,25 +246,13 @@ class DocumentBuilder:
                 ),
             )
 
-        if restored:
-            style = self.styles.paragraph(block.get("filled_style") or "normal")
-        else:
-            style = self.styles.paragraph(block.get("style") or options.get("style") or "todo")
-
-        lines = restored or [
+        text = (
             render(block.get("placeholder_text") or options.get("placeholder_text"), context)
             if options.get("show_placeholder")
             else ""
-        ]
-
-        with self.merge.slot(block):
-            for line in lines:
-                paragraph = self.doc.add_paragraph(style=style)
-                self._write_rich_text(paragraph, line, context, links=bool(restored))
-                if restored:
-                    self.merge.highlight_restored(paragraph)
-                else:
-                    self.merge.highlight_new(paragraph)
+        )
+        style = block.get("style") or options.get("style") or "todo"
+        self.doc.add_paragraph(text, style=self.styles.paragraph(style))
 
     def _write_property(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Sous-titre + valeur, ou sous-titre + liste de valeurs."""
@@ -424,29 +391,6 @@ class DocumentBuilder:
             return
 
         self._write_rich_text(paragraph, text, context, links=self._links_allowed(column, ""))
-
-    def _write_change_summary(self, block: dict[str, Any], context: dict[str, Any]) -> None:
-        """
-        Réserve le paragraphe du résumé des changements.
-
-        Le bilan n'est connu qu'une fois tout le document parcouru : le
-        paragraphe est posé ici, à l'emplacement voulu par le plan, et rempli
-        en fin de génération.
-        """
-        label = render(block.get("label"), context)
-        if label:
-            self.doc.add_paragraph(
-                label, style=self.styles.paragraph(block.get("label_style") or "subtitle")
-            )
-        self._summary_paragraph = self.doc.add_paragraph(
-            style=self.styles.paragraph(block.get("style") or "normal")
-        )
-
-    def _fill_change_summary(self) -> None:
-        """Écrit le bilan dans le paragraphe réservé par le bloc `change_summary`."""
-        if self._summary_paragraph is None:
-            return
-        self._summary_paragraph.add_run(self.merge.log.summary())
 
     def _write_loop(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Répète une section et/ou des blocs sur chaque élément d'une collection."""
