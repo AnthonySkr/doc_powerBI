@@ -1,7 +1,7 @@
 # Documentation automatique Power BI
 
 Génère la documentation Word d'un rapport Power BI (`.pbip`) à partir du
-template `template-doc-pbib-v2.docx` et d'un plan décrit en YAML.
+template `template-doc-pbib.docx` et d'un plan décrit en YAML.
 
 Le script ne contient aucune structure de document : **tout le plan est dans
 `config_doc_pbi.yaml`**. Pour documenter un rapport différemment, on modifie le
@@ -13,7 +13,7 @@ YAML, pas le code.
 python -m venv .venv
 .venv\Scripts\Activate.ps1        # Windows
 pip install taskipy
-task install
+task install                      # dépendances + outils de développement
 ```
 
 ## Lancer le script
@@ -187,23 +187,68 @@ title_suffix_style: "{{ styles.technical_id }}"
 
 ## Structure du projet
 
+Chaque module a une responsabilité unique ; les points d'entrée publics d'un
+paquet sont exposés par son `__init__.py`.
+
 ```
-main.py                     orchestration (lecture .pbip, questions, génération)
+main.py                       lance le script
+
 src/
-  doc_config.py               chargement du YAML, variables {{ }}, conditions when
-  generators/
-      data_context.py         filtres/tris et données exposées au plan
-      word_generator.py       écriture du .docx en parcourant le plan
-      measure_links.py        repérage des mentions de mesures dans les textes
+  console.py                  tout l'affichage console passe par ici
+  pipeline.py                 enchaînement .pbip → données → .docx
+
+  cli/
+      arguments.py            options de la ligne de commande
+      prompts.py              questions déclarées dans `inputs:`
+
+  config/
+      defaults.py             valeurs par défaut de la configuration
+      doc_config.py           chargement du YAML (DocConfig)
+      expressions.py          variables {{ }}, listes `over:`, conditions `when`
+
+  models/
+      data_models.py          structures manipulées par le plan
+
   parsers/
-      tmdl_parser.py          mesures DAX, tables, sources et étapes Power Query
-      report_parser.py        pages, visuels, champs et filtres du rapport
-      dependency_analyzer.py  dépendances transitives entre mesures
-  models/data_models.py       structures de données
-tests/                      tests unitaires (liens internes, noms de signets)
-config_doc_pbi.yaml         plan du document
-template-doc-pbib.docx      template Word
+      pbip.py                 localisation des dossiers d'un projet .pbip
+      dependencies.py         dépendances transitives entre mesures
+      tmdl/                   modèle sémantique
+          reader.py             lecture des fichiers, découpage en blocs
+          measures.py           blocs `measure` → DaxMeasure
+          tables.py             table, visibilité, partition
+          powerquery.py         script `let ... in` → étapes nommées
+      report/                 rapport PBIR
+          pages.py              pages et visuels
+          fields.py             projections et filtres
+
+  generators/
+      context.py              assemble le contexte exposé au plan
+      filters.py              filtres et tris de `data:`
+      references.py           tableau des références, « utilisée dans »
+      measure_links.py        repérage des mentions de mesures dans un texte
+      word/                   écriture du .docx
+          generator.py          ouverture du template, sauvegarde
+          document.py           parcours du plan et écriture du contenu
+          styles.py             clés de style → styles du template
+          links.py              signets et liens internes
+          tables.py             réglages OOXML des tableaux
+          fields.py             table des matières, en-têtes, pieds de page
+          word_app.py           recalcul des champs par Word (optionnel)
+
+tests/                        tests unitaires (110)
+config_doc_pbi.yaml           plan du document
+template-doc-pbib.docx        template Word
 ```
+
+### Par où commencer
+
+| Pour... | Ouvrir |
+| --- | --- |
+| changer le plan du document | `config_doc_pbi.yaml` (pas de code) |
+| ajouter un type de bloc | `generators/word/document.py` → `_block_writers` |
+| exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
+| ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
+| lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 
 ## Notes
 
@@ -218,6 +263,6 @@ template-doc-pbib.docx      template Word
 ```bash
 task run        # lancer la génération
 task test       # tests unitaires
-task check      # format + lint (ruff)
+task check      # format + lint (ruff) + tests
 task clean      # nettoyer les caches
 ```

@@ -3,7 +3,7 @@
 import unittest
 
 from src.generators.measure_links import MeasureLinker, collect_measures
-from src.generators.word_generator import _bookmark_name
+from src.generators.word.links import bookmark_name
 from src.models.data_models import DaxMeasure, MeasureGroup
 
 
@@ -82,20 +82,20 @@ class CollectMeasuresTest(unittest.TestCase):
 
 class BookmarkNameTest(unittest.TestCase):
     def test_noms_proches_restent_distincts(self):
-        self.assertNotEqual(_bookmark_name("measure:Marge"), _bookmark_name("measure:Marge %"))
+        self.assertNotEqual(bookmark_name("measure:Marge"), bookmark_name("measure:Marge %"))
 
     def test_deterministe(self):
-        self.assertEqual(_bookmark_name("measure:CA N-1"), _bookmark_name("measure:CA N-1"))
+        self.assertEqual(bookmark_name("measure:CA N-1"), bookmark_name("measure:CA N-1"))
 
     def test_contraintes_word(self):
-        name = _bookmark_name("measure:Évolution du chiffre d'affaires par région et par mois")
+        name = bookmark_name("measure:Évolution du chiffre d'affaires par région et par mois")
         self.assertLessEqual(len(name), 40)
         self.assertTrue(name[0].isalpha() or name[0] == "_")
         self.assertTrue(all(c.isalnum() or c == "_" for c in name))
         self.assertTrue(name.isascii())
 
     def test_nom_commencant_par_un_chiffre(self):
-        self.assertFalse(_bookmark_name("2024").startswith("2"))
+        self.assertFalse(bookmark_name("2024").startswith("2"))
 
 
 if __name__ == "__main__":

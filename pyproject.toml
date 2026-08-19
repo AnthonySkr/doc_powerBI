@@ -2,25 +2,36 @@
 name = "powerbi-doc"
 version = "1.0.0"
 description = "Générateur automatique de documentation Power BI (.pbip)"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "python-docx>=1.2.0",
     "pyyaml>=6.0.3",
+]
+
+[project.optional-dependencies]
+# Outils de développement : `pip install -e ".[dev]"`
+dev = [
     "taskipy>=1.14.1",
     "ruff>=0.16.0",
 ]
 
+[project.scripts]
+powerbi-doc = "src.cli:main"
+
 # Commandes rapides
 [tool.taskipy.tasks]
-install = "pip install -e ."
+install = "pip install -e \".[dev]\""
 run = "python main.py"
 test = "python -m unittest discover -s tests -t ."
 lint = "ruff check ."
 format = "ruff format ."
-check = "task format && task lint"
+check = "task format && task lint && task test"
 clean = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in Path('.').rglob('__pycache__')]; [p.unlink(missing_ok=True) for p in Path('.').rglob('*.pyc')]; [shutil.rmtree(d, ignore_errors=True) for d in ['.pytest_cache', '.ruff_cache']]; print('OK - Nettoyage terminé')\""
 help = "task --list"
 
+[tool.setuptools]
+packages = ["src"]
+
 [tool.ruff]
 line-length = 100
-target-version = "py314"
+target-version = "py311"

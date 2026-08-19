@@ -40,9 +40,6 @@ document:
   output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 
-  # Le template contient déjà la partie "Initialisation" : on écrit à la suite du contenu existant.
-  write_mode: append
-
   # Page de garde : le paragraphe contenant ce texte est remplacé.
   cover:
     placeholder: "Titre du document"
@@ -238,8 +235,7 @@ sections:
     title: "Initialisation"
     level: 1
     source: template          # le contenu vient du template
-    generate: false           # aucune écriture : ni titre, ni contenu
-    preserve: true            # interdit toute suppression du contenu existant
+    generate: false           # aucune écriture : le contenu du template est conservé
 
   # ---------------------------------------------------------------------------
   #  ORGANISATION GRAPHIQUE
