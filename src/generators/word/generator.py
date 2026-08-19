@@ -7,7 +7,7 @@ from typing import Any
 
 from docx import Document
 
-from src import console, paths
+from src import console
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
@@ -41,7 +41,7 @@ def generate_word_documentation(
     template_path = render(config.document.get("template"), context)
     try:
         doc = Document(template_path)
-    except Exception as e:  # noqa: BLE001
+    except Exception as e:
         raise DocumentError(f"Impossible de charger le template '{template_path}' — {e}") from e
 
     # Le plan peut conditionner une section à `merge.is_update`.
@@ -95,7 +95,7 @@ def _archive(output_path: str, options: dict[str, Any]) -> str:
     os.makedirs(directory, exist_ok=True)
 
     name, extension = os.path.splitext(os.path.basename(output_path))
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")  # noqa: DTZ005
     archived = os.path.join(directory, f"{name}_{stamp}{extension}")
 
     try:

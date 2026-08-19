@@ -34,9 +34,7 @@ class FindTest(unittest.TestCase):
     def test_fichier_a_cote_de_l_executable(self):
         self._file("config.yaml")
         with mock.patch.object(paths, "app_dir", return_value=self.directory):
-            self.assertEqual(
-                paths.find("config.yaml"), os.path.join(self.directory, "config.yaml")
-            )
+            self.assertEqual(paths.find("config.yaml"), os.path.join(self.directory, "config.yaml"))
 
     def test_copie_de_secours_embarquee(self):
         self._file("config.yaml")
@@ -44,9 +42,7 @@ class FindTest(unittest.TestCase):
             mock.patch.object(paths, "app_dir", return_value="/dossier/absent"),
             mock.patch.object(paths, "bundled_dir", return_value=self.directory),
         ):
-            self.assertEqual(
-                paths.find("config.yaml"), os.path.join(self.directory, "config.yaml")
-            )
+            self.assertEqual(paths.find("config.yaml"), os.path.join(self.directory, "config.yaml"))
 
     def test_nom_inchange_si_introuvable(self):
         with mock.patch.object(paths, "app_dir", return_value="/dossier/absent"):
