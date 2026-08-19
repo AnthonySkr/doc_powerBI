@@ -4,7 +4,8 @@
     generate_word_documentation(config, context, chemin, text_provider)
 
 Le module est découpé par responsabilité :
-    generator.py   ouverture du template, sauvegarde
+    generator.py   lecture du document précédent, écriture, archivage
+    merging.py     marqueurs, reprise des textes, surlignage
     document.py    parcours du plan YAML et écriture du contenu
     styles.py      clés de style de la configuration -> styles du template
     links.py       signets et liens internes
@@ -14,6 +15,11 @@ Le module est découpé par responsabilité :
 """
 
 from src.generators.word.document import DocumentBuilder, TextProvider
-from src.generators.word.generator import generate_word_documentation
+from src.generators.word.generator import DocumentError, generate_word_documentation
 
-__all__ = ["DocumentBuilder", "TextProvider", "generate_word_documentation"]
+__all__ = [
+    "DocumentBuilder",
+    "DocumentError",
+    "TextProvider",
+    "generate_word_documentation",
+]

@@ -15,7 +15,9 @@ from src import console
 from src.config import DocConfig, evaluate, render, render_list, resolve_items
 from src.generators.word import fields, tables
 from src.generators.word.links import LinkIndex
+from src.generators.word.merging import MergeWriter
 from src.generators.word.styles import StyleResolver
+from src.merge import PreviousDocument
 from src.models.data_models import DocLink
 
 # Callback proposant à l'utilisateur de réécrire le texte d'un bloc `editable`.
@@ -29,6 +31,7 @@ class DocumentBuilder:
         config: DocConfig,
         context: dict[str, Any],
         text_provider: TextProvider | None = None,
+        previous: PreviousDocument | None = None,
     ):
         self.doc = doc
         self.config = config
@@ -37,6 +40,7 @@ class DocumentBuilder:
 
         self.styles = StyleResolver(doc, config, context)
         self.links = LinkIndex(config, context, self.styles.ids)
+        self.merge = MergeWriter(doc, config, previous)
         self._figure_number = 0
 
         self._block_writers = {
@@ -138,21 +142,27 @@ class DocumentBuilder:
         if self._needs_page_break(section):
             self.doc.add_page_break()
 
-        title = render(section.get("title"), context)
-        if title:
-            level = int(section.get("level", 1))
-            paragraph = self.doc.add_paragraph(
-                title, style=self.styles.paragraph(f"heading_{level}")
-            )
-            self._add_title_suffix(paragraph, section, context)
-            if section.get("bookmark"):
-                self.links.add_bookmark(paragraph, render(section["bookmark"], context))
+        # L'ancre précède le titre : à la relecture, tout ce qui suit lui
+        # appartient jusqu'à l'ancre suivante.
+        self.merge.anchor(section, context)
+        self._write_title(section, context)
 
         for block in section.get("blocks") or []:
             self._write_block(block, context)
 
         for child in section.get("sections") or []:
             self._write_section(child, context)
+
+    def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
+        title = render(section.get("title"), context)
+        if not title:
+            return
+
+        level = int(section.get("level", 1))
+        paragraph = self.doc.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
+        self._add_title_suffix(paragraph, section, context)
+        if section.get("bookmark"):
+            self.links.add_bookmark(paragraph, render(section["bookmark"], context))
 
     def _add_title_suffix(self, paragraph, section: dict[str, Any], ctx: dict[str, Any]) -> None:
         """Complète un titre par une mention technique discrète (type du visuel...)."""
@@ -181,7 +191,9 @@ class DocumentBuilder:
         if writer is None:
             console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
-        writer(block, context)
+
+        with self.merge.owned(block):
+            writer(block, context)
 
     def _write_paragraph(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         text = render(block.get("text"), context)
@@ -217,8 +229,23 @@ class DocumentBuilder:
             self.doc.add_paragraph()
 
     def _write_user_fill(self, block: dict[str, Any], context: dict[str, Any]) -> None:
-        """Zone laissée à rédiger après génération."""
+        """
+        Zone à rédiger après génération.
+
+        Elle n'est écrite qu'à la première génération : ensuite, ce que
+        l'utilisateur y a mis est repris tel quel par la fusion.
+        """
         options = self.config.rendering["user_fill"]
+
+        label = render(block.get("label"), context)
+        if label:
+            self.doc.add_paragraph(
+                label,
+                style=self.styles.paragraph(
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
+                ),
+            )
+
         text = (
             render(block.get("placeholder_text") or options.get("placeholder_text"), context)
             if options.get("show_placeholder")
