@@ -328,6 +328,30 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
 
+### Comportement de l'exécutable chez l'utilisateur
+
+**La fenêtre reste ouverte à la fin.** Lancé par double-clic ou par
+glisser-déposer, l'exécutable obtient une console qui se refermerait aussitôt
+le travail terminé — emportant le compte rendu et les éventuelles erreurs. Il
+attend donc une touche avant de rendre la main. Lancé depuis un terminal déjà
+ouvert, il ne demande rien : la détection porte sur la console, pas sur le mode
+d'exécution (`src/cli/__init__.py`). `--no-pause` force le comportement
+silencieux pour une exécution automatisée.
+
+**Le dossier courant n'est pas fiable.** Un glisser-déposer donne à
+l'exécutable un dossier courant sans rapport avec l'endroit où il est
+installé. La configuration et le template sont donc cherchés dans cet ordre
+(`src/paths.py`) :
+
+1. le chemin tel quel — utile en développement ;
+2. à côté du fichier qui le désigne : un template nommé dans une
+   configuration est cherché à côté de cette configuration ;
+3. à côté de l'exécutable — le cas normal en distribution ;
+4. à l'intérieur de l'exécutable — copie de secours.
+
+Si le template reste introuvable, le message d'erreur énumère les emplacements
+consultés.
+
 ### Étapes séparées
 
 | Commande | Effet |
@@ -401,7 +425,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (118)
+tests/                        tests unitaires (185)
 tools/package.py              assemblage du dossier distribué
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
