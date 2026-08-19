@@ -193,7 +193,31 @@ data:
     sort_by: name
 
 # =============================================================================
-#  5. INPUTS — questions posées à l'utilisateur au lancement du script
+#  5. MERGE — regénération au-dessus d'une documentation existante
+# =============================================================================
+#  Si le fichier de sortie existe déjà, il est lu avant d'être régénéré : les
+#  zones rédigées à la main sont reprises, et ce qui a changé dans le rapport
+#  est signalé. Le repérage passe par des marqueurs invisibles (texte masqué)
+#  posés à la génération — ne pas les supprimer dans Word.
+# =============================================================================
+merge:
+  enabled: true
+  # Reprendre les textes saisis dans les zones `user_fill` et les paragraphes
+  # `editable`. false = repartir des textes du plan à chaque génération.
+  keep_user_text: true
+  # La version précédente est déplacée ici avant d'écrire la nouvelle ;
+  # elle n'est donc jamais écrasée.
+  backup: true
+  backup_dir: ".versions"
+  # Surlignage : yellow | green | turquoise | gray | none
+  # changed : texte repris alors que l'élément a changé techniquement
+  #           (nouvelle formule DAX, champs du visuel modifiés) — à relire.
+  # new     : zone à rédiger d'un élément apparu depuis la version précédente.
+  highlight_changed: yellow
+  highlight_new: green
+
+# =============================================================================
+#  6. INPUTS — questions posées à l'utilisateur au lancement du script
 # =============================================================================
 #  type : confirm (oui/non) | text (une ligne) | choice | textarea
 # =============================================================================
@@ -224,7 +248,7 @@ inputs:
     default: true
 
 # =============================================================================
-#  6. PLAN DU DOCUMENT
+#  7. PLAN DU DOCUMENT
 # =============================================================================
 sections:
 
@@ -236,6 +260,18 @@ sections:
     level: 1
     source: template          # le contenu vient du template
     generate: false           # aucune écriture : le contenu du template est conservé
+
+  # ---------------------------------------------------------------------------
+  #  RÉSUMÉ DE MISE À JOUR — écrit uniquement lorsqu'une doc existait déjà
+  # ---------------------------------------------------------------------------
+  - id: resume_maj
+    title: "Mise à jour de la documentation"
+    level: 1
+    when: merge.is_update
+    page_break_before: false
+    blocks:
+      - type: change_summary
+        id: resume_changements
 
   # ---------------------------------------------------------------------------
   #  ORGANISATION GRAPHIQUE
@@ -432,6 +468,9 @@ sections:
                 level: 3
                 # Cible des liens « Utilisée dans » de la définition des mesures
                 bookmark: "visual:{{ page.name }}:{{ visual.id }}"
+                # État technique du visuel : si l'empreinte change d'une
+                # génération à l'autre, la rédaction reprise est surlignée.
+                fingerprint: "{{ visual.visual_type }} {{ visual.signature }}"
                 blocks:
                   - type: image
                     id: visuel_capture
@@ -470,6 +509,13 @@ sections:
                         # Les mesures sont liées automatiquement à leur
                         # définition (voir rendering.links.auto).
                         value: "{{ ref.value }}"
+
+                  # Rédaction libre, conservée d'une génération à l'autre.
+                  # Surlignée si les champs du visuel ont changé depuis.
+                  - type: user_fill
+                    id: visuel_commentaire
+                    label: "Lecture du visuel"
+                    hint: "Ce que montre le visuel et comment le lire"
 
     # --- Construction des références de visuel -------------------------------
     options:
@@ -544,6 +590,8 @@ sections:
             section:
               title: "{{ table.name }}"
               level: 3
+              bookmark: "table:{{ table.name }}"
+              fingerprint: "{{ table.source }} {{ table.transformation_steps }}"
               blocks:
                 - type: property
                   id: table_parametres
@@ -558,6 +606,12 @@ sections:
                   value_list: "{{ table.transformation_steps }}"
                   value_style: "{{ styles.bullet }}"
                   fallback: "[À compléter]"
+
+                # Rédaction libre, conservée d'une génération à l'autre.
+                - type: user_fill
+                  id: table_commentaire
+                  label: "Contenu de la table"
+                  hint: "Ce que contient la table et à quoi elle sert"
 
   # ---------------------------------------------------------------------------
   #  DÉFINITION DES MESURES — cible des liens hypertextes des visuels
@@ -583,6 +637,7 @@ sections:
                 title: "{{ measure.name }}"
                 level: 3
                 bookmark: "measure:{{ measure.name }}"   # cible des liens
+                fingerprint: "{{ measure.expression }}"
                 blocks:
                   - type: property
                     id: mesure_code
@@ -620,3 +675,10 @@ sections:
                     value_list: "{{ measure.used_by_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "Aucune autre mesure ne l'utilise."
+
+                  # Rédaction libre, conservée d'une génération à l'autre.
+                  # Surlignée si l'expression DAX a changé depuis.
+                  - type: user_fill
+                    id: mesure_commentaire
+                    label: "Règle de gestion"
+                    hint: "Ce que calcule la mesure, en langage métier"

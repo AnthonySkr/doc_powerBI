@@ -43,6 +43,8 @@ Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.p
    contenu déjà présent dans le template.
 6. Remplace les textes de l'en-tête et du pied de page du template, puis marque
    la table des matières comme à recalculer.
+7. Si une documentation existait déjà, en reprend les textes rédigés à la main
+   et signale ce qui a changé (voir « Regénération » plus bas).
 
 Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
@@ -56,6 +58,7 @@ capture correspondante une fois le document généré.
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, tables et mesures |
+| `merge` | Regénération au-dessus d'une documentation existante |
 | `inputs` | Questions posées à l'utilisateur au lancement |
 | `sections` | Le plan du document |
 
@@ -145,6 +148,79 @@ inverse des liens précédents :
 - **Utilisée par** — les mesures dont l'expression DAX appelle celle-ci ; ces
   noms sont liés automatiquement vers leur propre définition.
 
+## Regénération au-dessus d'une documentation existante
+
+Si le fichier de sortie existe déjà, il n'est pas écrasé : il est lu, comparé
+au rapport actuel, et un document neuf est écrit en reprenant ce qui a été
+rédigé à la main.
+
+```
+1re génération   →  document.docx           zones « [À compléter] » à remplir
+   (vous rédigez dans Word)
+2e génération    →  document.docx           vos textes repris, technique à jour
+                    .versions/document_20260819-1030.docx   version précédente
+```
+
+### Ce qui est repris
+
+Les zones `user_fill` du plan et les paragraphes `editable`. Le plan en place
+en prévoit une par visuel (« Lecture du visuel »), par mesure (« Règle de
+gestion ») et par table (« Contenu de la table »), plus les zones générales.
+
+### Ce qui est signalé
+
+| Situation | Dans le document |
+| --- | --- |
+| Élément dont la technique a changé (formule DAX, champs du visuel) | Le texte repris est **surligné en jaune** : il porte peut-être sur une version périmée |
+| Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
+| Élément retiré du rapport | Simplement absent ; signalé en console |
+| Bilan | Bloc `change_summary`, écrit en tête du document lors d'une mise à jour |
+
+Le surlignage disparaît à la génération suivante : il signale ce qui a changé
+*depuis le document que vous aviez en main*, pas un état à cocher.
+
+### Comment le repérage fonctionne
+
+À la génération, le script pose dans le document des **marqueurs invisibles**
+(texte masqué Word, `w:vanish`) :
+
+| Marqueur | Rôle |
+| --- | --- |
+| `pbi::elem\|<id>\|<empreinte>` | Identifie l'élément et fige son état technique |
+| `pbi::slot\|<clé>` … `pbi::endslot` | Encadrent une zone rédigée par l'utilisateur |
+
+L'identifiant est le `bookmark:` déjà déclaré dans le plan — `measure:<nom>`,
+`visual:<page>:<visuel>`, `table:<nom>` : des identifiants stables issus de
+Power BI. L'empreinte est un condensé du `fingerprint:` déclaré à côté :
+
+```yaml
+bookmark: "measure:{{ measure.name }}"
+fingerprint: "{{ measure.expression }}"     # change → texte à revérifier
+```
+
+**Ne supprimez pas ces marqueurs dans Word.** Ils sont invisibles à l'écran et
+à l'impression ; on les voit en activant « Afficher tout » (¶). Un document
+sans marqueurs est simplement régénéré intégralement.
+
+### Réglages — bloc `merge`
+
+| Clé | Effet |
+| --- | --- |
+| `enabled` | `false` : régénère toujours de zéro, sans lire l'existant |
+| `keep_user_text` | `false` : repart des textes du plan à chaque génération |
+| `backup` / `backup_dir` | Archive la version précédente avant d'écrire la nouvelle |
+| `highlight_changed` | Couleur du texte repris dont l'élément a changé (`yellow`) |
+| `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
+
+### Limites connues
+
+- Le texte repris l'est en **clair** : gras, listes et tableaux saisis à la
+  main dans une zone ne survivent pas à la regénération.
+- Une mesure **renommée** dans Power BI est vue comme une suppression suivie
+  d'un ajout : son texte n'est pas reporté sur le nouveau nom.
+- Les zones situées dans un tableau ne sont pas relues (aucune dans le plan
+  actuel).
+
 ## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
@@ -209,6 +285,11 @@ src/
   models/
       data_models.py          structures manipulées par le plan
 
+  merge/                      regénération au-dessus d'une doc existante
+      markers.py              marqueurs invisibles posés dans le document
+      previous.py             relecture du document précédent
+      changes.py              bilan des ajouts / modifications / retraits
+
   parsers/
       pbip.py                 localisation des dossiers d'un projet .pbip
       dependencies.py         dépendances transitives entre mesures
@@ -227,7 +308,8 @@ src/
       references.py           tableau des références, « utilisée dans »
       measure_links.py        repérage des mentions de mesures dans un texte
       word/                   écriture du .docx
-          generator.py          ouverture du template, sauvegarde
+          generator.py          document précédent, écriture, archivage
+          merging.py            marqueurs, reprise des textes, surlignage
           document.py           parcours du plan et écriture du contenu
           styles.py             clés de style → styles du template
           links.py              signets et liens internes
@@ -235,7 +317,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (110)
+tests/                        tests unitaires (142)
 config_doc_pbi.yaml           plan du document
 template-doc-pbib.docx        template Word
 ```
@@ -249,6 +331,7 @@ template-doc-pbib.docx        template Word
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
+| changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 
 ## Notes
 
