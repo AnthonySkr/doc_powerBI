@@ -34,6 +34,10 @@ class DocConfig:
         return self.raw["data"]
 
     @property
+    def merge(self) -> dict[str, Any]:
+        return self.raw["merge"]
+
+    @property
     def inputs(self) -> list[dict[str, Any]]:
         return self.raw["inputs"]
 

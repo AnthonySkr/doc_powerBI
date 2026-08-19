@@ -2,6 +2,7 @@
 
 import unittest
 
+from src import console
 from src.config import DocConfig
 from src.generators.filters import filter_pages, filter_tables, filter_visuals, group_measures
 from src.models.data_models import DaxMeasure, ModelTable, ReportPage, Visual
@@ -112,7 +113,8 @@ class MeasureGroupTest(unittest.TestCase):
         self.assertIn("Technique", [m.name for g in groups for m in g.measures])
 
     def test_dependance_ajoutee_pour_ne_pas_casser_les_liens(self):
-        groups = group_measures(self.all, {"Marge"}, [], config(measures={}))
+        with console.silenced():
+            groups = group_measures(self.all, {"Marge"}, [], config(measures={}))
         self.assertEqual(sorted(m.name for g in groups for m in g.measures), ["CA", "Marge"])
 
     def test_regroupement_par_table(self):

@@ -105,6 +105,14 @@ DEFAULTS: dict[str, Any] = {
             "sort_by": "name",
         },
     },
+    "merge": {
+        "enabled": True,
+        "keep_user_text": True,
+        "backup": True,
+        "backup_dir": ".versions",
+        "highlight_changed": "yellow",
+        "highlight_new": "none",
+    },
     "inputs": [],
     "sections": [],
 }

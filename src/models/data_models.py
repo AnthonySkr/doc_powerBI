@@ -148,6 +148,19 @@ class Visual:
     # Renseigné par `generators.references` : lignes du tableau des références.
     references: list = field(default_factory=list)
 
+    @property
+    def signature(self) -> str:
+        """
+        Description stable des champs affichés par le visuel.
+
+        Sert d'empreinte à la régénération : si elle change, la documentation
+        rédigée pour ce visuel porte peut-être sur une version périmée.
+        """
+        return " ".join(
+            sorted(f"{element.role}:{element.model_name}" for element in self.elements)
+            + sorted(item.to_string() for item in self.filters)
+        )
+
 
 @dataclass
 class ReportPage:
