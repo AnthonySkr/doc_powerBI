@@ -5,6 +5,7 @@ from typing import Any
 
 import yaml
 
+from src import paths
 from src.config.defaults import DEFAULT_CONFIG_PATH, DEFAULTS
 
 
@@ -53,6 +54,7 @@ class DocConfig:
 
 def load_config(path: str = DEFAULT_CONFIG_PATH) -> DocConfig:
     """Charge le fichier YAML de configuration."""
+    path = paths.find(path)
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Fichier de configuration introuvable : '{path}'")
 

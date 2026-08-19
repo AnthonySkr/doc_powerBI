@@ -4,7 +4,7 @@ from typing import Any
 
 from docx import Document
 
-from src import console
+from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
@@ -26,7 +26,7 @@ def generate_word_documentation(
         text_provider: callback optionnel permettant à l'utilisateur de
             modifier les textes des blocs `editable`
     """
-    template_path = render(config.document.get("template"), context)
+    template_path = paths.find(render(config.document.get("template"), context))
 
     try:
         doc = Document(template_path)

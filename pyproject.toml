@@ -13,6 +13,7 @@ dependencies = [
 dev = [
     "taskipy>=1.14.1",
     "ruff>=0.16.0",
+    "pyinstaller>=6.10",
 ]
 
 [project.scripts]
@@ -26,7 +27,14 @@ test = "python -m unittest discover -s tests -t ."
 lint = "ruff check ."
 format = "ruff format ."
 check = "task format && task lint && task test"
-clean = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in Path('.').rglob('__pycache__')]; [p.unlink(missing_ok=True) for p in Path('.').rglob('*.pyc')]; [shutil.rmtree(d, ignore_errors=True) for d in ['.pytest_cache', '.ruff_cache']]; print('OK - Nettoyage terminé')\""
+
+# Distribution : `task package` produit dist/powerbi-doc-<version>-windows.zip
+# à remettre aux utilisateurs. À lancer sous Windows — PyInstaller ne sait pas
+# construire un .exe depuis un autre système.
+build = "pyinstaller --noconfirm --clean powerbi-doc.spec"
+package = "task lint && task test && task build && python tools/package.py"
+
+clean = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in Path('.').rglob('__pycache__')]; [p.unlink(missing_ok=True) for p in Path('.').rglob('*.pyc')]; [shutil.rmtree(d, ignore_errors=True) for d in ['.pytest_cache', '.ruff_cache', 'build', 'dist']]; print('OK - Nettoyage terminé')\""
 help = "task --list"
 
 [tool.setuptools]
