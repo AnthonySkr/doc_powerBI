@@ -7,31 +7,37 @@ from src.merge.previous import CHANGED, NEW, UNCHANGED
 
 @dataclass
 class ChangeLog:
-    """Ce qui a été constaté pendant l'écriture du document."""
+    """Ce qui a été constaté pendant la génération, affiché en fin d'exécution."""
 
     is_update: bool = False
     new: list[str] = field(default_factory=list)
     changed: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     removed: list[str] = field(default_factory=list)
-    restored: int = 0  # zones dont le texte utilisateur a été repris
+    preserved: int = 0  # contenus de l'utilisateur repris tels quels
+
+    def __post_init__(self) -> None:
+        self._status: dict[str, str] = {}
 
     def record(self, element_id: str, status: str) -> None:
+        self._status[element_id] = status
         {NEW: self.new, CHANGED: self.changed, UNCHANGED: self.unchanged}[status].append(element_id)
+
+    def status_of(self, element_id: str) -> str:
+        return self._status.get(element_id, UNCHANGED)
 
     @property
     def written_ids(self) -> set[str]:
-        return set(self.new) | set(self.changed) | set(self.unchanged)
+        return set(self._status)
 
     @property
     def has_changes(self) -> bool:
         return bool(self.new or self.changed or self.removed)
 
     def summary(self) -> str:
-        """Phrase résumant la mise à jour, écrite dans le document et la console."""
+        """Phrase résumant la génération, affichée en console."""
         if not self.is_update:
-            return f"Première génération : {len(self.unchanged) + len(self.new)} élément(s) documenté(s)."
-
+            return f"Première génération : {len(self.written_ids)} élément(s) documenté(s)."
         if not self.has_changes:
             return "Aucun changement depuis la version précédente du document."
 
@@ -45,7 +51,7 @@ class ChangeLog:
         return "Mise à jour : " + ", ".join(parts) + "."
 
     def details(self) -> list[str]:
-        """Lignes de détail affichées en console."""
+        """Lignes de détail affichées sous le résumé."""
         lines = []
         for label, names in (
             ("ajouté(s)", self.new),
@@ -56,6 +62,6 @@ class ChangeLog:
                 shown = ", ".join(names[:6])
                 suffix = f" (+{len(names) - 6})" if len(names) > 6 else ""
                 lines.append(f"{len(names)} {label} : {shown}{suffix}")
-        if self.restored:
-            lines.append(f"{self.restored} zone(s) de texte reprises du document précédent")
+        if self.preserved:
+            lines.append(f"{self.preserved} contenu(s) rédigé(s) repris tels quels")
         return lines

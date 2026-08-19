@@ -43,8 +43,8 @@ Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.p
    contenu déjà présent dans le template.
 6. Remplace les textes de l'en-tête et du pied de page du template, puis marque
    la table des matières comme à recalculer.
-7. Si une documentation existait déjà, en reprend les textes rédigés à la main
-   et signale ce qui a changé (voir « Regénération » plus bas).
+7. Si une documentation existait déjà, en reprend tout ce que vous y avez
+   écrit et signale ce qui a changé (voir « Regénération » plus bas).
 
 Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
@@ -151,32 +151,39 @@ inverse des liens précédents :
 ## Regénération au-dessus d'une documentation existante
 
 Si le fichier de sortie existe déjà, il n'est pas écrasé : il est lu, comparé
-au rapport actuel, et un document neuf est écrit en reprenant ce qui a été
-rédigé à la main.
+au rapport actuel, et un document neuf est écrit en reprenant tout ce que vous
+y avez mis.
 
-```
-1re génération   →  document.docx           zones « [À compléter] » à remplir
-   (vous rédigez dans Word)
-2e génération    →  document.docx           vos textes repris, technique à jour
-                    .versions/document_20260819-1030.docx   version précédente
-```
+### Le contrat
 
-### Ce qui est repris
+> **Le script est propriétaire de ses données, vous êtes propriétaire du
+> reste.**
 
-Les zones `user_fill` du plan et les paragraphes `editable`. Le plan en place
-en prévoit une par visuel (« Lecture du visuel »), par mesure (« Règle de
-gestion ») et par table (« Contenu de la table »), plus les zones générales.
+À chaque génération le script réécrit ce qu'il produit — formule DAX, tableau
+des champs d'un visuel, sources, mesures appelantes — pour qu'il soit toujours
+juste. Tout le reste vous appartient et est recopié tel quel :
+
+| Ce que vous faites dans Word | À la regénération |
+| --- | --- |
+| Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
+| Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
+| Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
+| Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
+| Changer une mise en forme, un style, ajouter un tableau | Conservés |
+
+Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
+paragraphe repère et en créer d'autres, le contenu est repris quand même.
 
 ### Ce qui est signalé
 
-| Situation | Dans le document |
+| Situation | Effet |
 | --- | --- |
-| Élément dont la technique a changé (formule DAX, champs du visuel) | Le texte repris est **surligné en jaune** : il porte peut-être sur une version périmée |
+| La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
 | Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
-| Élément retiré du rapport | Simplement absent ; signalé en console |
-| Bilan | Bloc `change_summary`, écrit en tête du document lors d'une mise à jour |
+| Élément retiré du rapport | Simplement absent du nouveau document |
+| Bilan | Affiché **en console** en fin de génération |
 
-Le surlignage disparaît à la génération suivante : il signale ce qui a changé
+Le surlignage est retiré à la génération suivante : il signale ce qui a changé
 *depuis le document que vous aviez en main*, pas un état à cocher.
 
 ### Comment le repérage fonctionne
@@ -186,42 +193,61 @@ Le surlignage disparaît à la génération suivante : il signale ce qui a chang
 
 | Marqueur | Rôle |
 | --- | --- |
-| `pbi::elem\|<id>\|<empreinte>` | Identifie l'élément et fige son état technique |
-| `pbi::slot\|<clé>` … `pbi::endslot` | Encadrent une zone rédigée par l'utilisateur |
+| `pbi::elem\|<id>\|<empreinte>` | Ancre un élément documenté et fige son état technique |
+| `pbi::gen\|<bloc>` … `pbi::endgen` | Encadrent un contenu produit par le script |
 
-L'identifiant est le `bookmark:` déjà déclaré dans le plan — `measure:<nom>`,
-`visual:<page>:<visuel>`, `table:<nom>` : des identifiants stables issus de
-Power BI. L'empreinte est un condensé du `fingerprint:` déclaré à côté :
+Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
+encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
+aucune attente sur la forme de ce contenu.
+
+L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
+`visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
+des identifiants stables issus de Power BI ou du plan. L'empreinte est un
+condensé du `fingerprint:` déclaré à côté :
 
 ```yaml
 bookmark: "measure:{{ measure.name }}"
-fingerprint: "{{ measure.expression }}"     # change → texte à revérifier
+fingerprint: "{{ measure.expression }}"     # change → vos textes à revérifier
 ```
 
-**Ne supprimez pas ces marqueurs dans Word.** Ils sont invisibles à l'écran et
-à l'impression ; on les voit en activant « Afficher tout » (¶). Un document
-sans marqueurs est simplement régénéré intégralement.
+**Ne supprimez pas ces marqueurs.** Ils sont invisibles à l'écran et à
+l'impression ; on les voit en activant « Afficher tout » (¶). Un document sans
+marqueurs est simplement régénéré intégralement, sans erreur.
+
+### Quels blocs le script s'attribue
+
+Par défaut les blocs `property` et `table` — ceux qui n'affichent que des
+données du rapport. Les paragraphes, emplacements d'image et zones
+`user_fill` sont des **amorces** : écrites à la première génération, puis
+laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
+
+```yaml
+- type: paragraph
+  id: rappel_legal
+  generated: true      # toujours réécrit depuis le YAML
+```
 
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
 | --- | --- |
 | `enabled` | `false` : régénère toujours de zéro, sans lire l'existant |
-| `keep_user_text` | `false` : repart des textes du plan à chaque génération |
+| `keep_user_text` | `false` : ignore le contenu du document précédent |
 | `backup` / `backup_dir` | Archive la version précédente avant d'écrire la nouvelle |
-| `highlight_changed` | Couleur du texte repris dont l'élément a changé (`yellow`) |
+| `highlight_changed` | Couleur des textes d'un élément qui a changé (`yellow`) |
 | `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
 
 ### Limites connues
 
-- Le texte repris l'est en **clair** : gras, listes et tableaux saisis à la
-  main dans une zone ne survivent pas à la regénération.
+- L'ordre suit le plan : si vous déplacez un élément **entier** ailleurs dans
+  le document, il revient à sa place. Vos remaniements *à l'intérieur* d'un
+  élément sont respectés.
 - Une mesure **renommée** dans Power BI est vue comme une suppression suivie
-  d'un ajout : son texte n'est pas reporté sur le nouveau nom.
-- Les zones situées dans un tableau ne sont pas relues (aucune dans le plan
-  actuel).
+  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom.
+- Ce qui précède la première ancre (page de garde, sommaire) vient du template
+  et est régénéré.
 
-## Template
+## Template## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
 repris par la configuration :
@@ -287,7 +313,10 @@ src/
 
   merge/                      regénération au-dessus d'une doc existante
       markers.py              marqueurs invisibles posés dans le document
+      blocks.py               découpage du corps en blocs ancrés
       previous.py             relecture du document précédent
+      smart.py                fusion : données du script, reste de l'utilisateur
+      transplant.py           recopie d'un contenu et de ses images
       changes.py              bilan des ajouts / modifications / retraits
 
   parsers/
@@ -317,7 +346,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (142)
+tests/                        tests unitaires (154)
 config_doc_pbi.yaml           plan du document
 template-doc-pbib.docx        template Word
 ```

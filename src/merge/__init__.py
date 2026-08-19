@@ -1,23 +1,25 @@
 """
-Régénération incrémentale du document.
+Régénération d'une documentation au-dessus de la version existante.
 
-Plutôt que d'écraser la documentation existante, le script la lit, la compare
-au rapport Power BI actuel et écrit un document neuf qui reprend les textes
-rédigés par l'utilisateur.
+Le principe : **le script est propriétaire de ses données, l'utilisateur du
+reste.** À chaque génération, le script réécrit les contenus qu'il produit
+(formule DAX, tableau des champs, métadonnées) et recopie tel quel tout le
+reste — titres reformulés, notes ajoutées, captures collées, mise en forme.
 
-    previous = merge.read_previous(chemin, placeholders)
-    ...                                    (écriture, voir generators.word)
-    previous.removed(log.written_ids)
+    previous = merge.read_previous(chemin)
+    ...                                     (génération, voir generators.word)
+    merge.apply_merge(document, previous, options, log)
 
-Le repérage repose sur des marqueurs invisibles posés à la génération
-(`merge.markers`) : identifiant et empreinte technique de chaque élément,
-bornes des zones rédigées par l'utilisateur.
+Le repérage passe par des marqueurs invisibles (`merge.markers`) : une ancre
+par élément documenté, et un encadrement autour de chaque contenu produit par
+le script.
 """
 
 from src.merge.changes import ChangeLog
 from src.merge.markers import Marker
 from src.merge.previous import CHANGED, NEW, UNCHANGED, PreviousDocument
 from src.merge.previous import read as read_previous
+from src.merge.smart import merge as apply_merge
 
 __all__ = [
     "CHANGED",
@@ -26,5 +28,6 @@ __all__ = [
     "ChangeLog",
     "Marker",
     "PreviousDocument",
+    "apply_merge",
     "read_previous",
 ]

@@ -1,126 +1,81 @@
 """
-Conduite de la régénération incrémentale, côté écriture.
+Pose des marqueurs pendant l'écriture du document.
 
-Le builder délègue ici trois questions :
-  - quel élément suis-je en train d'écrire, et a-t-il changé ? (`enter_element`)
-  - dois-je reprendre un texte du document précédent ? (`restore`)
-  - comment le signaler visuellement ? (`highlight`)
+Le builder délègue ici deux gestes, tous deux sans effet visible :
+  - ancrer un élément documenté et retenir s'il a changé (`element`) ;
+  - encadrer un contenu produit par le script (`owned`), pour que la
+    régénération sache qu'il peut le réécrire — et, par différence, que tout
+    le reste appartient à l'utilisateur.
 """
 
 from contextlib import contextmanager
 from typing import Any
 
-from docx.enum.text import WD_COLOR_INDEX
-
 from src.config import DocConfig, render
-from src.merge import CHANGED, NEW, ChangeLog, PreviousDocument, markers
-
-_HIGHLIGHTS = {
-    "yellow": WD_COLOR_INDEX.YELLOW,
-    "green": WD_COLOR_INDEX.BRIGHT_GREEN,
-    "turquoise": WD_COLOR_INDEX.TURQUOISE,
-    "gray": WD_COLOR_INDEX.GRAY_25,
-    "none": None,
-}
+from src.merge import ChangeLog, PreviousDocument, markers
 
 
 class MergeWriter:
-    """Marqueurs, reprise des textes et surlignage, pour un document en cours d'écriture."""
-
     def __init__(self, doc, config: DocConfig, previous: PreviousDocument | None):
         self.doc = doc
         self.previous = previous or PreviousDocument()
         self.options = config.merge
         self.enabled = bool(self.options.get("enabled", True))
-
         self.log = ChangeLog(is_update=self.previous.exists)
-        self._stack: list[tuple[str, str]] = []  # (identifiant, état) des éléments imbriqués
 
-    # ── Élément documenté ─────────────────────────────────────────
-    @contextmanager
-    def element(self, section: dict[str, Any], context: dict[str, Any]):
+    def anchor(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         """
-        Ouvre un élément documenté : pose son marqueur et retient son état.
+        Ancre un élément documenté.
 
-        Un élément est une section du plan portant un `bookmark:` — c'est déjà
-        son identifiant stable (`measure:Marge`, `visual:<page>:<visuel>`). Son
-        `fingerprint:` décrit l'état technique dont dépend la documentation.
+        L'identifiant est le `bookmark:` du plan quand il en porte un
+        (`measure:Marge`, `visual:<page>:<visuel>`), sinon `section:<id>` : des
+        identifiants stables, issus de Power BI ou du plan. Le `fingerprint:`
+        décrit l'état technique dont dépend la documentation rédigée.
         """
-        bookmark = section.get("bookmark")
-        if not self.enabled or not bookmark:
-            yield None
+        element_id = self._identifier(section, context)
+        if not element_id:
             return
 
-        element_id = render(bookmark, context)
         digest = markers.fingerprint(render(section.get("fingerprint"), context))
-        status = self.previous.status(element_id, digest)
-
-        self.log.record(element_id, status)
+        self.log.record(element_id, self.previous.status(element_id, digest))
         markers.write(self.doc, markers.element(element_id, digest))
 
-        self._stack.append((element_id, status))
-        try:
-            yield status
-        finally:
-            self._stack.pop()
-
-    @property
-    def current_id(self) -> str:
-        return self._stack[-1][0] if self._stack else ""
-
-    @property
-    def current_status(self) -> str:
-        return self._stack[-1][1] if self._stack else ""
-
-    # ── Zone rédigée par l'utilisateur ────────────────────────────
-    def restore(self, block: dict[str, Any]) -> list[str]:
-        """Texte saisi dans cette zone lors de la génération précédente, s'il existe."""
-        key = self._slot_key(block)
-        if not key or not self.options.get("keep_user_text", True):
-            return []
-
-        texts = self.previous.text_for(key)
-        if texts:
-            self.log.restored += 1
-        return texts
-
     @contextmanager
-    def slot(self, block: dict[str, Any]):
-        """Encadre une zone rédigeable par ses marqueurs de début et de fin."""
-        key = self._slot_key(block)
-        if not key:
+    def owned(self, block: dict[str, Any]):
+        """
+        Encadre un contenu produit par le script, donc réécrit à chaque
+        génération.
+
+        Sont concernés les blocs qui n'exposent que des données du rapport :
+        `property` (code DAX, sources, usages) et `table` (champs d'un visuel).
+        Tout le reste — paragraphes, emplacements d'image, zones à compléter —
+        est une amorce : écrite à la première génération, puis laissée à
+        l'utilisateur. Le plan peut trancher explicitement avec `generated:`.
+        """
+        block_id = block.get("id")
+        if not self.enabled or not block_id or not _is_generated(block):
             yield
             return
 
-        markers.write(self.doc, markers.slot(key))
+        markers.write(self.doc, markers.generated(str(block_id)))
         try:
             yield
         finally:
-            markers.write(self.doc, markers.slot_end())
+            markers.write(self.doc, markers.generated_end())
 
-    def _slot_key(self, block: dict[str, Any]) -> str:
-        block_id = block.get("id")
-        if not self.enabled or not block_id:
+    def _identifier(self, section: dict[str, Any], context: dict[str, Any]) -> str:
+        if not self.enabled:
             return ""
-        return markers.slot_key(self.current_id, str(block_id))
+        if section.get("bookmark"):
+            return render(section["bookmark"], context)
+        return f"section:{section['id']}" if section.get("id") else ""
 
-    # ── Signalement visuel ────────────────────────────────────────
-    def highlight_restored(self, paragraph) -> None:
-        """
-        Surligne un texte repris dont l'élément a changé techniquement : la
-        rédaction porte peut-être sur une version périmée du visuel ou du DAX.
-        """
-        if self.current_status == CHANGED:
-            self._apply(paragraph, self.options.get("highlight_changed", "yellow"))
 
-    def highlight_new(self, paragraph) -> None:
-        """Surligne la zone à rédiger d'un élément apparu depuis la dernière version."""
-        if self.log.is_update and self.current_status == NEW:
-            self._apply(paragraph, self.options.get("highlight_new", "none"))
+# Types de blocs dont le contenu n'est fait que de données du rapport.
+_GENERATED_TYPES = ("property", "table")
 
-    def _apply(self, paragraph, color_name: Any) -> None:
-        color = _HIGHLIGHTS.get(str(color_name).lower())
-        if color is None:
-            return
-        for run in paragraph.runs:
-            run.font.highlight_color = color
+
+def _is_generated(block: dict[str, Any]) -> bool:
+    if "generated" in block:
+        return bool(block["generated"])
+    return block.get("type") in _GENERATED_TYPES

@@ -1,10 +1,10 @@
 """
 Lecture du document généré précédemment.
 
-On n'en extrait que deux choses, repérées par les marqueurs invisibles :
-  - l'empreinte technique de chaque élément documenté, pour savoir plus tard
-    ce qui a changé dans le rapport Power BI ;
-  - le texte des zones rédigées par l'utilisateur, pour le reconduire.
+Le document est ouvert, découpé en blocs ancrés, et **laissé ouvert** : la
+fusion y puise non seulement du XML mais aussi les parties associées (une
+capture collée par l'utilisateur vit dans une partie du .docx, pas dans son
+paragraphe).
 
 Le document n'est jamais modifié : il est lu, puis un document neuf est écrit.
 """
@@ -15,18 +15,23 @@ from dataclasses import dataclass, field
 from docx import Document
 
 from src import console
-from src.merge import markers
+from src.merge import blocks as block_parser
+from src.merge.blocks import Block
+
+# États d'un élément vis-à-vis du document précédent.
+NEW = "new"
+CHANGED = "changed"
+UNCHANGED = "unchanged"
 
 
 @dataclass
 class PreviousDocument:
-    """Ce qui a été retenu du document précédent."""
+    """Le document précédent, tel qu'il servira à la fusion."""
 
     path: str = ""
-    # identifiant d'élément -> empreinte technique au moment de sa génération
+    document: object | None = None
+    blocks: list[Block] = field(default_factory=list)
     fingerprints: dict[str, str] = field(default_factory=dict)
-    # clé de zone -> paragraphes saisis par l'utilisateur
-    texts: dict[str, list[str]] = field(default_factory=dict)
 
     @property
     def exists(self) -> bool:
@@ -39,78 +44,40 @@ class PreviousDocument:
         previous = self.fingerprints.get(element_id)
         if previous is None:
             return NEW
-        if fingerprint and previous != fingerprint:
-            return CHANGED
-        return UNCHANGED
-
-    def text_for(self, key: str) -> list[str]:
-        """Paragraphes saisis par l'utilisateur dans cette zone, s'il y en a."""
-        return self.texts.get(key, [])
+        return CHANGED if fingerprint and previous != fingerprint else UNCHANGED
 
     def removed(self, written_ids: set[str]) -> list[str]:
         """Éléments présents dans le document précédent mais plus dans le rapport."""
         return sorted(set(self.fingerprints) - written_ids)
 
 
-# États d'un élément vis-à-vis du document précédent.
-NEW = "new"
-CHANGED = "changed"
-UNCHANGED = "unchanged"
-
-
-def read(path: str, ignored_texts: tuple[str, ...] = ()) -> PreviousDocument:
-    """
-    Lit le document précédent, s'il existe et porte des marqueurs.
-
-    Args:
-        path: chemin du .docx généré lors d'une exécution antérieure
-        ignored_texts: textes à considérer comme « zone non remplie »
-            (le texte repère `[À compléter]`), donc sans rien à reconduire.
-    """
+def read(path: str) -> PreviousDocument:
+    """Lit le document précédent, s'il existe et porte des marqueurs."""
     if not os.path.isfile(path):
         return PreviousDocument()
 
     try:
-        doc = Document(path)
+        document = Document(path)
     except Exception as e:  # noqa: BLE001
-        console.warn(f"Document précédent illisible, il sera remplacé ({e})")
+        console.warn(f"Document précédent illisible, il sera régénéré ({e})")
         return PreviousDocument()
 
-    previous = PreviousDocument(path=path)
-    ignored = {text.strip() for text in ignored_texts if text}
-    current_slot: str | None = None
-    collected: list[str] = []
+    blocks = block_parser.parse(block_parser.body_nodes(document))
+    anchored = block_parser.index(blocks)
 
-    for paragraph in doc.paragraphs:
-        marker = markers.parse(paragraph.text)
-
-        if marker is None:
-            if current_slot is not None:
-                collected.append(paragraph.text)
-            continue
-
-        if markers.is_element(marker):
-            previous.fingerprints[marker.value] = marker.fingerprint
-        elif markers.is_slot(marker):
-            current_slot = marker.value
-            collected = []
-        elif markers.is_slot_end(marker) and current_slot is not None:
-            previous.texts[current_slot] = _clean(collected, ignored)
-            current_slot = None
-
-    if not previous.fingerprints and not previous.texts:
+    if not anchored:
         console.info("Document précédent sans marqueurs : il sera entièrement régénéré")
         return PreviousDocument()
 
-    written = sum(1 for texts in previous.texts.values() if texts)
+    free = sum(len(block.free_nodes()) for block in anchored.values())
     console.info(
-        f"Document précédent lu : {len(previous.fingerprints)} élément(s) repéré(s), "
-        f"{written} zone(s) de texte"
+        f"Document précédent lu : {len(anchored)} élément(s) ancré(s), "
+        f"{free} paragraphe(s) et tableau(x) vous appartenant"
     )
-    return previous
 
-
-def _clean(paragraphs: list[str], ignored: set[str]) -> list[str]:
-    """Retire les lignes vides d'encadrement et les textes repères non remplis."""
-    kept = [text for text in paragraphs if text.strip() and text.strip() not in ignored]
-    return kept
+    return PreviousDocument(
+        path=path,
+        document=document,
+        blocks=blocks,
+        fingerprints={key: block.fingerprint for key, block in anchored.items()},
+    )
