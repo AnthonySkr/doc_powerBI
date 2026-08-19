@@ -47,51 +47,46 @@ class ExitCodeTest(unittest.TestCase):
 
 
 class PauseTest(unittest.TestCase):
-    def _main(self, will_close: bool, pause: bool = True, run_side_effect=None):
+    """La pause n'a lieu que depuis l'exécutable distribué."""
+
+    def _main(self, frozen: bool, pause: bool = True, run_side_effect=None):
         with (
             mock.patch("src.cli.parse_args", return_value=options(pause=pause)),
             mock.patch("src.cli.run", side_effect=run_side_effect or (lambda o: "/sortie")),
-            mock.patch("src.cli._console_will_close", return_value=will_close),
+            mock.patch("src.paths.is_frozen", return_value=frozen),
             mock.patch("builtins.input") as prompted,
             mock.patch("builtins.print"),
         ):
             cli.main([])
         return prompted
 
-    def test_pause_si_la_fenetre_va_se_fermer(self):
-        self.assertEqual(self._main(will_close=True).call_count, 1)
+    def test_pause_depuis_l_executable(self):
+        self.assertEqual(self._main(frozen=True).call_count, 1)
 
-    def test_pas_de_pause_depuis_un_terminal(self):
-        self._main(will_close=False).assert_not_called()
+    def test_pas_de_pause_en_developpement(self):
+        self._main(frozen=False).assert_not_called()
 
     def test_pause_aussi_en_cas_d_erreur(self):
-        prompted = self._main(will_close=True, run_side_effect=PipelineError("échec"))
+        prompted = self._main(frozen=True, run_side_effect=PipelineError("échec"))
         self.assertEqual(prompted.call_count, 1)
 
     def test_pause_aussi_sur_erreur_imprevue(self):
         with mock.patch("traceback.print_exc"):
-            prompted = self._main(will_close=True, run_side_effect=ValueError("bug"))
+            prompted = self._main(frozen=True, run_side_effect=ValueError("bug"))
         self.assertEqual(prompted.call_count, 1)
 
     def test_desactivable_par_option(self):
-        self._main(will_close=True, pause=False).assert_not_called()
+        self._main(frozen=True, pause=False).assert_not_called()
 
-
-class ConsoleDetectionTest(unittest.TestCase):
-    def test_jamais_hors_windows(self):
-        with mock.patch("os.name", "posix"):
-            self.assertFalse(cli._console_will_close())
-
-    def test_pas_de_pause_si_l_entree_est_redirigee(self):
+    def test_entree_absente_ne_bloque_pas(self):
         with (
-            mock.patch("os.name", "nt"),
-            mock.patch("sys.stdin", mock.Mock(isatty=lambda: False)),
+            mock.patch("src.cli.parse_args", return_value=options()),
+            mock.patch("src.cli.run", return_value="/sortie"),
+            mock.patch("src.paths.is_frozen", return_value=True),
+            mock.patch("builtins.input", side_effect=RuntimeError("lost sys.stdin")),
+            mock.patch("builtins.print"),
         ):
-            self.assertFalse(cli._console_will_close())
-
-    def test_pas_de_pause_sans_entree(self):
-        with mock.patch("os.name", "nt"), mock.patch("sys.stdin", None):
-            self.assertFalse(cli._console_will_close())
+            self.assertEqual(cli.main([]), 0)
 
 
 if __name__ == "__main__":
