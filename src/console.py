@@ -3,7 +3,7 @@ Affichage console du script.
 
 Tous les messages passent par ce module : le reste du code n'appelle jamais
 `print` directement, ce qui laisse un seul endroit à modifier pour changer la
-présentation (ou rediriger la sortie vers un journal).
+présentation.
 """
 
 WIDTH = 65

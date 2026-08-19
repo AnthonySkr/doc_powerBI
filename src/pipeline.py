@@ -45,8 +45,8 @@ def run(options: Options) -> str:
     if error:
         raise PipelineError(error)
 
-    console.info(f"SemanticModel : {os.path.basename(project.semantic_model_dir)}")
-    console.info(f"Report        : {os.path.basename(project.report_dir)}")
+    console.info(f"SemanticModel : {os.path.basename(project.semantic_model_dir)}")  # type: ignore
+    console.info(f"Report        : {os.path.basename(project.report_dir)}")  # type: ignore
     console.blank()
 
     report = _collect(project)
@@ -65,7 +65,7 @@ def run(options: Options) -> str:
 def _collect(project: PbipProject) -> PowerBIReport:
     """Lit le modèle sémantique et le rapport, puis croise les deux."""
     console.step("Étape 1 — Chargement du modèle sémantique")
-    all_measures, tables = load_semantic_model(project.semantic_model_dir)
+    all_measures, tables = load_semantic_model(project.semantic_model_dir)  # type: ignore
     console.blank()
 
     if all_measures:
@@ -75,7 +75,7 @@ def _collect(project: PbipProject) -> PowerBIReport:
         console.blank()
 
     console.step("Étape 3 — Lecture du rapport")
-    report = parse_report(project.report_dir, report_name=project.name)
+    report = parse_report(project.report_dir, report_name=project.name)  # type: ignore
     report.all_measures = all_measures
     report.tables = tables
     report.measures_used_in_report = dependencies.measures_used_in_report(report, all_measures)
