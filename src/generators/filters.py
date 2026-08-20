@@ -5,6 +5,7 @@ Chaque fonction prend la collection brute issue des parseurs et retourne la
 collection telle que le plan doit la parcourir.
 """
 
+import re
 from typing import Any
 
 from src import console
@@ -13,7 +14,9 @@ from src.models.data_models import (
     DaxMeasure,
     MeasureGroup,
     ModelTable,
+    PowerBIReport,
     ReportPage,
+    TransformationStep,
     Visual,
     VisualGroup,
     VisualGroupMember,
@@ -21,6 +24,10 @@ from src.models.data_models import (
 
 # Sépare les sous-groupes traversés dans la légende d'un groupe.
 _PATH_SEPARATOR = " › "
+
+# Power BI nomme d'un GUID les étapes Power Query auxquelles l'utilisateur n'a
+# pas donné de nom : elles n'apprennent rien au lecteur.
+_GENERATED_STEP_NAME = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$", re.IGNORECASE)
 
 
 def filter_pages(pages: list[ReportPage], config: DocConfig) -> list[ReportPage]:
@@ -85,6 +92,15 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
         return
 
     containers = {group.name: group for group in page.groups}
+    excluded_titles = _lowercase(group_options.get("exclude_titles"))
+
+    # Un groupe écarté l'est avec tout son contenu : il est présenté ailleurs
+    # dans le document, ses visuels n'ont pas à l'être une seconde fois ici.
+    documented = [
+        visual
+        for visual in documented
+        if _excluded_root(visual.parent_group_name, containers, excluded_titles) is None
+    ]
     documented_ids = {visual.id for visual in documented}
 
     # Chaque visuel rejoint le groupe racine qui le contient, en gardant trace
@@ -99,6 +115,8 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
     for group in _sorted_groups(page.groups, group_options.get("sort_by")):
         if _root_and_path(group.parent_group_name, containers)[0] is not None:
             continue  # sous-groupe : documenté avec son groupe racine
+        if group.title.lower() in excluded_titles:
+            continue
 
         group.subgroups = [g for g in page.groups if g.parent_group_name == group.name]
         group.members = _members(
@@ -137,6 +155,14 @@ def _members(
         )
         for visual, path in _sorted_visuals(contents, sort_by, key=lambda item: item[0])
     ]
+
+
+def _excluded_root(
+    parent_name: str, containers: dict[str, VisualGroup], excluded_titles: set[str]
+) -> VisualGroup | None:
+    """Le groupe racine d'un visuel, s'il fait partie des groupes écartés."""
+    root = _root_and_path(parent_name, containers)[0]
+    return root if root is not None and root.title.lower() in excluded_titles else None
 
 
 def _root_and_path(
@@ -188,11 +214,10 @@ def filter_tables(tables: list[ModelTable], config: DocConfig) -> list[ModelTabl
         and table.name.lower() not in excluded
     ]
 
-    step_format = options.get("step_format") or "{name}"
     for table in kept:
-        table.transformation_steps = [
-            _format_step(step, step_format) for step in table.transformation_steps
-        ]
+        table.transformation_steps = filter_steps(
+            table.transformation_steps, options.get("steps") or {}
+        )
 
     if options.get("sort_by", "name") == "name":
         kept.sort(key=lambda table: table.name.lower())
@@ -275,14 +300,46 @@ def _add_referenced(
         console.info(f"{added} mesure(s) ajoutée(s) au document car référencée(s) ailleurs")
 
 
-def _format_step(step: Any, step_format: str) -> str:
-    """Met en forme une étape Power Query ({"name": ..., "expression": ...})."""
-    if isinstance(step, dict):
-        return step_format.format(
-            name=step.get("name", ""), expression=step.get("expression", "")
-        ).strip()
-    return str(step)
+def filter_steps(
+    steps: list[TransformationStep], options: dict[str, Any]
+) -> list[TransformationStep]:
+    """
+    Ne garde d'un script Power Query que les étapes qui apprennent quelque
+    chose au lecteur.
+
+    Sont écartées les étapes auxquelles personne n'a donné de nom (Power BI les
+    nomme d'un GUID), et celles dont le nom est routinier — la navigation dans
+    la source, un changement de type, un renommage de colonnes... Ce sont des
+    gestes de mise en forme, pas des règles de traitement.
+    """
+    excluded = _lowercase(options.get("exclude_names"))
+    prefixes = tuple(_lowercase(options.get("exclude_prefixes")))
+
+    return [
+        step
+        for step in steps
+        if not (options.get("exclude_unnamed", True) and _GENERATED_STEP_NAME.match(step.name))
+        and step.name.lower() not in excluded
+        and not step.name.lower().startswith(prefixes)
+    ]
+
+
+def documentable_titles(report: PowerBIReport, config: DocConfig) -> list[str]:
+    """
+    Titres des groupes et visuels que le document peut détailler.
+
+    Ils sont proposés au lancement pour être écartés de la partie « Visuels ».
+    Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
+    sont donc dédoublonnés, et en écarter un l'écarte partout à la fois.
+    """
+    titles = {group.title for page in report.pages for group in page.groups}
+    for page in report.pages:
+        titles.update(visual.title for visual in filter_visuals(page.visuals, config))
+    return sorted(titles, key=str.lower)
 
 
 def _lowercase(values: Any) -> set[str]:
+    """Ensemble de comparaison d'une option de configuration, en minuscules."""
+    if isinstance(values, str):
+        values = [values]
     return {str(value).lower() for value in values or []}

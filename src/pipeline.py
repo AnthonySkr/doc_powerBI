@@ -14,6 +14,7 @@ from src import console
 from src.cli import prompts
 from src.cli.arguments import Options
 from src.config import DocConfig, load_config, render
+from src.generators import filters
 from src.generators.context import build_context
 from src.generators.word import DocumentError, generate_word_documentation
 from src.models.data_models import PowerBIReport
@@ -88,7 +89,14 @@ def _collect(project: PbipProject) -> PowerBIReport:
 
 
 def _ask_inputs(config: DocConfig, report: PowerBIReport, interactive: bool) -> dict[str, Any]:
-    base_context = {"report": report, "inputs": {}, "styles": config.styles}
+    # `choices` : ce que le rapport contient réellement, pour les questions qui
+    # font choisir dans son contenu plutôt que dans une liste figée du YAML.
+    base_context = {
+        "report": report,
+        "inputs": {},
+        "styles": config.styles,
+        "choices": {"visuals": filters.documentable_titles(report, config)},
+    }
     if interactive:
         return prompts.ask_inputs(config, base_context)
     return prompts.default_inputs(config, base_context)

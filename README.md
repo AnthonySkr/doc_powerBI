@@ -98,7 +98,7 @@ Une `section` = un titre + des `blocks` + des `sections` filles. Types de blocs 
 | `image` | Emplacement réservé pour une capture, avec sa description |
 | `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
-| `table` | Tableau construit à partir des données extraites |
+| `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
 | `loop` | Répétition d'un sous-plan sur une collection (pages, visuels, tables, mesures) |
 
 ### Variables et conditions
@@ -113,7 +113,7 @@ description: "Capture complète de la page « {{ page.display_name }} »"
 Collections disponibles dans les boucles : `report.pages`, `page.groups`,
 `page.ungrouped_visuals`, `page.visuals` (les deux précédentes réunies),
 `group.members`, `group.visuals`, `visual.references`, `model.tables`,
-`model.tables_with_measures`, `table.measures`.
+`model.tables_with_measures`, `table.measures`, `table.transformation_steps`.
 
 Une section ou un bloc peut être conditionné par `when` :
 
@@ -122,6 +122,53 @@ when: inputs.pages_secondaires      # vrai si la réponse est vraie
 when: "!inputs.pages_secondaires"   # négation
 when: "ref.kind == mesure"          # égalité
 ```
+
+### Ce que le script demande au lancement
+
+Les questions viennent de `inputs:`. Cinq types : `text`, `textarea`, `confirm`,
+`choice` et `multi_choice` (numéros séparés par une virgule). Les options d'un
+`choice` ou d'un `multi_choice` peuvent être une liste figée du YAML **ou une
+expression** — `choices.visuals` liste alors les titres réellement présents dans
+le rapport :
+
+```yaml
+  - id: visuels_non_detailles
+    type: multi_choice
+    label: "Visuels ou groupes déjà présentés ailleurs, à ne pas détailler"
+    options: "{{ choices.visuals }}"
+```
+
+Les filtres `data:` peuvent reprendre une réponse. C'est ainsi que la question
+ci-dessus agit : le titre choisi rejoint les titres écartés, et le visuel — ou
+le groupe, avec tout son contenu — disparaît de la partie « Visuels ».
+
+```yaml
+data:
+  visuals:
+    exclude_titles: "{{ inputs.visuels_non_detailles }}"
+```
+
+Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
+proposés sont dédoublonnés, et en écarter un l'écarte partout à la fois.
+
+### Table de données : ce qui est écrit, et ce qui ne l'est pas
+
+Une sous-partie ne s'écrit que si elle a quelque chose à dire — une table sans
+paramètres de connexion n'ouvre pas de rubrique « Paramètres » vide (`when:` sur
+le bloc).
+
+Les **paramètres** reprennent l'expression de l'étape source de Power Query
+telle qu'elle est écrite, indentation comprise, dans le style `Code DAX`.
+
+La **synthétisation du traitement** est un tableau *étape → opération*, réduit
+aux étapes qui portent une règle de gestion. Sont écartées, via
+`data.tables.steps` :
+
+| Réglage | Écarte |
+| --- | --- |
+| `exclude_unnamed` | les étapes sans nom — Power BI les nomme d'un GUID |
+| `exclude_names` | les noms exacts listés (`Source`) |
+| `exclude_prefixes` | tout nom commençant par (`Navigation`, `Type modifié`, `Colonnes renommées`, `Colonnes permutées`) — suffixes numérotés compris |
 
 ### Liens internes
 
@@ -452,7 +499,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (204)
+tests/                        tests unitaires (220)
 tools/package.py              assemblage du dossier distribué
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
@@ -467,6 +514,7 @@ template-doc-pbib.docx        template Word
 | ajouter un type de bloc | `generators/word/document.py` → `_block_writers` |
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
+| ajouter un type de question | `cli/prompts.py` → `ask_inputs` |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 

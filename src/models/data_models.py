@@ -51,6 +51,19 @@ class DaxMeasure:
 
 
 @dataclass
+class TransformationStep:
+    """Étape d'un script Power Query (`let ... in ...`)."""
+
+    name: str
+    expression: str  # opération de l'étape, ramenée sur une ligne
+    # L'expression telle qu'écrite, indentation et retours à la ligne compris.
+    raw_expression: str = ""
+
+    def __str__(self) -> str:
+        return f"{self.name} = {self.expression}"
+
+
+@dataclass
 class ModelTable:
     """Table du modèle sémantique."""
 
