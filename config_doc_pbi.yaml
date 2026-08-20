@@ -764,10 +764,3 @@ sections:
                     value_list: "{{ measure.used_by_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "Aucune autre mesure ne l'utilise."
-
-                  # Rédaction libre, conservée d'une génération à l'autre.
-                  # Surlignée si l'expression DAX a changé depuis.
-                  - type: user_fill
-                    id: mesure_commentaire
-                    label: "Règle de gestion"
-                    hint: "Ce que calcule la mesure, en langage métier"
