@@ -90,6 +90,12 @@ DEFAULTS: dict[str, Any] = {
             "exclude_titles": [],
             "only_with_measures": False,
             "sort_by": "title",
+            "groups": {
+                "enabled": True,
+                "keep_empty": False,
+                "sort_by": "position",
+                "member_sort_by": "position",
+            },
         },
         "tables": {
             "exclude_hidden": True,
