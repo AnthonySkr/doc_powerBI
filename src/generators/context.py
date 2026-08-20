@@ -24,6 +24,10 @@ def build_context(
     inputs: dict[str, Any],
 ) -> dict[str, Any]:
     """Assemble le contexte passé au générateur Word."""
+    # Les filtres `data:` peuvent désigner les réponses de l'utilisateur
+    # (visuels à ne pas détailler...) : ils sont résolus avant d'être appliqués.
+    config = config.resolve_data({"report": report, "inputs": inputs, "styles": config.styles})
+
     report.pages = filters.filter_pages(report.pages, config)
     for page in report.pages:
         filters.organize_page(page, config)

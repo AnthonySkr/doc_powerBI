@@ -12,6 +12,7 @@ from src.config.expressions import (
     render_list,
     resolve,
     resolve_items,
+    resolve_options,
     to_text,
 )
 
@@ -24,5 +25,6 @@ __all__ = [
     "render_list",
     "resolve",
     "resolve_items",
+    "resolve_options",
     "to_text",
 ]

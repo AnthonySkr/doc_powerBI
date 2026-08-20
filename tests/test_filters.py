@@ -5,7 +5,9 @@ import unittest
 from src import console
 from src.config import DocConfig
 from src.generators.filters import (
+    documentable_titles,
     filter_pages,
+    filter_steps,
     filter_tables,
     filter_visuals,
     group_measures,
@@ -17,6 +19,7 @@ from src.models.data_models import (
     ModelTable,
     PowerBIReport,
     ReportPage,
+    TransformationStep,
     Visual,
     VisualGroup,
 )
@@ -78,13 +81,14 @@ class VisualFilterTest(unittest.TestCase):
         self.assertEqual([v.title for v in kept], ["CA"])
 
 
+def step(name, expression="F()") -> TransformationStep:
+    return TransformationStep(name=name, expression=expression, raw_expression=expression)
+
+
 class TableFilterTest(unittest.TestCase):
     def _tables(self):
         return [
-            ModelTable(
-                name="Ventes",
-                transformation_steps=[{"name": "Source", "expression": "Sql.Database()"}],
-            ),
+            ModelTable(name="Ventes", transformation_steps=[step("Source", "Sql.Database()")]),
             ModelTable(name="Technique", is_hidden=True),
         ]
 
@@ -92,12 +96,61 @@ class TableFilterTest(unittest.TestCase):
         kept = filter_tables(self._tables(), config(tables={"exclude_hidden": True}))
         self.assertEqual([t.name for t in kept], ["Ventes"])
 
-    def test_etapes_mises_en_forme(self):
+    def test_etapes_filtrees_a_la_lecture_des_tables(self):
         kept = filter_tables(
             self._tables(),
-            config(tables={"exclude_hidden": True, "step_format": "{name} — {expression}"}),
+            config(tables={"exclude_hidden": True, "steps": {"exclude_names": ["Source"]}}),
         )
-        self.assertEqual(kept[0].transformation_steps, ["Source — Sql.Database()"])
+        self.assertEqual(kept[0].transformation_steps, [])
+
+
+class StepFilterTest(unittest.TestCase):
+    """Étapes Power Query retenues dans la synthétisation du traitement."""
+
+    def setUp(self):
+        self.steps = [
+            step("Source"),
+            step("b4d2029b-697d-437b-8c10-138964cd23db"),
+            step("576D2754-F120-415F-885F-1DDFF338D8CC"),
+            step("Navigation 1"),
+            step("Type modifié2"),
+            step("Colonnes renommées"),
+            step("Colonnes permutées"),
+            step("BASE_DOMAINE1", "Table.SelectRows(Source, each [x] > 5)"),
+        ]
+        self.options = {
+            "exclude_names": ["Source"],
+            "exclude_prefixes": [
+                "Navigation",
+                "Type modifié",
+                "Colonnes renommées",
+                "Colonnes permutées",
+            ],
+        }
+
+    def test_seules_les_etapes_parlantes_sont_gardees(self):
+        kept = filter_steps(self.steps, self.options)
+        self.assertEqual([s.name for s in kept], ["BASE_DOMAINE1"])
+        self.assertEqual(kept[0].expression, "Table.SelectRows(Source, each [x] > 5)")
+
+    def test_etapes_sans_nom_gardees_sur_demande(self):
+        kept = filter_steps(self.steps, {**self.options, "exclude_unnamed": False})
+        self.assertEqual(
+            [s.name for s in kept],
+            [
+                "b4d2029b-697d-437b-8c10-138964cd23db",
+                "576D2754-F120-415F-885F-1DDFF338D8CC",
+                "BASE_DOMAINE1",
+            ],
+        )
+
+    def test_prefixe_insensible_a_la_casse(self):
+        kept = filter_steps([step("NAVIGATION vers la table")], self.options)
+        self.assertEqual(kept, [])
+
+    def test_sans_option_rien_n_est_ecarte_hors_noms_generes(self):
+        kept = filter_steps([step("Source"), step("Autre")], {})
+        self.assertEqual([s.name for s in kept], ["Source", "Autre"])
 
 
 class MeasureGroupTest(unittest.TestCase):
@@ -259,6 +312,87 @@ class VisualGroupingTest(unittest.TestCase):
         self.assertEqual(
             [v.title for v in page.ungrouped_visuals], ["CA", "Détail", "Marge", "Volume"]
         )
+
+
+class ExcludedByAnswerTest(unittest.TestCase):
+    """Visuels et groupes écartés par la réponse donnée au lancement."""
+
+    def setUp(self):
+        self.page = ReportPage(name="p1", display_name="Accueil")
+        self.page.groups = [group("g0", "Bandeau d'en-tête", y=0), group("g1", "Ventes", y=10)]
+        self.page.visuals = [
+            visual("v0", "Titre page", group="g0", y=1),
+            visual("v1", "CA", group="g1", y=11),
+            visual("v2", "Détail", y=20),
+        ]
+
+    def organize(self, excluded):
+        raw = {
+            "data": {
+                "visuals": {
+                    "exclude_titles": "{{ inputs.exclus }}",
+                    "groups": {"exclude_titles": "{{ inputs.exclus }}"},
+                }
+            }
+        }
+        resolved = DocConfig(raw).resolve_data({"inputs": {"exclus": excluded}})
+        organize_page(self.page, resolved)
+        return self.page
+
+    def test_groupe_ecarte_avec_tout_son_contenu(self):
+        page = self.organize(["Bandeau d'en-tête"])
+
+        self.assertEqual([g.title for g in page.groups], ["Ventes"])
+        self.assertEqual([v.title for v in page.visuals], ["CA", "Détail"])
+        # Le visuel du groupe écarté ne réapparaît pas hors groupe
+        self.assertNotIn("Titre page", [v.title for v in page.ungrouped_visuals])
+
+    def test_visuel_isole_ecarte(self):
+        page = self.organize(["Détail"])
+
+        self.assertEqual([v.title for v in page.ungrouped_visuals], [])
+        self.assertEqual([g.title for g in page.groups], ["Bandeau d'en-tête", "Ventes"])
+
+    def test_aucune_exclusion(self):
+        page = self.organize([])
+
+        self.assertEqual([g.title for g in page.groups], ["Bandeau d'en-tête", "Ventes"])
+        self.assertEqual(len(page.visuals), 3)
+
+    def test_expression_non_resolue_n_ecarte_rien(self):
+        # Au moment où les questions sont posées, les filtres portent encore
+        # leur expression : elle ne doit correspondre à aucun titre.
+        organize_page(self.page, config(visuals={"exclude_titles": "{{ inputs.exclus }}"}))
+        self.assertEqual(len(self.page.visuals), 3)
+
+
+class DocumentableTitlesTest(unittest.TestCase):
+    """Titres proposés au lancement pour être écartés."""
+
+    def test_groupes_et_visuels_dedoublonnes_et_tries(self):
+        pages = [
+            ReportPage(name="p1", display_name="Accueil"),
+            ReportPage(name="p2", display_name="Détail"),
+        ]
+        for page in pages:
+            page.groups = [group("g0", "Bandeau d'en-tête")]
+            page.visuals = [
+                visual("v0", "Titre page", group="g0"),
+                visual("v1", "Logo", "", "image"),
+            ]
+        pages[0].visuals.append(visual("v2", "CA"))
+
+        titles = documentable_titles(PowerBIReport(name="R", pages=pages), config(visuals={}))
+        self.assertEqual(titles, ["Bandeau d'en-tête", "CA", "Logo", "Titre page"])
+
+    def test_visuels_exclus_par_type_non_proposes(self):
+        page = ReportPage(name="p1", display_name="Accueil")
+        page.visuals = [visual("v0", "CA"), visual("v1", "Logo", "", "image")]
+
+        titles = documentable_titles(
+            PowerBIReport(name="R", pages=[page]), config(visuals={"exclude_types": ["image"]})
+        )
+        self.assertEqual(titles, ["CA"])
 
 
 class GroupNumberingTest(unittest.TestCase):

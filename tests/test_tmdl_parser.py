@@ -103,7 +103,7 @@ class TableTest(unittest.TestCase):
     def test_source_et_etapes(self):
         table = parse_table(VENTES)
         self.assertEqual(
-            [step["name"] for step in table.transformation_steps],
+            [step.name for step in table.transformation_steps],
             ["Source", "Lignes filtrees"],
         )
         self.assertEqual(table.source, 'Sql.Database("srv", "db")')
@@ -112,17 +112,15 @@ class TableTest(unittest.TestCase):
 class PowerQueryTest(unittest.TestCase):
     def test_virgule_dans_une_chaine_non_separatrice(self):
         steps = parse_steps('let A = Text.From("x, y"), B = 1 in B')
-        self.assertEqual([step["name"] for step in steps], ["A", "B"])
+        self.assertEqual([step.name for step in steps], ["A", "B"])
 
     def test_virgule_entre_parentheses_non_separatrice(self):
         steps = parse_steps("let A = F(1, 2, 3) in A")
         self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0]["expression"], "F(1, 2, 3)")
+        self.assertEqual(steps[0].expression, "F(1, 2, 3)")
 
     def test_identifiant_echappe(self):
-        self.assertEqual(
-            parse_steps('let #"Lignes filtrées" = 1 in x')[0]["name"], "Lignes filtrées"
-        )
+        self.assertEqual(parse_steps('let #"Lignes filtrées" = 1 in x')[0].name, "Lignes filtrées")
 
     def test_source_par_defaut_premiere_etape(self):
         steps = parse_steps("let Depart = 1, Suite = 2 in Suite")

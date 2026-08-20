@@ -172,7 +172,11 @@ data:
       - basicShape
       - textbox
       - unknown
-    exclude_titles: []
+    # Titres à ne pas détailler. La question `visuels_non_detailles` posée au
+    # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
+    # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
+    # une seconde fois page par page.
+    exclude_titles: "{{ inputs.visuels_non_detailles }}"
     only_with_measures: false  # true = ne documenter que les visuels avec mesures
     sort_by: position             # title | position
 
@@ -183,6 +187,9 @@ data:
     groups:
       enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
       keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
+      # Groupes à ne pas détailler — même question qu'au-dessus. Un groupe
+      # écarté l'est avec tout son contenu.
+      exclude_titles: "{{ inputs.visuels_non_detailles }}"
       sort_by: position        # position | title — ordre des groupes dans la page
       member_sort_by: position # ordre de la légende : position à l'écran ou title
 
@@ -190,8 +197,21 @@ data:
     exclude_hidden: true
     exclude_names: []          # tables techniques à ne pas documenter
     sort_by: name
-    # Mise en forme d'une étape Power Query : {name} et {expression}
-    step_format: "{name}"
+
+    # Étapes Power Query retenues dans « Synthétisation du traitement ».
+    # Le but est de ne garder que les étapes qui portent une règle de gestion :
+    # tout le reste est du geste de mise en forme, que le lecteur n'a pas à lire.
+    steps:
+      # Les étapes auxquelles personne n'a donné de nom : Power BI les nomme
+      # d'un GUID (b4d2029b-697d-437b-8c10-138964cd23db).
+      exclude_unnamed: true
+      exclude_names:           # noms exacts à ne pas afficher
+        - Source
+      exclude_prefixes:        # tout nom commençant par... (suffixes compris)
+        - Navigation
+        - Type modifié
+        - Colonnes renommées
+        - Colonnes permutées
 
   measures:
     scope: all      # all | used_in_report (mesures + dépendances)
@@ -230,7 +250,10 @@ merge:
 # =============================================================================
 #  6. INPUTS — questions posées à l'utilisateur au lancement du script
 # =============================================================================
-#  type : confirm (oui/non) | text (une ligne) | choice | textarea
+#  type : confirm (oui/non) | text (une ligne) | textarea | choice
+#         | multi_choice (plusieurs numéros, séparés par une virgule)
+#  Les `options:` d'un choice / multi_choice acceptent une expression :
+#  `choices.visuals` liste ce que le rapport contient réellement.
 # =============================================================================
 inputs:
   - id: nom_rapport
@@ -252,6 +275,16 @@ inputs:
     type: confirm
     label: "Le rapport utilise-t-il un volet de filtre ouvert par un bouton ?"
     default: true
+
+  # Sélection multiple dans le contenu réel du rapport : `choices.visuals`
+  # liste les titres des groupes et des visuels que le document peut détailler.
+  # Un même bandeau porte le même titre sur toutes les pages : l'écarter une
+  # fois l'écarte partout.
+  - id: visuels_non_detailles
+    type: multi_choice
+    label: "Visuels ou groupes déjà présentés ailleurs, à ne pas détailler page par page"
+    options: "{{ choices.visuals }}"
+    default: []
 
   - id: editer_textes
     type: confirm
@@ -682,19 +715,46 @@ sections:
               bookmark: "table:{{ table.name }}"
               fingerprint: "{{ table.source }} {{ table.transformation_steps }}"
               blocks:
+                # Chaque partie ne s'écrit que si elle a quelque chose à dire :
+                # une table sans paramètres de connexion ni étape de traitement
+                # n'ouvre pas de sous-partie vide.
                 - type: property
                   id: table_parametres
+                  when: table.source
                   label: "Paramètres"
+                  # Expression de la source, telle qu'écrite dans Power Query :
+                  # son indentation est conservée.
                   value: "{{ table.source }}"
-                  fallback: "[À compléter]"
+                  value_style: "{{ styles.code }}"
 
-                - type: property
+                - type: table
                   id: table_traitement
+                  when: table.transformation_steps
                   label: "Synthétisation du traitement"
-                  # Étapes de transformation (Power Query) listées à la suite
-                  value_list: "{{ table.transformation_steps }}"
-                  value_style: "{{ styles.bullet }}"
-                  fallback: "[À compléter]"
+                  # Étapes Power Query retenues par data.tables.steps : les
+                  # étapes de mise en forme sont écartées, il ne reste que
+                  # celles qui portent une règle de gestion.
+                  over: table.transformation_steps
+                  item: step
+                  style: "{{ styles.table_data }}"
+                  header: true
+                  header_labels: ["Étape", "Opération"]
+                  header_style: "{{ styles.ref_header }}"
+                  layout: fixed
+                  repeat_header: true
+                  cant_split: true
+                  vertical_align: center
+                  autofit: false
+                  columns:
+                    - id: nom
+                      width_cm: 4.5
+                      style: "{{ styles.ref_role }}"
+                      value: "{{ step.name }}"
+                    - id: operation
+                      width_cm: 11.5
+                      style: "{{ styles.ref_value }}"
+                      # Opération de l'étape, ramenée sur une ligne
+                      value: "{{ step.expression }}"
 
                 # Rédaction libre, conservée d'une génération à l'autre.
                 - type: user_fill
