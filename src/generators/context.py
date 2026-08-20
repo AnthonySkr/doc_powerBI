@@ -4,7 +4,8 @@ Contexte de données consommé par le plan YAML.
 C'est ici que les données brutes issues des parseurs deviennent les collections
 que le plan parcourt :
 
-    report.pages / page.visuals / visual.references
+    report.pages / page.groups / page.ungrouped_visuals
+    page.visuals / group.members / group.visuals / visual.references
     model.tables / model.tables_with_measures / table.measures
     inputs.<id> / styles.<clé>
 """
@@ -23,11 +24,16 @@ def build_context(
     inputs: dict[str, Any],
 ) -> dict[str, Any]:
     """Assemble le contexte passé au générateur Word."""
+    # Les filtres `data:` peuvent désigner les réponses de l'utilisateur
+    # (visuels à ne pas détailler...) : ils sont résolus avant d'être appliqués.
+    config = config.resolve_data({"report": report, "inputs": inputs, "styles": config.styles})
+
     report.pages = filters.filter_pages(report.pages, config)
     for page in report.pages:
-        page.visuals = filters.filter_visuals(page.visuals, config)
+        filters.organize_page(page, config)
 
     options = references.visual_options(config)
+    references.index_group_members(report, options)
     references.index_references(report, options)
     references.index_usages(report, all_measures, options)
 

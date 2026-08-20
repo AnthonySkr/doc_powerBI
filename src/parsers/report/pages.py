@@ -1,12 +1,15 @@
-"""Pages et visuels du rapport (`Report/definition/pages/`)."""
+"""Pages, groupes et visuels du rapport (`Report/definition/pages/`)."""
 
 import json
 import os
 from typing import Any
 
 from src import console
-from src.models.data_models import ReportPage, Visual
+from src.models.data_models import ReportPage, Visual, VisualGroup
 from src.parsers.report.fields import parse_elements, parse_filters
+
+# Titre de repli d'un groupe dont le `displayName` est vide.
+UNTITLED_GROUP = "Groupe sans nom"
 
 
 def load_page_order(pages_dir: str) -> dict[str, int]:
@@ -34,22 +37,53 @@ def parse_page(page_path: str, folder_name: str, page_order: dict[str, int]) -> 
         return page
 
     for folder in sorted(os.listdir(visuals_dir)):
-        visual = parse_visual(os.path.join(visuals_dir, folder, "visual.json"), folder)
-        if visual:
-            page.visuals.append(visual)
+        container = parse_container(os.path.join(visuals_dir, folder, "visual.json"), folder)
+        if isinstance(container, VisualGroup):
+            page.groups.append(container)
+        elif container is not None:
+            page.visuals.append(container)
 
     return page
 
 
-def parse_visual(visual_json_path: str, folder_name: str) -> Visual | None:
-    """Parse un `visual.json`. Les visuels sont tous lus : le tri revient à `data.visuals`."""
+def parse_container(visual_json_path: str, folder_name: str) -> Visual | VisualGroup | None:
+    """
+    Parse un `visual.json`.
+
+    Le fichier décrit soit un visuel (`visual`), soit un conteneur de groupe
+    (`visualGroup`) — les deux clés s'excluent. Les visuels sont tous lus : le
+    tri revient à `data.visuals`.
+    """
     data = read_json(visual_json_path)
     if data is None:
         return None
 
+    if data.get("visualGroup"):
+        return parse_group(data, folder_name)
+    return parse_visual(data, folder_name)
+
+
+def parse_group(data: dict, folder_name: str) -> VisualGroup:
+    """Conteneur de groupe : pas de contenu propre, mais un nom et une place."""
+    node = data.get("visualGroup") or {}
+    position = data.get("position") or {}
+
+    return VisualGroup(
+        id=folder_name,
+        name=data.get("name") or folder_name,
+        title=(node.get("displayName") or "").strip() or UNTITLED_GROUP,
+        group_mode=node.get("groupMode", ""),
+        parent_group_name=data.get("parentGroupName", ""),
+        pos_x=float(position.get("x") or 0),
+        pos_y=float(position.get("y") or 0),
+    )
+
+
+def parse_visual(data: dict, folder_name: str) -> Visual | None:
+    """Visuel proprement dit : type, champs projetés, filtres et position."""
     node = data.get("visual") or {}
-    if node.get("visualGroup"):
-        return None  # conteneur de groupe : pas de contenu propre à documenter
+    if not node:
+        return None
 
     visual_type = node.get("visualType", "unknown")
     elements = parse_elements(node.get("query") or {})
@@ -64,6 +98,8 @@ def parse_visual(visual_json_path: str, folder_name: str) -> Visual | None:
         has_measures=any(element.type_category == "Mesure" for element in elements),
         pos_x=float(position.get("x") or 0),
         pos_y=float(position.get("y") or 0),
+        name=data.get("name") or folder_name,
+        parent_group_name=data.get("parentGroupName", ""),
     )
 
 

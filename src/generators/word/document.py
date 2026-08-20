@@ -311,6 +311,17 @@ class DocumentBuilder:
         if not columns or not rows:
             return
 
+        # Sous-titre facultatif, comme pour un bloc `property` : il n'est écrit
+        # que si le tableau l'est, et disparaît donc avec lui.
+        label = render(block.get("label"), context)
+        if label:
+            self.doc.add_paragraph(
+                label,
+                style=self.styles.paragraph(
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
+                ),
+            )
+
         table = self.doc.add_table(rows=0, cols=len(columns))
         style = self.styles.table(render(block.get("style"), context))
         if style:

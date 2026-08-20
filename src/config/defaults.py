@@ -90,12 +90,23 @@ DEFAULTS: dict[str, Any] = {
             "exclude_titles": [],
             "only_with_measures": False,
             "sort_by": "title",
+            "groups": {
+                "enabled": True,
+                "keep_empty": False,
+                "exclude_titles": [],
+                "sort_by": "position",
+                "member_sort_by": "position",
+            },
         },
         "tables": {
             "exclude_hidden": True,
             "exclude_names": [],
             "sort_by": "name",
-            "step_format": "{name}",
+            "steps": {
+                "exclude_unnamed": True,
+                "exclude_names": [],
+                "exclude_prefixes": [],
+            },
         },
         "measures": {
             "scope": "used_in_report",

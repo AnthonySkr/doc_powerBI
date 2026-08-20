@@ -50,6 +50,26 @@ def render_list(value: Any, context: dict[str, Any]) -> list[str]:
     return [to_text(value)]
 
 
+def resolve_options(value: Any, context: dict[str, Any]) -> Any:
+    """
+    Résout les `{{ ... }}` d'un arbre d'options de configuration.
+
+    Sert aux filtres `data:`, qui peuvent ainsi dépendre des réponses données
+    au lancement. Seules les chaînes contenant `{{` sont touchées : les autres
+    valeurs — nombres, booléens, gabarits en `{name}` — passent inchangées.
+    """
+    if isinstance(value, dict):
+        return {key: resolve_options(item, context) for key, item in value.items()}
+    if isinstance(value, list):
+        return [resolve_options(item, context) for item in value]
+    if not isinstance(value, str) or "{{" not in value:
+        return value
+    # Une expression seule peut désigner une liste ; sinon c'est du texte.
+    if _VAR_PATTERN.fullmatch(value.strip()):
+        return render_list(value, context)
+    return render(value, context)
+
+
 def resolve_items(expression: Any, context: dict[str, Any]) -> list[Any]:
     """
     Résout l'expression `over:` d'une boucle ou d'un tableau.

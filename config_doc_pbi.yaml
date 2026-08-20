@@ -172,16 +172,46 @@ data:
       - basicShape
       - textbox
       - unknown
-    exclude_titles: []
+    # Titres à ne pas détailler. La question `visuels_non_detailles` posée au
+    # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
+    # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
+    # une seconde fois page par page.
+    exclude_titles: "{{ inputs.visuels_non_detailles }}"
     only_with_measures: false  # true = ne documenter que les visuels avec mesures
     sort_by: position             # title | position
+
+    # Groupes Power BI (`visualGroup` d'un visual.json). Les visuels qui
+    # portent un `parentGroupName` sont documentés à l'intérieur de leur
+    # groupe : capture d'ensemble, légende du contenu, puis le détail visuel
+    # par visuel. Les autres suivent, comme avant, à la suite de la page.
+    groups:
+      enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
+      keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
+      # Groupes à ne pas détailler — même question qu'au-dessus. Un groupe
+      # écarté l'est avec tout son contenu.
+      exclude_titles: "{{ inputs.visuels_non_detailles }}"
+      sort_by: position        # position | title — ordre des groupes dans la page
+      member_sort_by: position # ordre de la légende : position à l'écran ou title
 
   tables:
     exclude_hidden: true
     exclude_names: []          # tables techniques à ne pas documenter
     sort_by: name
-    # Mise en forme d'une étape Power Query : {name} et {expression}
-    step_format: "{name}"
+
+    # Étapes Power Query retenues dans « Synthétisation du traitement ».
+    # Le but est de ne garder que les étapes qui portent une règle de gestion :
+    # tout le reste est du geste de mise en forme, que le lecteur n'a pas à lire.
+    steps:
+      # Les étapes auxquelles personne n'a donné de nom : Power BI les nomme
+      # d'un GUID (b4d2029b-697d-437b-8c10-138964cd23db).
+      exclude_unnamed: true
+      exclude_names:           # noms exacts à ne pas afficher
+        - Source
+      exclude_prefixes:        # tout nom commençant par... (suffixes compris)
+        - Navigation
+        - Type modifié
+        - Colonnes renommées
+        - Colonnes permutées
 
   measures:
     scope: all      # all | used_in_report (mesures + dépendances)
@@ -220,7 +250,10 @@ merge:
 # =============================================================================
 #  6. INPUTS — questions posées à l'utilisateur au lancement du script
 # =============================================================================
-#  type : confirm (oui/non) | text (une ligne) | choice | textarea
+#  type : confirm (oui/non) | text (une ligne) | textarea | choice
+#         | multi_choice (plusieurs numéros, séparés par une virgule)
+#  Les `options:` d'un choice / multi_choice acceptent une expression :
+#  `choices.visuals` liste ce que le rapport contient réellement.
 # =============================================================================
 inputs:
   - id: nom_rapport
@@ -242,6 +275,16 @@ inputs:
     type: confirm
     label: "Le rapport utilise-t-il un volet de filtre ouvert par un bouton ?"
     default: true
+
+  # Sélection multiple dans le contenu réel du rapport : `choices.visuals`
+  # liste les titres des groupes et des visuels que le document peut détailler.
+  # Un même bandeau porte le même titre sur toutes les pages : l'écarter une
+  # fois l'écarte partout.
+  - id: visuels_non_detailles
+    type: multi_choice
+    label: "Visuels ou groupes déjà présentés ailleurs, à ne pas détailler page par page"
+    options: "{{ choices.visuals }}"
+    default: []
 
   - id: editer_textes
     type: confirm
@@ -401,6 +444,21 @@ sections:
               - type: image
                 id: filtre_fermeture_capture
                 description: "Visuel explicatif fermeture volet filtre"
+          - id: rappel_contexte
+            title: "Rappel de contexte"
+            level: 3
+            when: inputs.volet_filtre
+            blocks:
+              - type: paragraph
+                id: text_rappel_contexte
+                editable: true
+                prompt: "Texte récapitulatif du contexte"
+                text: >-
+                  Le rappel de contexte nous permet de visualiser le contexte dans lequel 
+                  nous consultons les données. Il se met à jour en fonction des filtres appliqués.
+              - type: image
+                id: rappel_contexte_capture
+                description: "Visuel explicatif rappel contexte de filtre"
 
   # ---------------------------------------------------------------------------
   #  ACQUISITION DES DONNÉES — rédigée manuellement après génération
@@ -446,64 +504,132 @@ sections:
               id: page_capture
               description: "Capture complète de la page « {{ page.display_name }} »"
 
+            # --- Groupes Power BI de la page -----------------------------
+            # Un groupe rassemble ses visuels dans une même partie : capture
+            # d'ensemble, légende de son contenu, puis le détail de chacun de
+            # ses visuels documentés. Voir data.visuals.groups.
             - type: loop
-              id: boucle_visuels
-              over: page.visuals    # filtrée par data.visuals
-              item: visual
+              id: boucle_groupes
+              over: page.groups     # groupes racines, garnis par data.visuals
+              item: group
               section:
-                title: "{{ visual.title }}"
-                # Type du visuel, en gris discret à la suite du titre
-                title_suffix: "{{ visual.visual_type }}"
+                title: "{{ group.title }}"
+                title_suffix: "groupe"
                 title_suffix_style: "{{ styles.technical_id }}"
                 level: 3
-                # Cible des liens « Utilisée dans » de la définition des mesures
-                bookmark: "visual:{{ page.name }}:{{ visual.id }}"
-                # État technique du visuel : si l'empreinte change d'une
-                # génération à l'autre, la rédaction reprise est surlignée.
-                fingerprint: "{{ visual.visual_type }} {{ visual.signature }}"
+                bookmark: "group:{{ page.name }}:{{ group.id }}"
+                # Contenu du groupe : si un visuel y entre ou en sort, la
+                # rédaction reprise est signalée à la relecture.
+                fingerprint: "{{ group.signature }}"
                 blocks:
                   - type: image
-                    id: visuel_capture
-                    description: "Capture du visuel « {{ visual.title }} »"
+                    id: groupe_capture
+                    description: "Capture du groupe « {{ group.title }} »"
 
-                  # Tableau des références du visuel : le numéro de la première
-                  # colonne est reporté à la main sur la capture ci-dessus.
+                  # Légende du groupe : elle relie les numéros reportés sur la
+                  # capture ci-dessus aux visuels qui composent le groupe. Les
+                  # visuels écartés par data.visuals y figurent aussi — ils
+                  # n'ont simplement pas de partie détaillée plus bas.
                   - type: table
-                    id: visuel_references
-                    over: visual.references
-                    item: ref
+                    id: groupe_legende
+                    over: group.members
+                    item: member
                     style: "{{ styles.table }}"
                     header: true
-                    header_labels: ["N°", "Rôle", "Élément référencé"]
+                    header_labels: ["N°", "Élément du groupe", "Type"]
                     header_style: "{{ styles.ref_header }}"
-                    layout: fixed        # largeurs respectées par Word
-                    repeat_header: true  # en-tête répété à chaque page
-                    cant_split: true     # une ligne n'est jamais coupée
+                    layout: fixed
+                    repeat_header: true
+                    cant_split: true
                     vertical_align: center
                     autofit: false
                     columns:
                       - id: numero
                         width_cm: 1.25
                         style: "{{ styles.ref_number }}"
-                        value: "{{ ref.number }}"
-                      - id: role
-                        width_cm: 3.5
-                        style: "{{ styles.ref_role }}"
-                        value: "{{ ref.role }}"
-                      - id: valeur
-                        width_cm: 11.25
+                        value: "{{ member.number }}"
+                      - id: element
+                        width_cm: 10.25
                         style: "{{ styles.ref_value }}"
-                        # Nom de la mesure / colonne, ou expression du filtre.
-                        # Les mesures sont liées automatiquement à leur
-                        # définition (voir rendering.links.auto).
-                        value: "{{ ref.value }}"
+                        # Titre du visuel, précédé du sous-groupe s'il y en a un
+                        value: "{{ member.label }}"
+                      - id: type
+                        width_cm: 4.5
+                        style: "{{ styles.ref_role }}"
+                        value: "{{ member.visual_type }}"
 
-                  # Rédaction libre, conservée d'une génération à l'autre.
-                  # Surlignée si les champs du visuel ont changé depuis.
-                  - type: user_fill
-                    id: visuel_commentaire
-                    label: "Lecture du visuel"
-                    hint: "Ce que montre le visuel et comment le lire"
+                  # Le détail des visuels du groupe, à l'intérieur de sa partie.
+                  # Le plan d'un visuel est défini ici une seule fois (ancre
+                  # YAML `&visuel`) et repris tel quel plus bas, hors groupe.
+                  - type: loop
+                    id: boucle_visuels_groupe
+                    over: group.visuals
+                    item: visual
+                    section: &visuel
+                      title: "{{ visual.title }}"
+                      # Type du visuel, en gris discret à la suite du titre
+                      title_suffix: "{{ visual.visual_type }}"
+                      title_suffix_style: "{{ styles.technical_id }}"
+                      level: 4
+                      # Cible des liens « Utilisée dans » de la définition des mesures
+                      bookmark: "visual:{{ page.name }}:{{ visual.id }}"
+                      # État technique du visuel : si l'empreinte change d'une
+                      # génération à l'autre, la rédaction reprise est surlignée.
+                      fingerprint: "{{ visual.visual_type }} {{ visual.signature }}"
+                      blocks:
+                        - type: image
+                          id: visuel_capture
+                          description: "Capture du visuel « {{ visual.title }} »"
+
+                        # Tableau des références du visuel : le numéro de la
+                        # première colonne est reporté à la main sur la capture.
+                        - type: table
+                          id: visuel_references
+                          over: visual.references
+                          item: ref
+                          style: "{{ styles.table }}"
+                          header: true
+                          header_labels: ["N°", "Rôle", "Élément référencé"]
+                          header_style: "{{ styles.ref_header }}"
+                          layout: fixed        # largeurs respectées par Word
+                          repeat_header: true  # en-tête répété à chaque page
+                          cant_split: true     # une ligne n'est jamais coupée
+                          vertical_align: center
+                          autofit: false
+                          columns:
+                            - id: numero
+                              width_cm: 1.25
+                              style: "{{ styles.ref_number }}"
+                              value: "{{ ref.number }}"
+                            - id: role
+                              width_cm: 3.5
+                              style: "{{ styles.ref_role }}"
+                              value: "{{ ref.role }}"
+                            - id: valeur
+                              width_cm: 11.25
+                              style: "{{ styles.ref_value }}"
+                              # Nom de la mesure / colonne, ou expression du
+                              # filtre. Les mesures sont liées automatiquement à
+                              # leur définition (voir rendering.links.auto).
+                              value: "{{ ref.value }}"
+
+                        # Rédaction libre, conservée d'une génération à l'autre.
+                        # Surlignée si les champs du visuel ont changé depuis.
+                        - type: user_fill
+                          id: visuel_commentaire
+                          label: "Lecture du visuel"
+                          hint: "Ce que montre le visuel et comment le lire"
+
+            # --- Visuels de la page hors de tout groupe ------------------
+            # Même plan que ci-dessus, d'un cran moins profond : sans groupe
+            # au-dessus d'eux, ces visuels sont des parties de la page.
+            - type: loop
+              id: boucle_visuels
+              over: page.ungrouped_visuals   # filtrés par data.visuals
+              item: visual
+              section:
+                <<: *visuel
+                level: 3
 
     # --- Construction des références de visuel -------------------------------
     options:
@@ -512,6 +638,14 @@ sections:
       usages:
         target: "visual:{{ page.name }}:{{ visual.id }}"
         label: "{{ page.display_name }} — {{ visual.title }}"
+
+      # Numérotation de la légende d'un groupe : ces numéros sont ceux à
+      # reporter sur la capture d'ensemble du groupe.
+      groups:
+        numbering:
+          start: 1
+          scope: group             # group | page | document
+          format: "{n}"
 
       references:
         numbering:
@@ -581,19 +715,46 @@ sections:
               bookmark: "table:{{ table.name }}"
               fingerprint: "{{ table.source }} {{ table.transformation_steps }}"
               blocks:
+                # Chaque partie ne s'écrit que si elle a quelque chose à dire :
+                # une table sans paramètres de connexion ni étape de traitement
+                # n'ouvre pas de sous-partie vide.
                 - type: property
                   id: table_parametres
+                  when: table.source
                   label: "Paramètres"
+                  # Expression de la source, telle qu'écrite dans Power Query :
+                  # son indentation est conservée.
                   value: "{{ table.source }}"
-                  fallback: "[À compléter]"
+                  value_style: "{{ styles.code }}"
 
-                - type: property
+                - type: table
                   id: table_traitement
+                  when: table.transformation_steps
                   label: "Synthétisation du traitement"
-                  # Étapes de transformation (Power Query) listées à la suite
-                  value_list: "{{ table.transformation_steps }}"
-                  value_style: "{{ styles.bullet }}"
-                  fallback: "[À compléter]"
+                  # Étapes Power Query retenues par data.tables.steps : les
+                  # étapes de mise en forme sont écartées, il ne reste que
+                  # celles qui portent une règle de gestion.
+                  over: table.transformation_steps
+                  item: step
+                  style: "{{ styles.table_data }}"
+                  header: true
+                  header_labels: ["Étape", "Opération"]
+                  header_style: "{{ styles.ref_header }}"
+                  layout: fixed
+                  repeat_header: true
+                  cant_split: true
+                  vertical_align: center
+                  autofit: false
+                  columns:
+                    - id: nom
+                      width_cm: 4.5
+                      style: "{{ styles.ref_role }}"
+                      value: "{{ step.name }}"
+                    - id: operation
+                      width_cm: 11.5
+                      style: "{{ styles.ref_value }}"
+                      # Opération de l'étape, ramenée sur une ligne
+                      value: "{{ step.expression }}"
 
                 # Rédaction libre, conservée d'une génération à l'autre.
                 - type: user_fill
@@ -663,10 +824,3 @@ sections:
                     value_list: "{{ measure.used_by_measures }}"
                     value_style: "{{ styles.bullet }}"
                     fallback: "Aucune autre mesure ne l'utilise."
-
-                  # Rédaction libre, conservée d'une génération à l'autre.
-                  # Surlignée si l'expression DAX a changé depuis.
-                  - type: user_fill
-                    id: mesure_commentaire
-                    label: "Règle de gestion"
-                    hint: "Ce que calcule la mesure, en langage métier"
