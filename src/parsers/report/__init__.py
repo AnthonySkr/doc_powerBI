@@ -3,6 +3,9 @@ Lecture du rapport Power BI au format PBIR.
 
     Report/definition/pages/<hash>/page.json
                                    visuals/<hash>/visual.json
+
+Un `visual.json` décrit soit un visuel, soit un groupe (`visualGroup`) dont les
+membres le désignent par `parentGroupName`.
 """
 
 import os
@@ -36,6 +39,10 @@ def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> Powe
     report.pages.sort(key=lambda page: page.order)
 
     visuals = sum(len(page.visuals) for page in report.pages)
+    groups = sum(len(page.groups) for page in report.pages)
     with_measures = sum(1 for page in report.pages for v in page.visuals if v.has_measures)
-    console.info(f"{len(report.pages)} pages | {visuals} visuels | {with_measures} avec mesures")
+    console.info(
+        f"{len(report.pages)} pages | {visuals} visuels ({with_measures} avec mesures) "
+        f"| {groups} groupes"
+    )
     return report
