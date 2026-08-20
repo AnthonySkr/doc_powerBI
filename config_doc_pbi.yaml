@@ -43,7 +43,7 @@ document:
   # Page de garde : le paragraphe contenant ce texte est remplacé.
   cover:
     placeholder: "Titre du document"
-    text: "Documentation du Rapport\n{{ inputs.nom_rapport }}"
+    text: "Documentation \n{{ inputs.nom_rapport }}"
     bold: true
 
   # En-têtes et pieds de page du template : le texte placé à droite est
@@ -171,9 +171,10 @@ data:
       - shape
       - basicShape
       - textbox
+      - unknown
     exclude_titles: []
     only_with_measures: false  # true = ne documenter que les visuels avec mesures
-    sort_by: title             # title | position
+    sort_by: position             # title | position
 
   tables:
     exclude_hidden: true
