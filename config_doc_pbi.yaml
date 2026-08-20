@@ -411,6 +411,21 @@ sections:
               - type: image
                 id: filtre_fermeture_capture
                 description: "Visuel explicatif fermeture volet filtre"
+          - id: rappel_contexte
+            title: "Rappel de contexte"
+            level: 3
+            when: inputs.volet_filtre
+            blocks:
+              - type: paragraph
+                id: text_rappel_contexte
+                editable: true
+                prompt: "Texte récapitulatif du contexte"
+                text: >-
+                  Le rappel de contexte nous permet de visualiser le contexte dans lequel 
+                  nous consultons les données. Il se met à jour en fonction des filtres appliqués.
+              - type: image
+                id: rappel_contexte_capture
+                description: "Visuel explicatif rappel contexte de filtre"
 
   # ---------------------------------------------------------------------------
   #  ACQUISITION DES DONNÉES — rédigée manuellement après génération
