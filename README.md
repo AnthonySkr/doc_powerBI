@@ -37,7 +37,8 @@ Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.p
 1. Lit le modèle sémantique (`.SemanticModel`) : mesures DAX, tables, sources
    et étapes de transformation Power Query.
 2. Analyse les dépendances entre mesures (mesures et colonnes utilisées).
-3. Lit le rapport (`.Report`) : pages, visuels, champs et filtres.
+3. Lit le rapport (`.Report`) : pages, groupes de visuels, visuels, champs
+   et filtres.
 4. Pose les questions déclarées dans `inputs:`.
 5. Écrit le document en suivant le plan `sections:` du YAML, à la suite du
    contenu déjà présent dans le template.
@@ -50,6 +51,31 @@ Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
 capture correspondante une fois le document généré.
 
+### Groupes de visuels
+
+Les visuels regroupés dans Power BI (`parentGroupName` d'un `visual.json`) sont
+documentés ensemble, dans une partie au nom du groupe :
+
+1. un emplacement pour une **capture d'ensemble du groupe** ;
+2. la **légende** de cette capture — un tableau numérotant *tout* le contenu du
+   groupe, y compris les visuels écartés par `data.visuals.exclude_types`
+   (boutons, formes, images) : le lecteur retrouve ainsi chaque élément vu sur
+   l'image, sans que ceux-ci soient détaillés pour autant ;
+3. puis, d'un cran plus bas, le **détail habituel de chaque visuel documenté**
+   du groupe (capture, tableau des références, lecture du visuel).
+
+Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite, à
+plat, exactement comme avant.
+
+Un groupe imbriqué ne crée pas de partie supplémentaire : son contenu rejoint
+son groupe racine, et la légende garde trace du chemin
+(`Sous-groupe › Nom du visuel`). Un groupe dont aucun visuel n'est documenté est
+ignoré, sauf `keep_empty: true`.
+
+Réglages dans `data.visuals.groups` : `enabled`, `keep_empty`, `sort_by`,
+`member_sort_by` ; numérotation de la légende sous `options.groups.numbering` de
+la section `visuels` du plan.
+
 ## Configuration — `config_doc_pbi.yaml`
 
 | Bloc | Rôle |
@@ -57,7 +83,7 @@ capture correspondante une fois le document généré.
 | `document` | Template, dossier et nom de sortie, page de garde, en-tête / pied de page, propriétés du fichier |
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
-| `data` | Filtres et tris appliqués aux pages, visuels, tables et mesures |
+| `data` | Filtres et tris appliqués aux pages, visuels, groupes de visuels, tables et mesures |
 | `merge` | Regénération au-dessus d'une documentation existante |
 | `inputs` | Questions posées à l'utilisateur au lancement |
 | `sections` | Le plan du document |
@@ -84,9 +110,10 @@ title: "{{ page.display_name }}"
 description: "Capture complète de la page « {{ page.display_name }} »"
 ```
 
-Collections disponibles dans les boucles : `report.pages`, `page.visuals`,
-`visual.references`, `model.tables`, `model.tables_with_measures`,
-`table.measures`.
+Collections disponibles dans les boucles : `report.pages`, `page.groups`,
+`page.ungrouped_visuals`, `page.visuals` (les deux précédentes réunies),
+`group.members`, `group.visuals`, `visual.references`, `model.tables`,
+`model.tables_with_measures`, `table.measures`.
 
 Une section ou un bloc peut être conditionné par `when` :
 
@@ -407,13 +434,13 @@ src/
           tables.py             table, visibilité, partition
           powerquery.py         script `let ... in` → étapes nommées
       report/                 rapport PBIR
-          pages.py              pages et visuels
+          pages.py              pages, groupes et visuels
           fields.py             projections et filtres
 
   generators/
       context.py              assemble le contexte exposé au plan
-      filters.py              filtres et tris de `data:`
-      references.py           tableau des références, « utilisée dans »
+      filters.py              filtres, tris et groupes de `data:`
+      references.py           tableaux numérotés, « utilisée dans »
       measure_links.py        repérage des mentions de mesures dans un texte
       word/                   écriture du .docx
           generator.py          document précédent, écriture, archivage
@@ -425,7 +452,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (185)
+tests/                        tests unitaires (204)
 tools/package.py              assemblage du dossier distribué
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
