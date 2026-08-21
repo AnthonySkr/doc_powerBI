@@ -104,6 +104,27 @@ class TableFilterTest(unittest.TestCase):
         self.assertEqual(kept[0].transformation_steps, [])
 
 
+class IgnoredSourceTest(unittest.TestCase):
+    """Sources qui n'apprennent rien : la table est traitée comme sans source."""
+
+    def _source(self, source, ignored=("{1}",)):
+        tables = [ModelTable(name="Indicateurs", source=source)]
+        kept = filter_tables(tables, config(tables={"ignore_sources": list(ignored)}))
+        return kept[0].source
+
+    def test_source_ignoree_effacee(self):
+        self.assertEqual(self._source("{1}"), "")
+
+    def test_comparaison_insensible_aux_espaces(self):
+        self.assertEqual(self._source("{ 1 }"), "")
+
+    def test_source_reelle_conservee(self):
+        self.assertEqual(self._source('Sql.Database("srv", "db")'), 'Sql.Database("srv", "db")')
+
+    def test_sans_liste_rien_n_est_efface(self):
+        self.assertEqual(self._source("{1}", ignored=()), "{1}")
+
+
 class StepFilterTest(unittest.TestCase):
     """Étapes Power Query retenues dans la synthétisation du traitement."""
 

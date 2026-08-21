@@ -64,12 +64,24 @@ class TransformationStep:
 
 
 @dataclass
+class CalculatedColumn:
+    """Colonne calculée d'une table : son nom et son expression DAX."""
+
+    name: str
+    expression: str
+
+    def __str__(self) -> str:
+        return f"{self.name} = {self.expression}"
+
+
+@dataclass
 class ModelTable:
     """Table du modèle sémantique."""
 
     name: str
     source: str = ""
     transformation_steps: list = field(default_factory=list)
+    calculated_columns: list = field(default_factory=list)
     is_hidden: bool = False
     measures: list = field(default_factory=list)
 

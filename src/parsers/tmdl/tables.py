@@ -1,12 +1,13 @@
 """
 Extraction d'une table du modèle sémantique depuis son fichier .tmdl :
-nom, visibilité, et code Power Query de sa partition.
+nom, visibilité, colonnes calculées, et code Power Query de sa partition.
 """
 
 import re
 
 from src.models.data_models import ModelTable
 from src.parsers.tmdl import powerquery
+from src.parsers.tmdl.columns import extract_calculated_columns
 from src.parsers.tmdl.reader import indent_of, opens_block, table_name
 
 
@@ -19,6 +20,7 @@ def parse_table(content: str) -> ModelTable:
         name=table_name(content),
         source=powerquery.source_expression(steps, m_code),
         transformation_steps=steps,
+        calculated_columns=extract_calculated_columns(content),
         is_hidden=_is_hidden(content),
     )
 

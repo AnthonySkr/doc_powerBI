@@ -113,7 +113,8 @@ description: "Capture complète de la page « {{ page.display_name }} »"
 Collections disponibles dans les boucles : `report.pages`, `page.groups`,
 `page.ungrouped_visuals`, `page.visuals` (les deux précédentes réunies),
 `group.members`, `group.visuals`, `visual.references`, `model.tables`,
-`model.tables_with_measures`, `table.measures`, `table.transformation_steps`.
+`model.tables_with_measures`, `table.measures`, `table.transformation_steps`,
+`table.calculated_columns`.
 
 Une section ou un bloc peut être conditionné par `when` :
 
@@ -158,7 +159,10 @@ paramètres de connexion n'ouvre pas de rubrique « Paramètres » vide (`when:`
 le bloc).
 
 Les **paramètres** reprennent l'expression de l'étape source de Power Query
-telle qu'elle est écrite, indentation comprise, dans le style `Code DAX`.
+telle qu'elle est écrite, indentation comprise, dans le style `Code DAX`. Une
+source qui n'apprend rien ne compte pas comme une source : `ignore_sources`
+liste ces expressions — `{1}`, la source de la table de mesures créée à la main
+— et la rubrique disparaît comme si la table n'en avait pas.
 
 La **synthétisation du traitement** est un tableau *étape → opération*, réduit
 aux étapes qui portent une règle de gestion. Sont écartées, via
@@ -169,6 +173,12 @@ aux étapes qui portent une règle de gestion. Sont écartées, via
 | `exclude_unnamed` | les étapes sans nom — Power BI les nomme d'un GUID |
 | `exclude_names` | les noms exacts listés (`Source`) |
 | `exclude_prefixes` | tout nom commençant par (`Navigation`, `Type modifié`, `Colonnes renommées`, `Colonnes permutées`) — suffixes numérotés compris |
+
+La **particularité** n'apparaît que si la table porte des colonnes calculées :
+un tableau *colonne → code DAX*. Une colonne calculée est un `column` du .tmdl
+porteur d'une expression (`column Marge = [Montant] - [Coût]`) ; une colonne
+ramenée de la source n'en a pas, et n'a donc rien à documenter ici. Les mesures
+mentionnées dans le code sont liées à leur définition.
 
 ### Liens internes
 
@@ -478,6 +488,7 @@ src/
       tmdl/                   modèle sémantique
           reader.py             lecture des fichiers, découpage en blocs
           measures.py           blocs `measure` → DaxMeasure
+          columns.py            blocs `column ... = ...` → colonnes calculées
           tables.py             table, visibilité, partition
           powerquery.py         script `let ... in` → étapes nommées
       report/                 rapport PBIR
@@ -499,7 +510,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (220)
+tests/                        tests unitaires (231)
 tools/package.py              assemblage du dossier distribué
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
