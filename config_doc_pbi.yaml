@@ -198,6 +198,13 @@ data:
     exclude_names: []          # tables techniques à ne pas documenter
     sort_by: name
 
+    # Sources qui n'apprennent rien : la table de mesures créée à la main a
+    # pour toute source `{1}`. Une table dont la source est listée ici est
+    # traitée comme sans source — le bloc « Paramètres » n'est pas écrit.
+    # Comparaison insensible aux espaces et à la casse.
+    ignore_sources:
+      - "{1}"
+
     # Étapes Power Query retenues dans « Synthétisation du traitement ».
     # Le but est de ne garder que les étapes qui portent une règle de gestion :
     # tout le reste est du geste de mise en forme, que le lecteur n'a pas à lire.
@@ -713,7 +720,9 @@ sections:
               title: "{{ table.name }}"
               level: 3
               bookmark: "table:{{ table.name }}"
-              fingerprint: "{{ table.source }} {{ table.transformation_steps }}"
+              fingerprint: >-
+                {{ table.source }} {{ table.transformation_steps }}
+                {{ table.calculated_columns }}
               blocks:
                 # Chaque partie ne s'écrit que si elle a quelque chose à dire :
                 # une table sans paramètres de connexion ni étape de traitement
@@ -756,11 +765,36 @@ sections:
                       # Opération de l'étape, ramenée sur une ligne
                       value: "{{ step.expression }}"
 
-                # Rédaction libre, conservée d'une génération à l'autre.
-                - type: user_fill
-                  id: table_commentaire
-                  label: "Contenu de la table"
-                  hint: "Ce que contient la table et à quoi elle sert"
+                # Colonnes calculées de la table : elles sont écrites en DAX
+                # dans le modèle, pas ramenées de la source. Sans colonne
+                # calculée, la table n'a pas de particularité à signaler.
+                - type: table
+                  id: table_particularite
+                  when: table.calculated_columns
+                  label: "Particularité"
+                  over: table.calculated_columns
+                  item: column
+                  style: "{{ styles.table_data }}"
+                  header: true
+                  header_labels: ["Colonne calculée", "Code"]
+                  header_style: "{{ styles.ref_header }}"
+                  layout: fixed
+                  repeat_header: true
+                  cant_split: true
+                  vertical_align: center
+                  autofit: false
+                  columns:
+                    - id: nom
+                      width_cm: 4.5
+                      style: "{{ styles.ref_role }}"
+                      value: "{{ column.name }}"
+                    - id: code
+                      width_cm: 11.5
+                      style: "{{ styles.ref_value }}"
+                      # Expression DAX, telle qu'écrite dans le modèle. Les
+                      # mesures qu'elle mentionne sont liées automatiquement
+                      # à leur définition (voir rendering.links.auto).
+                      value: "{{ column.expression }}"
 
   # ---------------------------------------------------------------------------
   #  DÉFINITION DES MESURES — cible des liens hypertextes des visuels

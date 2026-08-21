@@ -102,6 +102,7 @@ DEFAULTS: dict[str, Any] = {
             "exclude_hidden": True,
             "exclude_names": [],
             "sort_by": "name",
+            "ignore_sources": [],
             "steps": {
                 "exclude_unnamed": True,
                 "exclude_names": [],
