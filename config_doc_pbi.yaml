@@ -745,7 +745,7 @@ sections:
                   # celles qui portent une règle de gestion.
                   over: table.transformation_steps
                   item: step
-                  style: "{{ styles.table_data }}"
+                  style: "{{ styles.table }}"
                   header: true
                   header_labels: ["Étape", "Opération"]
                   header_style: "{{ styles.ref_header }}"
@@ -771,7 +771,7 @@ sections:
                 - type: table
                   id: table_particularite
                   when: table.calculated_columns
-                  label: "Particularité"
+                  label: "Colonnes calculées"
                   over: table.calculated_columns
                   item: column
                   style: "{{ styles.table_data }}"
