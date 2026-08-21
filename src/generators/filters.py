@@ -214,7 +214,12 @@ def filter_tables(tables: list[ModelTable], config: DocConfig) -> list[ModelTabl
         and table.name.lower() not in excluded
     ]
 
+    ignored_sources = {_compact(value) for value in options.get("ignore_sources") or []}
     for table in kept:
+        # Une source qui ne dit rien (`{1}`, la table de mesures créée à la
+        # main) vaut mieux tue : le bloc « Paramètres » disparaît avec elle.
+        if _compact(table.source) in ignored_sources:
+            table.source = ""
         table.transformation_steps = filter_steps(
             table.transformation_steps, options.get("steps") or {}
         )
@@ -336,6 +341,11 @@ def documentable_titles(report: PowerBIReport, config: DocConfig) -> list[str]:
     for page in report.pages:
         titles.update(visual.title for visual in filter_visuals(page.visuals, config))
     return sorted(titles, key=str.lower)
+
+
+def _compact(value: Any) -> str:
+    """Forme de comparaison d'une expression : sans espaces ni casse."""
+    return "".join(str(value or "").split()).lower()
 
 
 def _lowercase(values: Any) -> set[str]:
