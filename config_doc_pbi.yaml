@@ -40,6 +40,13 @@ document:
   output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 
+  # Les réponses aux questions ci-dessous (`inputs:`) sont conservées à côté du
+  # document et reproposées à la génération suivante : un Entrée les reconduit.
+  # C'est ce qui évite de faire disparaître une partie déjà rédigée en oubliant
+  # de re-cocher un visuel écarté. Le fichier se modifie et se supprime à la main.
+  remember_answers: true
+  answers_file: "reponses_{{ report.name }}.yaml"
+
   # Page de garde : le paragraphe contenant ce texte est remplacé.
   cover:
     placeholder: "Titre du document"

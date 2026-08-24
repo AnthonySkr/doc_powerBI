@@ -12,6 +12,10 @@ DEFAULT_CONFIG_PATH = "config_doc_pbi.yaml"
 
 DEFAULTS: dict[str, Any] = {
     "document": {
+        # Conserver les réponses aux questions à côté du document, et les
+        # reproposer à la génération suivante.
+        "remember_answers": True,
+        "answers_file": "reponses_{{ report.name }}.yaml",
         "template": "template-doc-pbib.docx",
         "output_dir": "output",
         "output_name": "documentation_{{ report.name }}.docx",

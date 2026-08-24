@@ -152,6 +152,14 @@ data:
 Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
 proposés sont dédoublonnés, et en écarter un l'écarte partout à la fois.
 
+**Vos réponses sont conservées.** Elles sont écrites à côté du document
+(`reponses_<rapport>.yaml`) et reproposées à la génération suivante — marquées
+d'une flèche pour les listes : un Entrée les reconduit. Sans cela, oublier de
+re-cocher un visuel écarté ferait disparaître la partie qui lui correspond, et
+la rédaction qui allait avec. `--no-input` s'en sert aussi, plutôt que des
+valeurs figées du plan. Le fichier se modifie et se supprime à la main ;
+`document.remember_answers: false` désactive la mémoire.
+
 ### Table de données : ce qui est écrit, et ce qui ne l'est pas
 
 Une sous-partie ne s'écrit que si elle a quelque chose à dire — une table sans
@@ -540,6 +548,7 @@ src/
   cli/
       arguments.py            options de la ligne de commande
       prompts.py              questions déclarées dans `inputs:`
+      answers.py              mémoire des réponses d'une génération à l'autre
 
   config/
       defaults.py             valeurs par défaut de la configuration
@@ -605,6 +614,7 @@ template-doc-pbib.docx        template Word
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
 | ajouter un type de question | `cli/prompts.py` → `ask_inputs` |
+| changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 
