@@ -5,12 +5,19 @@ Deux niveaux, et un principe : **le script est propriétaire de ses données,
 l'utilisateur du reste.**
 
     pbi::elem|<identifiant>|<empreinte>   ancre un élément documenté
-    pbi::gen|<bloc>  ...  pbi::endgen     encadrent un contenu produit par le script
+    pbi::gen|<bloc>  ...  pbi::endgen|<empreintes>
+                                          encadrent un contenu produit par le
+                                          script ; le marqueur de fin retient
+                                          l'empreinte de chaque paragraphe et
+                                          tableau écrits
 
 Tout ce qui se trouve entre deux ancres sans être encadré par `gen` appartient
 à l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
 À la régénération, seuls les contenus `gen` sont réécrits ; le reste est
-recopié tel quel.
+recopié tel quel. Les empreintes du marqueur de fin disent, contenu par
+contenu, ce que le script avait écrit : ce qu'on retrouve en plus à
+l'intérieur de l'encadrement a été écrit par l'utilisateur, et lui est rendu
+(voir `merge.salvage`).
 
 Les marqueurs occupent un paragraphe dont le texte porte l'attribut Word
 « masqué » (`w:vanish`) : Word ne l'affiche ni ne l'imprime, et le paragraphe
@@ -37,6 +44,11 @@ _FINGERPRINT_LENGTH = 10
 
 _TEXT = qn("w:t")
 
+# Contenus qui ne laissent aucun texte derrière eux : image, objet incorporé,
+# forme dessinée. Un paragraphe qui n'en porte pas et n'a pas de texte est vide.
+_PICTURES = (qn("w:drawing"), qn("w:pict"), qn("w:object"))
+_PICTURE_MARK = "\u0001image"
+
 
 @dataclass(frozen=True)
 class Marker:
@@ -45,6 +57,10 @@ class Marker:
     kind: str  # "elem", "gen" ou "endgen"
     value: str = ""  # identifiant d'élément, ou identifiant de bloc du plan
     fingerprint: str = ""
+    # Empreintes des contenus écrits par le script, portées par `endgen`.
+    # None : marqueur d'un document produit par une version antérieure, qui
+    # ne les portait pas encore.
+    digests: tuple[str, ...] | None = None
 
 
 # ─────────────────────────────────────────────────────────────
@@ -60,8 +76,14 @@ def generated(block_id: str) -> str:
     return f"{PREFIX}{GENERATED}{_SEPARATOR}{block_id}"
 
 
-def generated_end() -> str:
-    return f"{PREFIX}{GENERATED_END}"
+def generated_end(digests: list[str] | tuple[str, ...] = ()) -> str:
+    """
+    Marqueur de fin, portant l'empreinte de chaque contenu écrit par le bloc.
+
+    Le séparateur est toujours écrit, même sans contenu : c'est lui qui
+    distingue un bloc qui n'a rien produit d'un marqueur d'ancienne version.
+    """
+    return f"{PREFIX}{GENERATED_END}{_SEPARATOR}{' '.join(digests)}"
 
 
 def fingerprint(text: str) -> str:
@@ -74,10 +96,28 @@ def fingerprint(text: str) -> str:
     return hashlib.md5(normalized.encode("utf-8")).hexdigest()[:_FINGERPRINT_LENGTH]
 
 
-def write(doc, text: str) -> None:
-    """Ajoute au document un paragraphe masqué portant le marqueur."""
+def digest(node) -> str:
+    """
+    Empreinte du contenu d'un élément de corps (paragraphe ou tableau).
+
+    Elle est prise au moment de l'écriture, puis retrouvée telle quelle à la
+    relecture tant que personne n'a touché à l'élément. Une image est notée :
+    une capture collée dans un paragraphe laissé vide doit se voir.
+    """
+    text = "".join(run.text or "" for run in node.iter(_TEXT))
+    return fingerprint(f"{_PICTURE_MARK} {text}" if has_picture(node) else text)
+
+
+def has_picture(node) -> bool:
+    """L'élément porte-t-il une image, un objet incorporé ou une forme ?"""
+    return any(next(node.iter(tag), None) is not None for tag in _PICTURES)
+
+
+def write(doc, text: str):
+    """Ajoute au document un paragraphe masqué portant le marqueur, et le retourne."""
     paragraph = doc.add_paragraph()
     hide(paragraph.add_run(text))
+    return paragraph
 
 
 def hide(run) -> None:
@@ -98,10 +138,10 @@ def parse(text: str) -> Marker | None:
     if not text.startswith(PREFIX):
         return None
 
-    kind, _, rest = text[len(PREFIX) :].partition(_SEPARATOR)
+    kind, separator, rest = text[len(PREFIX) :].partition(_SEPARATOR)
 
     if kind == GENERATED_END:
-        return Marker(kind=GENERATED_END)
+        return Marker(kind=GENERATED_END, digests=tuple(rest.split()) if separator else None)
     if kind == GENERATED and rest:
         return Marker(kind=GENERATED, value=rest)
     if kind == ELEMENT and _SEPARATOR in rest:
