@@ -42,9 +42,9 @@ class MergeWriter:
         # Identifiants déjà posés : deux ancres de même identifiant rendraient
         # la relecture ambiguë (voir `_unique`).
         self._used: dict[str, int] = {}
-        # Profondeur d'encadrement : un `gen` dans un `gen` casserait le
-        # découpage du document à la relecture (voir `owned`).
-        self._depth = 0
+        # Un encadrement dans un autre casserait le découpage du document à la
+        # relecture (voir `delimit`).
+        self._enclosed = False
 
     def anchor(self, section: dict[str, Any], context: dict[str, Any], parent: str = "") -> str:
         """
@@ -61,7 +61,8 @@ class MergeWriter:
         Le `fingerprint:` décrit l'état technique dont dépend la documentation
         rédigée.
         """
-        element_id = self._unique(self._identifier(section, context, parent))
+        title = render(section.get("title"), context)
+        element_id = self._unique(self._identifier(section, context, parent, title), title)
         if not element_id:
             return ""
 
@@ -92,46 +93,50 @@ class MergeWriter:
 
         kind = markers.GENERATED if _is_generated(block) else markers.SEED
 
-        if self._depth:
-            # Un encadrement imbriqué produirait un `endgen` orphelin, et le
-            # découpage perdrait le contenu du bloc extérieur. Le bloc reste
-            # écrit, simplement sans être revendiqué par le script.
+        if self._enclosed:
+            # Un encadrement imbriqué produirait un marqueur de fin orphelin, et
+            # le découpage perdrait le contenu du bloc extérieur. Le bloc reste
+            # écrit, simplement sans identité propre.
             console.warn(
-                f"Bloc '{block_id}' imbriqué dans un autre contenu généré : "
-                "il ne sera pas réécrit automatiquement. Retirez `generated:` "
-                "du bloc qui l'englobe."
+                f"Bloc '{block_id}' imbriqué dans un autre bloc encadré : il ne "
+                "sera pas repéré à la régénération. Un bloc ne doit pas en "
+                "contenir d'autres."
             )
             yield
             return
 
         opening = markers.write(self.doc, markers.opening(kind, str(block_id)))
-        self._depth += 1
+        self._enclosed = True
         try:
             yield
         finally:
-            self._depth -= 1
+            self._enclosed = False
             markers.write(self.doc, markers.closing(kind, _digests(opening)))
 
-    def _identifier(self, section: dict[str, Any], context: dict[str, Any], parent: str) -> str:
+    def _identifier(
+        self, section: dict[str, Any], context: dict[str, Any], parent: str, title: str
+    ) -> str:
         if not self.enabled:
             return ""
         if section.get("bookmark"):
             return render(section["bookmark"], context)
         if section.get("id"):
             return f"section:{section['id']}"
-
-        title = render(section.get("title"), context)
         return f"{parent}>{title}" if parent and title else ""
 
-    def _unique(self, element_id: str) -> str:
+    def _unique(self, element_id: str, title: str) -> str:
         """
         Garantit qu'un identifiant n'est posé qu'une fois.
 
         Un `id:` de section placé dans une boucle produit le même
         `section:<id>` à chaque tour : les blocs deviendraient indistinguables
-        et la rédaction reprise irait au mauvais endroit — ou nulle part. Les
-        occurrences suivantes sont donc suffixées, et le cas est signalé : la
-        vraie réponse est un `bookmark:` bâti sur la donnée parcourue.
+        et la rédaction reprise irait au mauvais endroit — ou nulle part.
+
+        Les occurrences suivantes sont donc distinguées par leur titre, qui
+        vient de la donnée parcourue et ne bouge donc pas si la collection est
+        réordonnée. À défaut de titre, il ne reste que le rang, qui lui bouge :
+        c'est un pis-aller, et le cas est signalé avec la vraie réponse — un
+        `bookmark:` bâti sur la donnée parcourue.
         """
         if not element_id:
             return ""
@@ -144,10 +149,12 @@ class MergeWriter:
         if seen == 1:
             console.warn(
                 f"Identifiant '{element_id}' posé plusieurs fois : les occurrences "
-                "suivantes sont numérotées. Donnez à cette section un `bookmark:` "
-                "construit sur l'élément parcouru pour un repérage stable."
+                "suivantes sont distinguées par leur titre. Donnez à cette section "
+                "un `bookmark:` construit sur l'élément parcouru pour un repérage sûr."
             )
-        return f"{element_id}#{seen + 1}"
+
+        distinct = f"{element_id}>{title}" if title else f"{element_id}#{seen + 1}"
+        return distinct if distinct not in self._used else f"{element_id}#{seen + 1}"
 
 
 def _digests(opening) -> list[str]:

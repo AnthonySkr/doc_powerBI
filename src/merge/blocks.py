@@ -45,6 +45,10 @@ class Segment:
     kind: str  # OWNED, SEED ou FREE
     block_id: str = ""  # identifiant du bloc du plan, pour un segment identifié
     nodes: list = field(default_factory=list)
+    # Les mêmes éléments, sans les marqueurs qui encadrent le segment. Séparés
+    # dès le découpage : les reconnaître une seconde fois coûterait un parcours
+    # du texte de chaque élément, pour une réponse déjà connue.
+    content: list = field(default_factory=list)
     # Empreintes des contenus que le script avait écrits, relevées sur le
     # marqueur de fin d'un segment identifié. None : le marqueur n'en portait
     # pas (document produit par une version antérieure).
@@ -54,9 +58,22 @@ class Segment:
     def identified(self) -> bool:
         return self.kind in IDENTIFIED
 
+    @property
+    def untouched(self) -> bool:
+        """
+        Le contenu est-il exactement celui que le script y avait mis ?
+
+        Sans empreintes — document produit par une version antérieure — on ne
+        peut pas savoir : dans le doute, ce qui s'y trouve appartient à
+        l'utilisateur.
+        """
+        if self.digests is None:
+            return False
+        return [markers.digest(node) for node in self.content] == list(self.digests)
+
     def content_nodes(self) -> list:
         """Les éléments du segment, sans les marqueurs qui l'encadrent."""
-        return [node for node in self.nodes if markers.of(node) is None]
+        return self.content
 
 
 @dataclass
@@ -67,10 +84,6 @@ class Block:
     fingerprint: str = ""
     anchor: object | None = None  # le paragraphe portant l'ancre
     segments: list[Segment] = field(default_factory=list)
-
-    @property
-    def owned_ids(self) -> list[str]:
-        return [s.block_id for s in self.segments if s.kind == OWNED]
 
     @property
     def block_ids(self) -> list[str]:
@@ -115,32 +128,31 @@ def body_nodes(document) -> list:
 def parse(nodes: list) -> list[Block]:
     """Découpe une suite d'éléments de corps en blocs ancrés."""
     blocks = [Block()]
-    open_kind: str | None = None
+    enclosure: Segment | None = None
 
     for node in nodes:
         marker = markers.of(node)
 
         if marker is None:
-            _append(blocks[-1], open_kind or FREE, _open_id(blocks[-1], open_kind), node)
+            _append(enclosure or _free_segment(blocks[-1]), node)
             continue
 
         if marker.kind == markers.ELEMENT:
             blocks.append(
                 Block(element_id=marker.value, fingerprint=marker.fingerprint, anchor=node)
             )
-            open_kind = None
+            enclosure = None
         elif marker.kind in _KINDS:
-            open_kind = _KINDS[marker.kind]
             # Le segment porte ses propres délimiteurs : réémis avec lui, ils
             # gardent le contenu reconnaissable à la génération suivante. Un
             # segment vide reste utile : il retient la place du bloc dans
             # l'ordre voulu par l'utilisateur.
-            blocks[-1].segments.append(Segment(kind=open_kind, block_id=marker.value, nodes=[node]))
-        elif marker.kind in (markers.GENERATED_END, markers.SEED_END):
-            if open_kind is not None:
-                blocks[-1].segments[-1].nodes.append(node)
-                blocks[-1].segments[-1].digests = marker.digests
-            open_kind = None
+            enclosure = Segment(kind=_KINDS[marker.kind], block_id=marker.value, nodes=[node])
+            blocks[-1].segments.append(enclosure)
+        elif marker.kind in markers.CLOSINGS and enclosure is not None:
+            enclosure.nodes.append(node)
+            enclosure.digests = marker.digests
+            enclosure = None
 
     return blocks
 
@@ -150,16 +162,14 @@ def index(blocks: list[Block]) -> dict[str, Block]:
     return {block.element_id: block for block in blocks if block.element_id}
 
 
-def _open_id(block: Block, open_kind: str | None) -> str:
-    return block.segments[-1].block_id if open_kind is not None and block.segments else ""
+def _free_segment(block: Block) -> Segment:
+    """Le segment libre en cours du bloc, ouvert au besoin."""
+    if not block.segments or block.segments[-1].kind != FREE:
+        block.segments.append(Segment(kind=FREE))
+    return block.segments[-1]
 
 
-def _append(block: Block, kind: str, block_id: str, node) -> None:
-    if (
-        block.segments
-        and block.segments[-1].kind == kind
-        and block.segments[-1].block_id == block_id
-    ):
-        block.segments[-1].nodes.append(node)
-    else:
-        block.segments.append(Segment(kind=kind, block_id=block_id, nodes=[node]))
+def _append(segment: Segment, node) -> None:
+    """Ajoute un élément à un segment : il compte comme contenu, pas comme marqueur."""
+    segment.nodes.append(node)
+    segment.content.append(node)

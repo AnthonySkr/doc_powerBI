@@ -10,10 +10,7 @@ une suppression silencieuse.
 import copy
 import unittest
 
-from docx import Document
-
-from src.merge import orphans
-from tests.test_merge_cycle import PLAN, MergeHarness
+from tests.test_merge_cycle import PLAN, MergeHarness, measure_section
 
 
 class OrphansTest(MergeHarness):
@@ -67,13 +64,36 @@ class OrphansTest(MergeHarness):
         self.write_under_table("Ce tableau se lit de gauche à droite")
 
         plan = copy.deepcopy(PLAN)
-        section = plan["sections"][0]["blocks"][0]["section"]["blocks"][0]["section"]
+        section = measure_section(plan)
         section["blocks"] = [b for b in section["blocks"] if b["id"] != "champs"]
         self.generate({"sections": plan["sections"]}, marge="SUM(T[a])")
 
         # Le bloc existe encore dans le plan au moment de la fusion : le texte
         # revient à sa place, il n'a pas besoin de l'annexe.
         self.assertIn("Ce tableau se lit de gauche à droite", self.before_annexe())
+
+    def test_amorce_rediged_dans_un_bloc_retire_du_plan(self):
+        """La zone n'existe plus dans le plan : sa rédaction ne doit pas partir avec."""
+        self.generate(marge="SUM(T[a])")
+        self.rewrite("[À compléter]", "Ma lecture de la mesure")
+
+        plan = copy.deepcopy(PLAN)
+        section = measure_section(plan)
+        section["blocks"] = [b for b in section["blocks"] if b["id"] != "commentaire"]
+        self.generate({"sections": plan["sections"]}, marge="SUM(T[a])")
+
+        self.assertIn("Ma lecture de la mesure", self.annexe())
+        self.assertTrue(any("Bloc retiré du plan" in text for text in self.annexe()))
+
+    def test_amorce_jamais_rediged_dans_un_bloc_retire_ne_laisse_rien(self):
+        self.generate(marge="SUM(T[a])")
+
+        plan = copy.deepcopy(PLAN)
+        section = measure_section(plan)
+        section["blocks"] = [b for b in section["blocks"] if b["id"] != "commentaire"]
+        self.generate({"sections": plan["sections"]}, marge="SUM(T[a])")
+
+        self.assertEqual(self.annexe(), [])
 
     # ── Reconduction de l'annexe ──────────────────────────────────
     def test_annexe_reconduite_a_la_generation_suivante(self):
@@ -108,7 +128,7 @@ class OrphansTest(MergeHarness):
         self.generate(marge="SUM(T[a])", ca="SUM(T[b])")
         self.rewrite("[À compléter]", "Ma rédaction")
         self.generate(ca="SUM(T[b])")
-        self._empty_annexe()
+        self.drop_annexe()
 
         self.generate(ca="SUM(T[b])")
 
@@ -131,20 +151,6 @@ class OrphansTest(MergeHarness):
         self.generate(options, ca="SUM(T[b])")
 
         self.assertIn("À reclasser", self.annexe())
-
-    # ── Utilitaire ────────────────────────────────────────────────
-    def _empty_annexe(self) -> None:
-        """Supprime l'annexe, comme le ferait l'utilisateur une fois reclassée."""
-        document = Document(self.path)
-        body = document.element.body
-        removing = False
-        for node in list(body):
-            text = node.xpath("string(.)") if node.tag.endswith("}p") else ""
-            if text.startswith(f"pbi::elem|{orphans.ELEMENT_ID}|"):
-                removing = True
-            if removing:
-                body.remove(node)
-        document.save(self.path)
 
 
 if __name__ == "__main__":

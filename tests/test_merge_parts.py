@@ -9,17 +9,19 @@ neuf part du template et ne connaît rien de tout cela.
 import unittest
 
 from docx import Document
+from docx.opc.constants import RELATIONSHIP_TYPE as RT
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from tests.test_merge_cycle import MergeHarness
 
 
+def numbering(document):
+    return document.part.part_related_by(RT.NUMBERING).element
+
+
 def numbering_ids(document) -> set[str]:
-    root = document.part.part_related_by(
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
-    ).element
-    return {node.get(qn("w:numId")) for node in root.iter(qn("w:num"))}
+    return {node.get(qn("w:numId")) for node in numbering(document).iter(qn("w:num"))}
 
 
 def style_ids(document) -> set[str]:
@@ -48,9 +50,7 @@ class TransplantedPartsTest(MergeHarness):
         document = Document(self.path)
         paragraph = next(p for p in document.paragraphs if "Premier point" in p.text)
         num_id = next(node.get(qn("w:val")) for node in paragraph._p.iter(qn("w:numId")))
-        root = document.part.part_related_by(
-            "http://schemas.openxmlformats.org/officeDocument/2006/relationships/numbering"
-        ).element
+        root = numbering(document)
         instance = next(n for n in root.iter(qn("w:num")) if n.get(qn("w:numId")) == num_id)
         abstract = instance.find(qn("w:abstractNumId")).get(qn("w:val"))
         self.assertIn(
@@ -74,8 +74,7 @@ class TransplantedPartsTest(MergeHarness):
         document, paragraph = self.find("[À compléter]")
         style = document.styles.add_style("MonStylePerso", 1)
         style.font.name = "Consolas"
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         paragraph.add_run("Texte dans mon style")
         paragraph.style = style
         document.save(self.path)
@@ -92,8 +91,7 @@ class TransplantedPartsTest(MergeHarness):
         """Un commentaire de révision suit le texte qu'il annote."""
         self.generate(marge="SUM(T[a])")
         document, paragraph = self.find("[À compléter]")
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         paragraph.add_run("Texte à revoir")
         document.add_comment(paragraph.runs, "Vérifier avec le métier", author="Anthony")
         document.save(self.path)
@@ -109,8 +107,7 @@ class TransplantedPartsTest(MergeHarness):
         """Une référence sans `comments.xml` rend le fichier illisible pour Word."""
         self.generate(marge="SUM(T[a])")
         document, paragraph = self.find("[À compléter]")
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         paragraph.add_run("Texte annoté")
         run = OxmlElement("w:r")
         reference = OxmlElement("w:commentReference")
@@ -135,17 +132,16 @@ class TransplantedPartsTest(MergeHarness):
     def _make_list(self, needle: str, text: str, num_id: str) -> None:
         """Transforme un paragraphe en liste, comme le bouton « puces » de Word."""
         document, paragraph = self.find(needle)
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         paragraph.add_run(text)
 
-        numbering = document.part.numbering_part.element
+        root = document.part.numbering_part.element
         instance = OxmlElement("w:num")
         instance.set(qn("w:numId"), num_id)
         abstract = OxmlElement("w:abstractNumId")
         abstract.set(qn("w:val"), "0")
         instance.append(abstract)
-        numbering.append(instance)
+        root.append(instance)
 
         properties = paragraph._p.get_or_add_pPr()
         number = OxmlElement("w:numPr")

@@ -47,7 +47,27 @@ class IdentifiantsUniquesTest(unittest.TestCase):
             merge.anchor({"id": "autre"}, {})
         self.assertEqual(anchors(document), ["section:fiche", "section:autre"])
 
-    def test_identifiant_repete_numerote(self):
+    def test_identifiant_repete_distingue_par_le_titre(self):
+        """Le titre vient de la donnée parcourue : il ne bouge pas si elle est retriée."""
+        document, merge = writer()
+        with console.silenced():
+            for name in ("Ventes", "Achats"):
+                merge.anchor({"id": "fiche", "title": name}, {})
+        self.assertEqual(anchors(document), ["section:fiche", "section:fiche>Achats"])
+
+    def test_ordre_des_iterations_sans_effet_sur_les_identifiants(self):
+        first, second = writer()[1], writer()[1]
+        with console.silenced():
+            for merge, names in ((first, ("Ventes", "Achats")), (second, ("Achats", "Ventes"))):
+                for name in names:
+                    merge.anchor({"id": "fiche", "title": name}, {})
+        # Chaque titre garde le même identifiant quel que soit son rang.
+        self.assertEqual(
+            set(first._used) - {"section:fiche"}, set(second._used) - {"section:fiche"}
+        )
+
+    def test_identifiant_repete_sans_titre_numerote(self):
+        """Sans titre il ne reste que le rang : un pis-aller, mais rien n'est perdu."""
         document, merge = writer()
         with console.silenced():
             for _ in range(3):

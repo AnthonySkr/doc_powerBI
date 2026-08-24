@@ -23,7 +23,7 @@ from docx.text.paragraph import Paragraph
 from src import console
 from src.config import DocConfig
 from src.generators.word import generate_word_documentation
-from src.merge import orphans
+from src.merge import markers, orphans
 from src.models.data_models import DaxMeasure, MeasureGroup, SemanticModel
 
 _DRAWING = qn("w:drawing")
@@ -108,6 +108,11 @@ def png(path: str) -> str:
     return path
 
 
+def measure_section(plan: dict) -> dict:
+    """La section d'une mesure dans une copie du plan de référence."""
+    return plan["sections"][0]["blocks"][0]["section"]["blocks"][0]["section"]
+
+
 def context(**expressions: str) -> dict:
     measures = [
         DaxMeasure(
@@ -154,6 +159,15 @@ class MergeHarness(unittest.TestCase):
     def texts(self) -> list[str]:
         return [p.text for p in Document(self.path).paragraphs if p.text.strip()]
 
+    def _annexe_start(self, document) -> int:
+        """Rang, dans le corps, de l'ancre de l'annexe — la fin du corps sinon."""
+        body = list(document.element.body)
+        for rank, node in enumerate(body):
+            marker = markers.of(node)
+            if marker is not None and marker.value == orphans.ELEMENT_ID:
+                return rank
+        return len(body)
+
     def _split_annexe(self) -> tuple[list[str], list[str]]:
         """Le document, de part et d'autre de l'annexe des contenus non replacés."""
         texts = self.texts()
@@ -167,6 +181,25 @@ class MergeHarness(unittest.TestCase):
     def annexe(self) -> list[str]:
         return self._split_annexe()[1]
 
+    def annexe_content(self) -> list[str]:
+        """Tout ce que porte l'annexe, cellules de tableau comprises."""
+        document = Document(self.path)
+        body = list(document.element.body)
+        return [node.xpath("string(.)") for node in body[self._annexe_start(document) :]]
+
+    def drop_annexe(self) -> None:
+        """Supprime l'annexe, comme le ferait l'utilisateur une fois reclassée."""
+        document = Document(self.path)
+        body = document.element.body
+        for node in list(body)[self._annexe_start(document) :]:
+            body.remove(node)
+        document.save(self.path)
+
+    def clear_runs(self, paragraph) -> None:
+        """Vide un paragraphe de son texte, sans toucher à ce qui l'entoure."""
+        for run in list(paragraph.runs):
+            run._element.getparent().remove(run._element)
+
     def find(self, needle: str):
         document = Document(self.path)
         return document, next(p for p in document.paragraphs if needle in p.text)
@@ -174,8 +207,7 @@ class MergeHarness(unittest.TestCase):
     def rewrite(self, needle: str, text: str) -> None:
         """Remplace le texte d'un paragraphe, comme le ferait l'utilisateur."""
         document, paragraph = self.find(needle)
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         paragraph.add_run(text)
         document.save(self.path)
 
@@ -185,8 +217,7 @@ class MergeHarness(unittest.TestCase):
         node = deepcopy(paragraph._p)
         paragraph._p.addnext(node)
         added = Paragraph(node, paragraph._parent)
-        for run in list(added.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(added)
         added.add_run(text)
         document.save(self.path)
 
@@ -238,8 +269,7 @@ class MergeHarness(unittest.TestCase):
 
     def paste_image(self, needle: str) -> None:
         document, paragraph = self.find(needle)
-        for run in list(paragraph.runs):
-            run._element.getparent().remove(run._element)
+        self.clear_runs(paragraph)
         image = png(os.path.join(self._directory.name, "capture.png"))
         paragraph.add_run().add_picture(image, width=Cm(2))
         document.save(self.path)

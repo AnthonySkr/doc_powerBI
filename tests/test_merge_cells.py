@@ -19,28 +19,8 @@ class CellAnnotationTest(MergeHarness):
     def annotate(self, row: int, column: int, text: str) -> None:
         """Écrit sous la donnée d'une cellule, comme on le fait dans Word."""
         document = Document(self.path)
-        cell = document.tables[0].rows[row].cells[column]
-        cell.add_paragraph(text)
+        document.tables[0].rows[row].cells[column].add_paragraph(text)
         document.save(self.path)
-
-    def annexe_texts(self) -> list[str]:
-        """Tout ce que porte l'annexe, cellules de tableau comprises."""
-        from docx.oxml.ns import qn
-        from docx.text.paragraph import Paragraph
-
-        from src.merge import orphans
-
-        document = Document(self.path)
-        found: list[str] = []
-        inside = False
-        for node in document.element.body:
-            if node.tag == qn("w:p"):
-                text = Paragraph(node, document).text
-                if text.startswith(f"pbi::elem|{orphans.ELEMENT_ID}|"):
-                    inside = True
-            if inside:
-                found.append(node.xpath("string(.)"))
-        return found
 
     def cell_texts(self) -> list[str]:
         document = Document(self.path)
@@ -113,19 +93,18 @@ class CellAnnotationTest(MergeHarness):
 
         self.generate(ca="SUM(T[b])")
 
-        self.assertTrue(any("Note sur cette ligne" in text for text in self.annexe_texts()))
+        self.assertTrue(any("Note sur cette ligne" in text for text in self.annexe_content()))
 
     def test_retouche_de_la_donnee_elle_meme_recueillie(self):
         """Écrire dans la ligne du script reste une réécriture de sa donnée."""
         self.generate(marge="SUM(T[a])")
         document = Document(self.path)
-        cell = document.tables[0].rows[1].cells[0]
-        cell.paragraphs[0].add_run(" — à vérifier")
+        document.tables[0].rows[1].cells[0].paragraphs[0].add_run(" — à vérifier")
         document.save(self.path)
 
         self.generate(marge="SUM(T[a])")
 
-        self.assertTrue(any("à vérifier" in text for text in self.annexe_texts()))
+        self.assertTrue(any("à vérifier" in text for text in self.annexe_content()))
 
 
 if __name__ == "__main__":

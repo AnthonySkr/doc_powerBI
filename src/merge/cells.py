@@ -25,19 +25,22 @@ retouchée part en annexe.
 
 from docx.oxml.ns import qn
 
+from src.merge import markers
+
 _TABLE = qn("w:tbl")
 _ROW = qn("w:tr")
 _CELL = qn("w:tc")
 _PARAGRAPH = qn("w:p")
-_TEXT = qn("w:t")
 
 
 def reconcile(old_table, fresh_table, copy) -> bool:
     """
     Reporte dans le tableau neuf les contenus ajoutés dans ses cellules.
 
-    Retourne vrai si tout ce qui avait été ajouté a retrouvé sa cellule — auquel
-    cas il n'y a rien à recueillir en annexe pour ce tableau.
+    Tout ou rien : les cellules d'accueil sont d'abord toutes résolues, et rien
+    n'est écrit si l'une d'elles manque. Sans cela un tableau à moitié
+    rapproché aurait vu ses annotations à deux endroits — dans sa cellule *et*
+    en annexe, où le tableau entier serait parti.
     """
     if old_table.tag != _TABLE or fresh_table.tag != _TABLE:
         return False
@@ -47,13 +50,16 @@ def reconcile(old_table, fresh_table, copy) -> bool:
         # Rien n'a été ajouté : le tableau a donc été retouché autrement.
         return False
 
-    targets = _rows_by_key(fresh_table)
+    rows = _rows_by_key(fresh_table)
+    placed = []
     for key, column, nodes in additions:
-        row = targets.get(key)
-        if row is None or column >= len(row):
+        cells = rows.get(key)
+        if cells is None or column >= len(cells):
             return False
-        for node in nodes:
-            row[column].append(copy(node))
+        placed.append((cells[column], nodes))
+
+    for cell, nodes in placed:
+        cell.extend(copy(node) for node in nodes)
     return True
 
 
@@ -65,7 +71,7 @@ def _additions(table) -> list[tuple[tuple[str, ...], int, list]]:
         key = _key(cells)
         for column, cell in enumerate(cells):
             extra = list(cell.iterfind(_PARAGRAPH))[1:]
-            written = [node for node in extra if _has_text(node)]
+            written = [node for node in extra if markers.has_content(node)]
             if written:
                 found.append((key, column, written))
     return found
@@ -94,12 +100,4 @@ def _key(cells: list) -> tuple[str, ...]:
 def _first_line(cell) -> str:
     """Texte de la première ligne d'une cellule — celle que le script écrit."""
     first = next(cell.iterfind(_PARAGRAPH), None)
-    return " ".join(_text(first).split()) if first is not None else ""
-
-
-def _text(node) -> str:
-    return "".join(run.text or "" for run in node.iter(_TEXT))
-
-
-def _has_text(node) -> bool:
-    return bool(_text(node).strip())
+    return " ".join(markers.text(first).split()) if first is not None else ""

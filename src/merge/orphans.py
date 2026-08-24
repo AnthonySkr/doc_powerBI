@@ -23,11 +23,13 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from src import console
-from src.merge import markers
-from src.merge.blocks import Block
+from src.merge import markers, salvage
+from src.merge.blocks import FREE, SEED, Block
 
-# Identifiant de l'ancre de l'annexe, et du bloc qui porte son titre.
-ELEMENT_ID = "merge:orphans"
+# Identifiant de l'ancre de l'annexe, et du bloc qui porte son titre. Le
+# préfixe la déclare interne à la fusion : elle ne décrit rien du rapport, et
+# `PreviousDocument.removed` ne la compte donc pas comme un élément disparu.
+ELEMENT_ID = f"{markers.INTERNAL_PREFIX}orphans"
 _HEADING_BLOCK = "orphans:heading"
 
 _DEFAULT_TITLE = "Contenu non replacé"
@@ -80,13 +82,44 @@ class Collector:
 
     def add(self, reason: str, source: str, nodes: list) -> None:
         """Recueille des contenus, sans les marqueurs qui les entouraient."""
+        if not self.enabled:
+            return
         kept = [node for node in nodes if markers.of(node) is None]
-        if self.enabled and kept:
+        if kept:
             self.groups.append(Group(reason=reason, source=source, nodes=kept))
 
 
 def collector(merge_options: dict[str, Any]) -> Collector:
     return Collector(settings=merge_options.get("orphans") or {})
+
+
+def collect_preamble(collector: Collector, blocks: list[Block], fresh: list[Block]) -> None:
+    """
+    Ce qui a été écrit avant la première partie documentée.
+
+    Cette zone vient du template — page de garde, sommaire — et est régénérée
+    telle quelle. Ce qu'on y avait ajouté n'a donc pas de place où revenir :
+    c'est reconnu en comparant au préambule du document neuf, et recueilli.
+    """
+    old_head = next((block for block in blocks if not block.element_id), None)
+    new_head = next((block for block in fresh if not block.element_id), None)
+    if old_head is None or new_head is None:
+        return
+
+    written = {markers.digest(node) for node in _nodes(new_head)} | {markers.EMPTY}
+    extra = [node for node in _nodes(old_head) if markers.digest(node) not in written]
+    collector.add("preamble", "", extra)
+
+
+def collect_removed(collector: Collector, old: dict[str, Block], written: set[str]) -> None:
+    """Rédaction des éléments que le rapport ne contient plus."""
+    for element_id, block in old.items():
+        if element_id not in written and not element_id.startswith(markers.INTERNAL_PREFIX):
+            collector.add("removed", element_id, user_content(block))
+
+
+def _nodes(block: Block) -> list:
+    return [node for segment in block.segments for node in segment.nodes]
 
 
 def carried(old: dict[str, Block]) -> list:
@@ -126,6 +159,27 @@ def render(document, transplanter, styles, collector: Collector, previous: list)
         nodes += [transplanter.copy(node) for node in group.nodes]
 
     return nodes
+
+
+def user_content(block: Block) -> list:
+    """
+    Ce qui, dans un bloc, appartient à l'utilisateur.
+
+    Les contenus du script sont écartés — ils seront réécrits ailleurs ou plus
+    du tout — ainsi que les amorces auxquelles personne n'a touché : archiver
+    un « [À compléter] » resté vide n'apprendrait rien.
+    """
+    nodes: list = []
+    for segment in block.segments:
+        if segment.kind == FREE:
+            nodes += segment.nodes
+        elif segment.kind == SEED:
+            if not segment.untouched:
+                nodes += segment.content_nodes()
+        else:
+            salvaged, retouched = salvage.scan(segment)
+            nodes += [node for _, node in salvaged + retouched]
+    return [node for node in nodes if markers.digest(node) != markers.EMPTY]
 
 
 def report(collector: Collector) -> None:

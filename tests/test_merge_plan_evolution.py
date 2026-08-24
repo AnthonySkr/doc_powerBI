@@ -12,17 +12,7 @@ import unittest
 from docx import Document
 from docx.oxml.ns import qn
 
-from tests.test_merge_cycle import PLAN, MergeHarness
-
-_MEASURE_SECTION = ("sections", 0, "blocks", 0, "section", "blocks", 0, "section")
-
-
-def measure_section(plan: dict) -> dict:
-    """La section d'une mesure dans une copie du plan de référence."""
-    node = plan
-    for step in _MEASURE_SECTION:
-        node = node[step]
-    return node
+from tests.test_merge_cycle import PLAN, MergeHarness, measure_section
 
 
 class PlanEvolutionTest(MergeHarness):

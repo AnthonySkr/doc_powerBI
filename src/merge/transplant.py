@@ -57,9 +57,21 @@ class Transplanter:
         self.target = target_document.part
         self._relations: dict[str, str] = {}
         self._numbering: dict[str, str] = {}
-        self._styles: set[str] | None = None
         self._comments_attached = False
         self._bookmark_id = first_bookmark_id
+
+        # Racines des parties liées : fixes pour toute la recopie, alors que
+        # les retrouver coûte un parcours des relations de la partie — qui
+        # s'allonge à chaque image rattachée.
+        self._source_styles = _part_element(self.source, RT.STYLES)
+        self._target_styles = _part_element(self.target, RT.STYLES)
+        self._source_numbering = _part_element(self.source, RT.NUMBERING)
+        self._target_numbering = _part_element(self.target, RT.NUMBERING)
+        self._styles = (
+            {node.get(_STYLE_ID) for node in self._target_styles.iter(_STYLE)}
+            if self._target_styles is not None
+            else set()
+        )
 
     def copy(self, node):
         """Retourne une copie de `node` rattachée au document cible."""
@@ -129,32 +141,35 @@ class Transplanter:
         que dans son `styles.xml`. Sans sa définition, le texte recopié retombe
         en « Normal » et la mise en forme est perdue.
         """
-        source = _part_element(self.source, RT.STYLES)
-        target = _part_element(self.target, RT.STYLES)
-        if source is None or target is None:
+        if self._source_styles is None or self._target_styles is None:
             return
 
         for element in clone.iter(*_STYLE_REFERENCES):
-            self._carry_style(element.get(_VAL), source, target)
+            self._carry_style(element.get(_VAL))
 
-    def _carry_style(self, style_id: str | None, source, target, depth: int = 0) -> None:
-        """Copie un style et ceux dont il dépend (`basedOn`, `link`, `next`)."""
-        if self._styles is None:
-            self._styles = {node.get(_STYLE_ID) for node in target.iter(_STYLE)}
-        if not style_id or style_id in self._styles or depth > 10:
+    def _carry_style(self, style_id: str | None) -> None:
+        """
+        Copie un style et ceux dont il dépend (`basedOn`, `link`, `next`).
+
+        Un identifiant est retenu dès qu'il est traité, connu ou non : c'est ce
+        qui arrête la récursion sur une chaîne de styles circulaire, et ce qui
+        évite de reparcourir `styles.xml` pour un style introuvable.
+        """
+        if not style_id or style_id in self._styles:
             return
+        self._styles.add(style_id)
 
         definition = next(
-            (node for node in source.iter(_STYLE) if node.get(_STYLE_ID) == style_id), None
+            (node for node in self._source_styles.iter(_STYLE) if node.get(_STYLE_ID) == style_id),
+            None,
         )
         if definition is None:
             return
 
-        self._styles.add(style_id)
         copied = copy.deepcopy(definition)
-        target.append(copied)
+        self._target_styles.append(copied)
         for link in copied.iter(*_STYLE_LINKS):
-            self._carry_style(link.get(_VAL), source, target, depth + 1)
+            self._carry_style(link.get(_VAL))
 
     # ── Listes à puces et numérotées ──────────────────────────────
     def _carry_numbering(self, clone) -> None:
@@ -166,31 +181,34 @@ class Transplanter:
         template : sans cette instance, le paragraphe garde son retrait mais
         perd sa puce ou son numéro.
         """
-        source = _part_element(self.source, RT.NUMBERING)
-        if source is None:
+        if self._source_numbering is None:
             return
 
-        target = _part_element(self.target, RT.NUMBERING)
-        if target is None:
+        if self._target_numbering is None:
             # Le template n'a aucune numérotation : celle du document précédent
             # peut donc être reprise telle quelle, sans risque de collision.
             self.target.relate_to(self.source.part_related_by(RT.NUMBERING), RT.NUMBERING)
+            self._target_numbering = self._source_numbering
             return
 
         for element in clone.iter(_NUM_ID):
-            new_id = self._numbering_instance(element.get(_VAL), source, target)
+            new_id = self._numbering_instance(element.get(_VAL))
             if new_id:
                 element.set(_VAL, new_id)
 
-    def _numbering_instance(self, num_id: str | None, source, target) -> str:
+    def _numbering_instance(self, num_id: str | None) -> str:
         """Recopie une instance de numérotation, et retourne son numéro dans la cible."""
         if not num_id:
             return ""
         if num_id in self._numbering:
             return self._numbering[num_id]
 
+        source, target = self._source_numbering, self._target_numbering
         instance = next((node for node in source.iter(_NUM) if node.get(_NUM_ID) == num_id), None)
         if instance is None:
+            # `w:numId val="0"` signifie « pas de numérotation » : il ne
+            # désigne aucune instance, et il est inutile d'y revenir.
+            self._numbering[num_id] = ""
             return ""
 
         copied = copy.deepcopy(instance)
@@ -233,15 +251,14 @@ class Transplanter:
         orphelines sont retirées : mieux vaut perdre l'annotation que le
         fichier.
         """
-        references = list(clone.iter(*_COMMENT_REFERENCES))
-        if not references:
+        if next(clone.iter(*_COMMENT_REFERENCES), None) is None:
             return
 
         if not self._comments_attached:
             self._comments_attached = _attach_comments(self.source, self.target)
 
         if not self._comments_attached:
-            for element in references:
+            for element in list(clone.iter(*_COMMENT_REFERENCES)):
                 _remove(element)
 
     def bookmark_names(self, node) -> set[str]:
@@ -283,7 +300,7 @@ def _attach_comments(source, target) -> bool:
 
 
 def _next_id(root, tag: str, attribute: str) -> int:
-    """Premier numéro libre parmi les éléments `tag` de `root`."""
+    """Numéro libre au-delà de tous ceux qu'emploient les éléments `tag` de `root`."""
     used = {int(value) for node in root.iter(tag) if (value := node.get(attribute) or "").isdigit()}
     return max(used, default=0) + 1
 

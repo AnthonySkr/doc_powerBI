@@ -49,7 +49,6 @@ class DocumentBuilder:
             "user_fill": self._write_user_fill,
             "property": self._write_property,
             "table": self._write_table,
-            "loop": self._write_loop,
         }
 
     # ── Point d'entrée ────────────────────────────────────────────
@@ -198,15 +197,16 @@ class DocumentBuilder:
         if not evaluate(block.get("when"), context):
             return
 
+        if block.get("type") == "loop":
+            # Une boucle n'écrit rien elle-même : elle déroule un sous-plan,
+            # dont chaque section porte sa propre identité. Elle n'est donc
+            # jamais encadrée.
+            self._write_loop(block, context, parent)
+            return
+
         writer = self._block_writers.get(block.get("type", ""))
         if writer is None:
             console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
-            return
-
-        if block.get("type") == "loop":
-            # Une boucle n'écrit rien elle-même : elle déroule un sous-plan,
-            # dont chaque section porte sa propre identité.
-            self._write_loop(block, context, parent)
             return
 
         with self.merge.delimit(block):

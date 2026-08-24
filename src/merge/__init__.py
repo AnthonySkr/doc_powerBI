@@ -6,6 +6,10 @@ reste.** À chaque génération, le script réécrit les contenus qu'il produit
 (formule DAX, tableau des champs, métadonnées) et recopie tel quel tout le
 reste — titres reformulés, notes ajoutées, captures collées, mise en forme.
 
+Les amorces — paragraphes d'exemple, emplacements d'image, zones à compléter —
+tiennent des deux : tant que personne n'y a touché, elles suivent le plan ; dès
+qu'on y écrit, c'est la version du document qui l'emporte.
+
     previous = merge.read_previous(chemin)
     ...                                     (génération, voir generators.word)
     merge.apply_merge(document, previous, options, log)

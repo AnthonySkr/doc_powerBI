@@ -21,13 +21,15 @@ Les deux encadrements donnent une identité aux blocs du plan. Sans elle, un
 bloc ajouté au plan ne pouvait pas être distingué du contenu libre de
 l'utilisateur, et n'apparaissait jamais dans les éléments déjà documentés.
 
-Tout ce qui se trouve entre deux ancres sans être encadré par `gen` appartient
-à l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
-À la régénération, seuls les contenus `gen` sont réécrits ; le reste est
-recopié tel quel. Les empreintes du marqueur de fin disent, contenu par
-contenu, ce que le script avait écrit : ce qu'on retrouve en plus à
-l'intérieur de l'encadrement a été écrit par l'utilisateur, et lui est rendu
-(voir `merge.salvage`).
+Tout ce qui se trouve entre deux ancres sans être encadré appartient à
+l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
+
+À la régénération, un contenu `gen` est toujours réécrit — c'est une donnée du
+rapport. Une amorce `seed` ne l'est que si personne n'y a touché : dès qu'on y
+a écrit, c'est la version du document qui l'emporte. Les empreintes du marqueur
+de fin disent, contenu par contenu, ce que le script avait écrit : elles
+permettent de reconnaître cette différence, et de rendre à l'utilisateur ce
+qu'on retrouve en plus à l'intérieur de l'encadrement (voir `merge.salvage`).
 
 Les marqueurs occupent un paragraphe dont le texte porte l'attribut Word
 « masqué » (`w:vanish`) : Word ne l'affiche ni ne l'imprime, et le paragraphe
@@ -50,6 +52,11 @@ SEED_END = "endseed"
 
 # Encadrements : marqueur d'ouverture -> marqueur de fermeture.
 ENCLOSURES = {GENERATED: GENERATED_END, SEED: SEED_END}
+CLOSINGS = frozenset(ENCLOSURES.values())
+
+# Les ancres que la fusion pose pour elle-même — et non pour le plan — portent
+# ce préfixe : elles ne décrivent rien du rapport documenté.
+INTERNAL_PREFIX = "merge:"
 
 # Séparateur des champs. Les identifiants d'éléments contiennent des « : »
 # (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
@@ -58,11 +65,14 @@ _SEPARATOR = "|"
 _FINGERPRINT_LENGTH = 10
 
 _TEXT = qn("w:t")
+_PARAGRAPH = qn("w:p")
 
 # Contenus qui ne laissent aucun texte derrière eux : image, objet incorporé,
 # forme dessinée. Un paragraphe qui n'en porte pas et n'a pas de texte est vide.
 _PICTURES = (qn("w:drawing"), qn("w:pict"), qn("w:object"))
 _PICTURE_MARK = "\u0001image"
+
+_TABLE = qn("w:tbl")
 
 
 @dataclass(frozen=True)
@@ -102,14 +112,6 @@ def closing(kind: str, digests: list[str] | tuple[str, ...] = ()) -> str:
     return f"{PREFIX}{ENCLOSURES[kind]}{_SEPARATOR}{' '.join(digests)}"
 
 
-def generated(block_id: str) -> str:
-    return opening(GENERATED, block_id)
-
-
-def generated_end(digests: list[str] | tuple[str, ...] = ()) -> str:
-    return closing(GENERATED, digests)
-
-
 def fingerprint(text: str) -> str:
     """
     Empreinte du contenu technique d'un élément (expression DAX, champs d'un
@@ -120,6 +122,11 @@ def fingerprint(text: str) -> str:
     return hashlib.md5(normalized.encode("utf-8")).hexdigest()[:_FINGERPRINT_LENGTH]
 
 
+# Empreinte d'un contenu sans texte ni image : la place laissée libre par le
+# script en fin de bloc. Ce qu'on y écrit ne remplace rien.
+EMPTY = fingerprint("")
+
+
 def digest(node) -> str:
     """
     Empreinte du contenu d'un élément de corps (paragraphe ou tableau).
@@ -128,8 +135,18 @@ def digest(node) -> str:
     relecture tant que personne n'a touché à l'élément. Une image est notée :
     une capture collée dans un paragraphe laissé vide doit se voir.
     """
-    text = "".join(run.text or "" for run in node.iter(_TEXT))
-    return fingerprint(f"{_PICTURE_MARK} {text}" if has_picture(node) else text)
+    content = text(node)
+    return fingerprint(f"{_PICTURE_MARK} {content}" if has_picture(node) else content)
+
+
+def text(node) -> str:
+    """Texte porté par un élément XML, tous ses descendants réunis."""
+    return "".join(run.text or "" for run in node.iter(_TEXT))
+
+
+def has_content(node) -> bool:
+    """L'élément porte-t-il quelque chose : du texte, une image, un tableau ?"""
+    return node.tag == _TABLE or bool(text(node).strip()) or has_picture(node)
 
 
 def has_picture(node) -> bool:
@@ -164,7 +181,7 @@ def parse(text: str) -> Marker | None:
 
     kind, separator, rest = text[len(PREFIX) :].partition(_SEPARATOR)
 
-    if kind in (GENERATED_END, SEED_END):
+    if kind in CLOSINGS:
         return Marker(kind=kind, digests=tuple(rest.split()) if separator else None)
     if kind in ENCLOSURES and rest:
         return Marker(kind=kind, value=rest)
@@ -176,6 +193,4 @@ def parse(text: str) -> Marker | None:
 
 def of(node) -> Marker | None:
     """Marqueur porté par un élément XML de corps de document (`w:p`), sinon None."""
-    if node.tag != qn("w:p"):
-        return None
-    return parse("".join(text.text or "" for text in node.iter(_TEXT)))
+    return parse(text(node)) if node.tag == _PARAGRAPH else None
