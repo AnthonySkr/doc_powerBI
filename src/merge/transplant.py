@@ -264,9 +264,17 @@ def _part_element(part, reltype: str):
 
 
 def _attach_comments(source, target) -> bool:
-    """Rattache au document cible la partie des commentaires du document source."""
-    if source is None or _part_element(target, RT.COMMENTS) is not None:
-        return _part_element(target, RT.COMMENTS) is not None
+    """
+    Rattache au document cible la partie des commentaires du document source.
+
+    Retourne vrai lorsque la cible dispose, à l'issue de l'appel, d'un
+    `comments.xml` où les références recopiées trouveront leur définition.
+    """
+    if _part_element(target, RT.COMMENTS) is not None:
+        return True
+    if source is None:
+        return False
+
     try:
         target.relate_to(source.part_related_by(RT.COMMENTS), RT.COMMENTS)
     except (KeyError, AttributeError):
