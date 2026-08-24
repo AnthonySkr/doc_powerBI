@@ -255,6 +255,9 @@ juste. Tout le reste vous appartient et est recopié tel quel :
 | Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
 | Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
 | Changer une mise en forme, un style, ajouter un tableau | Conservés |
+| Faire une liste à puces ou numérotée | Conservée, numérotation comprise |
+| Appliquer un style que vous avez créé dans le document | Conservé, définition comprise |
+| Poser un commentaire de révision | Conservé, avec son auteur |
 
 Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
 paragraphe repère et en créer d'autres, le contenu est repris quand même. Et
@@ -555,7 +558,7 @@ src/
       salvage.py              textes retrouvés dans un contenu du script
       smart.py                fusion : données du script, reste de l'utilisateur
       orphans.py              annexe des contenus qui n'ont plus de place
-      transplant.py           recopie d'un contenu et de ses images
+      transplant.py           recopie d'un contenu et de ce dont il dépend
       changes.py              bilan des ajouts / modifications / retraits
 
   parsers/
