@@ -12,12 +12,17 @@ celui voulu par l'utilisateur — et on n'y remplace que les contenus du script 
     titre reformulé par l'utilisateur  →   recopié tel quel
     note ajoutée par l'utilisateur     →   recopiée telle quelle
     [gen] tableau des champs           →   remplacé par le tableau à jour
+      description écrite sous le tableau   récupérée dedans, remise à sa place
     capture collée par l'utilisateur   →   recopiée, image comprise
     [gen] code DAX                     →   remplacé par la formule à jour
     explication de l'utilisateur       →   recopiée, surlignée si le DAX a changé
 
 Un bloc du plan absent du document précédent est ajouté à la fin de l'élément ;
 un contenu `gen` dont le bloc n'existe plus dans le plan disparaît.
+
+Ce qui a été écrit *à l'intérieur* d'un contenu du script — sous son tableau,
+entre ses valeurs — n'est pas perdu pour autant : `merge.salvage` l'y retrouve
+et le repose au même endroit, entre les données remises à jour.
 """
 
 from typing import Any
@@ -27,7 +32,8 @@ from docx.oxml.ns import qn
 
 from src import console
 from src.merge import blocks as block_parser
-from src.merge.blocks import FREE, OWNED, Block
+from src.merge import markers, salvage
+from src.merge.blocks import FREE, OWNED, Block, Segment
 from src.merge.changes import ChangeLog
 from src.merge.previous import CHANGED, NEW, PreviousDocument
 from src.merge.transplant import Transplanter
@@ -99,15 +105,11 @@ class _Merger:
         for segment in old.segments:
             if segment.kind == OWNED:
                 if segment.block_id in generated and segment.block_id not in emitted:
-                    nodes += generated[segment.block_id]
+                    nodes += self._owned(generated[segment.block_id], segment, changed)
                     emitted.add(segment.block_id)
                 continue
 
-            for node in segment.nodes:
-                copied = self.transplanter.copy(node)
-                self._mark_review(copied, changed)
-                nodes.append(copied)
-                self.log.preserved += 1
+            nodes += self._preserved(segment.nodes, changed)
 
         # Blocs ajoutés au plan depuis la version précédente du document.
         for block_id, block_nodes in generated.items():
@@ -115,6 +117,45 @@ class _Merger:
                 nodes += block_nodes
 
         return nodes
+
+    def _owned(self, fresh: list, old: Segment, changed: bool) -> list:
+        """
+        Contenu du script remis à jour, autour de ce qu'on a écrit dedans.
+
+        Les données reviennent telles que le script vient de les produire ;
+        les contenus rédigés retrouvés à l'intérieur sont reposés au rang
+        qu'ils occupaient, entre les mêmes données qu'avant.
+        """
+        pending: dict[int, list] = {}
+        for rank, node in salvage.of(old):
+            pending.setdefault(rank, []).append(node)
+        if not pending:
+            return fresh
+
+        nodes: list = []
+        rank = 0
+        for node in fresh:
+            marker = markers.of(node)
+            if marker is None:
+                nodes += self._preserved(pending.pop(rank, []), changed)
+                rank += 1
+            elif marker.kind == markers.GENERATED_END:
+                # Ce qui suivait la dernière donnée du script reste à
+                # l'intérieur de l'encadrement, donc devant le marqueur de fin.
+                nodes += self._preserved(_remaining(pending), changed)
+            nodes.append(node)
+
+        return nodes + self._preserved(_remaining(pending), changed)
+
+    def _preserved(self, nodes: list, changed: bool) -> list:
+        """Recopie des contenus de l'utilisateur dans le document neuf."""
+        copies = []
+        for node in nodes:
+            copied = self.transplanter.copy(node)
+            self._mark_review(copied, changed)
+            copies.append(copied)
+            self.log.preserved += 1
+        return copies
 
     # ── Signalement visuel ────────────────────────────────────────
     def _mark_review(self, node, changed: bool) -> None:
@@ -149,6 +190,13 @@ class _Merger:
 # ─────────────────────────────────────────────────────────────
 #  Mise en forme (XML)
 # ─────────────────────────────────────────────────────────────
+
+
+def _remaining(pending: dict[int, list]) -> list:
+    """Vide la réserve des contenus pas encore reposés, dans l'ordre des rangs."""
+    nodes = [node for rank in sorted(pending) for node in pending[rank]]
+    pending.clear()
+    return nodes
 
 
 def _is_heading(paragraph) -> bool:

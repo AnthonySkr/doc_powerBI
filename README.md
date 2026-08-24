@@ -251,12 +251,16 @@ juste. Tout le reste vous appartient et est recopié tel quel :
 | --- | --- |
 | Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
 | Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
+| Écrire une description sous un tableau du script, ou entre ses valeurs | Conservée, remise au même endroit |
 | Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
 | Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
 | Changer une mise en forme, un style, ajouter un tableau | Conservés |
 
 Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
-paragraphe repère et en créer d'autres, le contenu est repris quand même.
+paragraphe repère et en créer d'autres, le contenu est repris quand même. Et
+aucune contrainte sur l'*endroit* : même écrit au milieu d'un contenu produit
+par le script — sous le tableau d'un groupe, sous une formule DAX — votre
+texte est retrouvé et reposé entre les mêmes données à la regénération.
 
 ### Ce qui est signalé
 
@@ -278,11 +282,17 @@ Le surlignage est retiré à la génération suivante : il signale ce qui a chan
 | Marqueur | Rôle |
 | --- | --- |
 | `pbi::elem\|<id>\|<empreinte>` | Ancre un élément documenté et fige son état technique |
-| `pbi::gen\|<bloc>` … `pbi::endgen` | Encadrent un contenu produit par le script |
+| `pbi::gen\|<bloc>` … `pbi::endgen\|<empreintes>` | Encadrent un contenu produit par le script. Le marqueur de fin retient l'empreinte de chaque paragraphe et tableau écrits |
 
 Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
 encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
 aucune attente sur la forme de ce contenu.
+
+Et *à l'intérieur* d'un `gen` ? Les empreintes du marqueur de fin disent, ligne
+par ligne, ce que le script avait écrit là. À la relecture, ce qui s'y trouve
+en plus n'est donc pas de lui : c'est rendu et reposé au même rang, entre les
+données remises à jour. Une donnée du script retouchée à la main est en
+revanche réécrite — elle reste la sienne.
 
 L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
 `visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
@@ -330,8 +340,12 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
   d'un ajout : vos textes ne sont pas reportés sur le nouveau nom.
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
   et est régénéré.
+- Un document produit **avant** cette version ne porte pas encore les
+  empreintes du marqueur de fin : ce qui y a été écrit à l'intérieur d'un
+  contenu du script n'est retrouvé que sous un tableau. Dès la première
+  regénération, l'endroit n'a plus d'importance.
 
-## Template## Template
+## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
 repris par la configuration :
@@ -478,6 +492,7 @@ src/
       markers.py              marqueurs invisibles posés dans le document
       blocks.py               découpage du corps en blocs ancrés
       previous.py             relecture du document précédent
+      salvage.py              textes retrouvés dans un contenu du script
       smart.py                fusion : données du script, reste de l'utilisateur
       transplant.py           recopie d'un contenu et de ses images
       changes.py              bilan des ajouts / modifications / retraits

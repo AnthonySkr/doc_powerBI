@@ -5,14 +5,21 @@ Le builder délègue ici deux gestes, tous deux sans effet visible :
   - ancrer un élément documenté et retenir s'il a changé (`element`) ;
   - encadrer un contenu produit par le script (`owned`), pour que la
     régénération sache qu'il peut le réécrire — et, par différence, que tout
-    le reste appartient à l'utilisateur.
+    le reste appartient à l'utilisateur, y compris ce qui a été glissé au
+    milieu : le marqueur de fermeture relève l'empreinte de chaque contenu
+    écrit, ce qui permet plus tard de reconnaître les ajouts.
 """
 
 from contextlib import contextmanager
 from typing import Any
 
+from docx.oxml.ns import qn
+
 from src.config import DocConfig, render
 from src.merge import ChangeLog, PreviousDocument, markers
+
+_PARAGRAPH = qn("w:p")
+_TABLE = qn("w:tbl")
 
 
 class MergeWriter:
@@ -57,11 +64,11 @@ class MergeWriter:
             yield
             return
 
-        markers.write(self.doc, markers.generated(str(block_id)))
+        opening = markers.write(self.doc, markers.generated(str(block_id)))
         try:
             yield
         finally:
-            markers.write(self.doc, markers.generated_end())
+            markers.write(self.doc, markers.generated_end(_digests(opening)))
 
     def _identifier(self, section: dict[str, Any], context: dict[str, Any]) -> str:
         if not self.enabled:
@@ -69,6 +76,21 @@ class MergeWriter:
         if section.get("bookmark"):
             return render(section["bookmark"], context)
         return f"section:{section['id']}" if section.get("id") else ""
+
+
+def _digests(opening) -> list[str]:
+    """
+    Empreintes des contenus écrits depuis l'ouverture du bloc, dans l'ordre.
+
+    Elles disent, à la génération suivante, ce que le script avait posé là :
+    tout ce qu'on retrouvera en plus entre les deux marqueurs aura été écrit
+    par l'utilisateur, et lui sera rendu (voir `merge.salvage`).
+    """
+    return [
+        markers.digest(node)
+        for node in opening._p.itersiblings()
+        if node.tag in (_PARAGRAPH, _TABLE)
+    ]
 
 
 # Types de blocs dont le contenu n'est fait que de données du rapport.

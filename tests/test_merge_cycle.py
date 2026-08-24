@@ -2,10 +2,13 @@
 Cycle complet : génération, remaniement libre par l'utilisateur, regénération.
 
 Le contrat vérifié ici : le script réécrit ses données, et ne touche à rien
-d'autre — titre reformulé, note ajoutée, capture collée, paragraphes en plus.
+d'autre — titre reformulé, note ajoutée, capture collée, paragraphes en plus,
+y compris ce qui a été écrit *à l'intérieur* d'un contenu du script (sous son
+tableau, entre ses valeurs).
 """
 
 import os
+import re
 import struct
 import tempfile
 import unittest
@@ -57,6 +60,22 @@ PLAN = {
                                             "label": "Code DAX",
                                             "value": "{{ measure.expression }}",
                                         },
+                                        {
+                                            "type": "property",
+                                            "id": "sources",
+                                            "label": "Sources",
+                                            "value_list": "{{ measure.used_columns }}",
+                                        },
+                                        {
+                                            "type": "table",
+                                            "id": "champs",
+                                            "label": "Champs",
+                                            "over": "groupe.measures",
+                                            "item": "champ",
+                                            "header": True,
+                                            "header_labels": ["Mesure"],
+                                            "columns": [{"id": "nom", "value": "{{ champ.name }}"}],
+                                        },
                                         {"type": "user_fill", "id": "commentaire"},
                                     ],
                                 },
@@ -90,7 +109,14 @@ def png(path: str) -> str:
 
 def context(**expressions: str) -> dict:
     measures = [
-        DaxMeasure(name=name, expression=expression, table_name="Ventes")
+        DaxMeasure(
+            name=name,
+            expression=expression,
+            table_name="Ventes",
+            # Colonnes citées par l'expression : une liste de valeurs qui bouge
+            # d'une génération à l'autre, comme dans le plan livré.
+            used_columns=sorted(set(re.findall(r"\w+\[[^\]]+\]", expression))),
+        )
         for name, expression in expressions.items()
     ]
     return {
@@ -143,6 +169,52 @@ class MergeCycleTest(unittest.TestCase):
             run._element.getparent().remove(run._element)
         added.add_run(text)
         document.save(self.path)
+
+    def write_under_table(self, text: str) -> None:
+        """
+        Écrit sous le tableau, dans la ligne que le script laisse là.
+
+        C'est le geste naturel : on clique sous le tableau et on décrit ce
+        qu'il montre.
+        """
+        document = Document(self.path)
+        table = document.tables[0]
+        paragraph = Paragraph(table._tbl.getnext(), document)
+        paragraph.add_run(text)
+        document.save(self.path)
+
+    def add_above_table(self, text: str) -> None:
+        """Insère un paragraphe entre le sous-titre du tableau et le tableau."""
+        document = Document(self.path)
+        table = document.tables[0]
+        added = deepcopy(table._tbl.getnext())
+        table._tbl.addprevious(added)
+        Paragraph(added, document).add_run(text)
+        document.save(self.path)
+
+    def forget_digests(self) -> None:
+        """
+        Ramène les marqueurs de fin à leur forme d'avant les empreintes, pour
+        rejouer un document produit par une version antérieure du script.
+        """
+        document = Document(self.path)
+        for paragraph in document.paragraphs:
+            if paragraph.text.startswith("pbi::endgen"):
+                paragraph.runs[0].text = "pbi::endgen"
+        document.save(self.path)
+
+    def layout(self) -> list[str]:
+        """Corps du document : textes visibles et tableaux, dans l'ordre."""
+        document = Document(self.path)
+        items = []
+        for node in document.element.body:
+            if node.tag == qn("w:tbl"):
+                items.append("[tableau]")
+                continue
+            text = Paragraph(node, document).text if node.tag == qn("w:p") else ""
+            if text.strip() and not text.startswith("pbi::"):
+                items.append(text)
+        return items
 
     def paste_image(self, needle: str) -> None:
         document, paragraph = self.find(needle)
@@ -223,6 +295,110 @@ class MergeCycleTest(unittest.TestCase):
         self.generate(CA="2")
         self.generate(CA="2")
         self.assertIsNone(self.highlight("Explication."))
+
+    # ── Écrire à l'intérieur d'un contenu du script ───────────────
+    def test_description_sous_un_tableau_conservee(self):
+        self.generate(CA="1")
+        self.write_under_table("Ce tableau liste les mesures de la table.")
+
+        self.generate(CA="1")
+
+        self.assertIn("Ce tableau liste les mesures de la table.", self.texts())
+
+    def test_description_sous_un_tableau_remise_a_sa_place(self):
+        self.generate(CA="1")
+        self.write_under_table("Lecture du tableau.")
+
+        self.generate(CA="1")
+
+        layout = self.layout()
+        self.assertEqual(layout[layout.index("[tableau]") + 1], "Lecture du tableau.")
+
+    def test_description_sous_un_tableau_conservee_a_chaque_generation(self):
+        self.generate(CA="1")
+        self.write_under_table("Lecture du tableau.")
+        self.generate(CA="1")
+        reference = self.layout()
+
+        for _ in range(3):
+            self.generate(CA="1")
+        self.assertEqual(self.layout(), reference)
+
+    def test_description_conservee_quand_le_tableau_change(self):
+        self.generate(CA="1")
+        self.write_under_table("Lecture du tableau.")
+
+        self.generate(CA="1", Marge="2")
+
+        self.assertIn("Lecture du tableau.", self.texts())
+        self.assertEqual(self.texts().count("Lecture du tableau."), 1)
+
+    def test_note_glissee_avant_un_tableau_conservee_a_sa_place(self):
+        self.generate(CA="1")
+        self.add_above_table("Avertissement avant le tableau.")
+
+        self.generate(CA="1")
+
+        layout = self.layout()
+        self.assertEqual(layout[layout.index("[tableau]") - 1], "Avertissement avant le tableau.")
+
+    def test_note_glissee_sous_le_code_dax_conservee(self):
+        self.generate(CA="SUM(Ventes[Montant])")
+        self.add_after("SUM(Ventes[Montant])", "Formule reprise du cahier des charges.")
+
+        self.generate(CA="SUM(Ventes[Montant])")
+
+        self.assertIn("Formule reprise du cahier des charges.", self.texts())
+
+    def test_capture_collee_sous_un_tableau_conservee(self):
+        self.generate(CA="1")
+        document = Document(self.path)
+        paragraph = Paragraph(document.tables[0]._tbl.getnext(), document)
+        paragraph.add_run().add_picture(png(os.path.join(self._directory.name, "vue.png")), Cm(2))
+        document.save(self.path)
+
+        self.generate(CA="1")
+
+        self.assertEqual(self.images(), 1)
+
+    def test_donnee_du_script_reecrite_et_jamais_doublee(self):
+        self.generate(CA="SUM(Ventes[Montant])")
+        self.write_under_table("Lecture du tableau.")
+
+        self.generate(CA="SUM(Ventes[MontantHT])")
+
+        self.assertIn("SUM(Ventes[MontantHT])", self.texts())
+        self.assertNotIn("SUM(Ventes[Montant])", self.texts())
+        self.assertEqual(self.layout().count("[tableau]"), 1)
+
+    def test_donnee_du_script_remaniee_a_la_main_est_reecrite(self):
+        """Le script reste propriétaire de ses données : la sienne l'emporte."""
+        self.generate(CA="SUM(Ventes[Montant])")
+        self.rewrite("SUM(Ventes[Montant])", "SUM(Ventes[Autre])")
+
+        self.generate(CA="SUM(Ventes[Montant])")
+
+        self.assertIn("SUM(Ventes[Montant])", self.texts())
+        self.assertNotIn("SUM(Ventes[Autre])", self.texts())
+
+    def test_valeur_disparue_du_script_ne_revient_pas(self):
+        self.generate(CA="SUM(Ventes[A]) + SUM(Ventes[B])")
+        self.write_under_table("Lecture du tableau.")
+
+        self.generate(CA="SUM(Ventes[A])")
+
+        self.assertNotIn("Ventes[B]", self.texts())
+        self.assertIn("Lecture du tableau.", self.texts())
+
+    def test_document_d_une_version_anterieure_rend_ce_qui_suit_son_tableau(self):
+        """Sans empreintes, on récupère au moins ce qui suit le tableau."""
+        self.generate(CA="1")
+        self.write_under_table("Écrit avec l'ancienne version.")
+        self.forget_digests()
+
+        self.generate(CA="1")
+
+        self.assertIn("Écrit avec l'ancienne version.", self.texts())
 
     def test_titre_jamais_surligne(self):
         self.generate(CA="1")

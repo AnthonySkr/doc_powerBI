@@ -7,6 +7,10 @@ seulement deux natures de contenu :
     owned  encadré par `pbi::gen|<bloc>` … `pbi::endgen` — produit par le script
     free   tout le reste — écrit ou remanié par l'utilisateur
 
+Un segment `owned` retient au passage les empreintes portées par son marqueur
+de fin : elles disent ce que le script avait écrit, et donc, par différence, ce
+que l'utilisateur a glissé à l'intérieur (voir `merge.salvage`).
+
 Le même découpage sert pour le document précédent et pour celui qui vient
 d'être généré : la fusion consiste à superposer les deux.
 """
@@ -30,6 +34,14 @@ class Segment:
     kind: str  # OWNED ou FREE
     block_id: str = ""  # identifiant du bloc du plan, pour un segment OWNED
     nodes: list = field(default_factory=list)
+    # Empreintes des contenus que le script avait écrits, relevées sur le
+    # marqueur de fin d'un segment OWNED. None : le marqueur n'en portait pas
+    # (document produit par une version antérieure).
+    digests: tuple[str, ...] | None = None
+
+    def content_nodes(self) -> list:
+        """Les éléments du segment, sans les marqueurs qui l'encadrent."""
+        return [node for node in self.nodes if markers.of(node) is None]
 
 
 @dataclass
@@ -81,6 +93,7 @@ def parse(nodes: list) -> list[Block]:
         elif marker.kind == markers.GENERATED_END:
             if owned_id is not None:
                 blocks[-1].segments[-1].nodes.append(node)
+                blocks[-1].segments[-1].digests = marker.digests
             owned_id = None
 
     return blocks
