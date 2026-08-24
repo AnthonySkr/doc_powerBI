@@ -10,6 +10,16 @@ l'utilisateur du reste.**
                                           script ; le marqueur de fin retient
                                           l'empreinte de chaque paragraphe et
                                           tableau écrits
+    pbi::seed|<bloc> ...  pbi::endseed|<empreintes>
+                                          encadrent une **amorce** : un contenu
+                                          écrit à la première génération, puis
+                                          laissé à l'utilisateur. Même forme que
+                                          `gen`, politique inverse — c'est la
+                                          version du document qui l'emporte
+
+Les deux encadrements donnent une identité aux blocs du plan. Sans elle, un
+bloc ajouté au plan ne pouvait pas être distingué du contenu libre de
+l'utilisateur, et n'apparaissait jamais dans les éléments déjà documentés.
 
 Tout ce qui se trouve entre deux ancres sans être encadré par `gen` appartient
 à l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
@@ -35,6 +45,11 @@ PREFIX = "pbi::"
 ELEMENT = "elem"
 GENERATED = "gen"
 GENERATED_END = "endgen"
+SEED = "seed"
+SEED_END = "endseed"
+
+# Encadrements : marqueur d'ouverture -> marqueur de fermeture.
+ENCLOSURES = {GENERATED: GENERATED_END, SEED: SEED_END}
 
 # Séparateur des champs. Les identifiants d'éléments contiennent des « : »
 # (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
@@ -54,7 +69,7 @@ _PICTURE_MARK = "\u0001image"
 class Marker:
     """Marqueur reconnu dans un document."""
 
-    kind: str  # "elem", "gen" ou "endgen"
+    kind: str  # "elem", "gen", "endgen", "seed" ou "endseed"
     value: str = ""  # identifiant d'élément, ou identifiant de bloc du plan
     fingerprint: str = ""
     # Empreintes des contenus écrits par le script, portées par `endgen`.
@@ -72,18 +87,27 @@ def element(element_id: str, fingerprint: str) -> str:
     return f"{PREFIX}{ELEMENT}{_SEPARATOR}{element_id}{_SEPARATOR}{fingerprint}"
 
 
-def generated(block_id: str) -> str:
-    return f"{PREFIX}{GENERATED}{_SEPARATOR}{block_id}"
+def opening(kind: str, block_id: str) -> str:
+    """Marqueur ouvrant un encadrement (`gen` ou `seed`)."""
+    return f"{PREFIX}{kind}{_SEPARATOR}{block_id}"
 
 
-def generated_end(digests: list[str] | tuple[str, ...] = ()) -> str:
+def closing(kind: str, digests: list[str] | tuple[str, ...] = ()) -> str:
     """
-    Marqueur de fin, portant l'empreinte de chaque contenu écrit par le bloc.
+    Marqueur fermant un encadrement, portant l'empreinte de chaque contenu écrit.
 
     Le séparateur est toujours écrit, même sans contenu : c'est lui qui
     distingue un bloc qui n'a rien produit d'un marqueur d'ancienne version.
     """
-    return f"{PREFIX}{GENERATED_END}{_SEPARATOR}{' '.join(digests)}"
+    return f"{PREFIX}{ENCLOSURES[kind]}{_SEPARATOR}{' '.join(digests)}"
+
+
+def generated(block_id: str) -> str:
+    return opening(GENERATED, block_id)
+
+
+def generated_end(digests: list[str] | tuple[str, ...] = ()) -> str:
+    return closing(GENERATED, digests)
 
 
 def fingerprint(text: str) -> str:
@@ -140,10 +164,10 @@ def parse(text: str) -> Marker | None:
 
     kind, separator, rest = text[len(PREFIX) :].partition(_SEPARATOR)
 
-    if kind == GENERATED_END:
-        return Marker(kind=GENERATED_END, digests=tuple(rest.split()) if separator else None)
-    if kind == GENERATED and rest:
-        return Marker(kind=GENERATED, value=rest)
+    if kind in (GENERATED_END, SEED_END):
+        return Marker(kind=kind, digests=tuple(rest.split()) if separator else None)
+    if kind in ENCLOSURES and rest:
+        return Marker(kind=kind, value=rest)
     if kind == ELEMENT and _SEPARATOR in rest:
         value, _, digest = rest.rpartition(_SEPARATOR)
         return Marker(kind=ELEMENT, value=value, fingerprint=digest)

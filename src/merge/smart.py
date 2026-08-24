@@ -4,8 +4,15 @@ Fusion du document fraîchement généré avec le précédent.
 Le contrat : le script est propriétaire des contenus qu'il a produits, marqués
 `pbi::gen`. Tout le reste appartient à l'utilisateur.
 
-Pour chaque élément documenté, on suit l'ordre du **document précédent** — donc
-celui voulu par l'utilisateur — et on n'y remplace que les contenus du script :
+Pour chaque élément documenté, on superpose deux séquences de blocs :
+
+    l'ordre du document précédent    ce que l'utilisateur a voulu
+    l'ordre du plan                  ce que le script sait écrire aujourd'hui
+
+Les blocs communs gardent **l'ordre du document** — un remaniement à
+l'intérieur d'un élément est respecté. Les blocs que le plan a gagnés depuis
+sont insérés **à leur place dans le plan**, entre leurs voisins connus : une
+rubrique ajoutée au YAML apparaît donc aussi dans les éléments déjà rédigés.
 
     ancien bloc                            bloc reconstruit
     ─────────────────────────────────────  ────────────────────────────────
@@ -15,14 +22,13 @@ celui voulu par l'utilisateur — et on n'y remplace que les contenus du script 
       description écrite sous le tableau   récupérée dedans, remise à sa place
     capture collée par l'utilisateur   →   recopiée, image comprise
     [gen] code DAX                     →   remplacé par la formule à jour
+    [seed] zone à compléter rédigée    →   la version du document l'emporte
+    [seed] amorce jamais touchée       →   reprise du plan, donc à jour
     explication de l'utilisateur       →   recopiée, surlignée si le DAX a changé
 
-Un bloc du plan absent du document précédent est ajouté à la fin de l'élément ;
-un contenu `gen` dont le bloc n'existe plus dans le plan disparaît.
-
-Ce qui a été écrit *à l'intérieur* d'un contenu du script — sous son tableau,
-entre ses valeurs — n'est pas perdu pour autant : `merge.salvage` l'y retrouve
-et le repose au même endroit, entre les données remises à jour.
+Un contenu `gen` dont le bloc n'existe plus dans le plan n'est pas réécrit,
+mais ce que l'utilisateur avait glissé dedans lui est rendu : `merge.salvage`
+l'y retrouve et le repose entre les données remises à jour.
 """
 
 from typing import Any
@@ -33,7 +39,7 @@ from docx.oxml.ns import qn
 from src import console
 from src.merge import blocks as block_parser
 from src.merge import markers, salvage
-from src.merge.blocks import FREE, OWNED, Block, Segment
+from src.merge.blocks import FREE, SEED, Block, Segment
 from src.merge.changes import ChangeLog
 from src.merge.previous import CHANGED, NEW, PreviousDocument
 from src.merge.transplant import Transplanter
@@ -51,6 +57,9 @@ _PARAGRAPH = qn("w:p")
 _HIGHLIGHT = qn("w:highlight")
 _STYLE = qn("w:pStyle")
 
+# Repère du contenu qui ouvre un bloc — le titre — dans `Block.free_after()`.
+_HEAD = ""
+
 
 def merge(document, previous: PreviousDocument, options: dict[str, Any], log: ChangeLog) -> None:
     """
@@ -66,7 +75,7 @@ def merge(document, previous: PreviousDocument, options: dict[str, Any], log: Ch
     fresh = block_parser.parse(nodes)
     old = block_parser.index(previous.blocks)
 
-    merger = _Merger(document, previous, options, log)
+    merger = _Merger(document, previous, options, log, fresh, old)
     rebuilt = [node for block in fresh for node in merger.rebuild(block, old.get(block.element_id))]
 
     body = document.element.body
@@ -78,13 +87,21 @@ def merge(document, previous: PreviousDocument, options: dict[str, Any], log: Ch
 
 class _Merger:
     def __init__(
-        self, document, previous: PreviousDocument, options: dict[str, Any], log: ChangeLog
+        self,
+        document,
+        previous: PreviousDocument,
+        options: dict[str, Any],
+        log: ChangeLog,
+        fresh: list[Block],
+        old: dict[str, Block],
     ):
         self.transplanter = Transplanter(previous.document, document)
         self.options = options
         self.log = log
         self.keep_user_text = bool(options.get("keep_user_text", True))
+        self._promoted = _promoted_headings(fresh, old)
 
+    # ── Recomposition d'un bloc ───────────────────────────────────
     def rebuild(self, fresh: Block, old: Block | None) -> list:
         """Recompose un bloc : ordre de l'utilisateur, contenus du script à jour."""
         nodes = [fresh.anchor] if fresh.anchor is not None else []
@@ -96,27 +113,89 @@ class _Merger:
             self._highlight_new(nodes, fresh)
             return nodes
 
-        generated = {
-            segment.block_id: segment.nodes for segment in fresh.segments if segment.kind == OWNED
-        }
-        emitted: set[str] = set()
+        fresh_segments = fresh.identified_segments()
+        old_segments = old.identified_segments()
+        fresh_free = fresh.free_after()
+        old_free = old.free_after()
         changed = self.log.status_of(fresh.element_id) == CHANGED
 
-        for segment in old.segments:
-            if segment.kind == OWNED:
-                if segment.block_id in generated and segment.block_id not in emitted:
-                    nodes += self._owned(generated[segment.block_id], segment, changed)
-                    emitted.add(segment.block_id)
-                continue
-
-            nodes += self._preserved(segment.nodes, changed)
-
-        # Blocs ajoutés au plan depuis la version précédente du document.
-        for block_id, block_nodes in generated.items():
-            if block_id not in emitted:
-                nodes += block_nodes
+        element_id = fresh.element_id
+        nodes += self._free(element_id, _HEAD, old_free, fresh_free, changed)
+        for block_id in _weave(old.block_ids, fresh.block_ids):
+            nodes += self._segment(
+                fresh_segments.get(block_id), old_segments.get(block_id), changed
+            )
+            nodes += self._free(element_id, block_id, old_free, fresh_free, changed)
 
         return nodes
+
+    def _free(
+        self,
+        element_id: str,
+        key: str,
+        old_free: dict[str, list],
+        fresh_free: dict[str, list],
+        changed: bool,
+    ) -> list:
+        """
+        Contenu libre attaché à un bloc : le titre, une note glissée après lui.
+
+        Il n'a pas d'identité propre — c'est le bloc qui le précède qui le
+        situe. La version du document l'emporte toujours : c'est celle que
+        l'utilisateur a sous les yeux. Le plan ne s'exprime que là où le
+        document n'a rien, c'est-à-dire sous un bloc qu'il vient de gagner.
+        """
+        if key in old_free:
+            return self._preserved(self._without_promoted(element_id, old_free[key]), changed)
+        return list(fresh_free.get(key, []))
+
+    def _without_promoted(self, element_id: str, nodes: list) -> list:
+        """
+        Écarte le titre qu'un élément voisin vient de reprendre à son compte.
+
+        Une sous-partie sans `bookmark:` n'était pas ancrée : son titre vivait
+        comme contenu libre, à la suite de l'élément précédent. Maintenant
+        qu'elle est ancrée, le titre est écrit par son propre bloc — le
+        recopier ferait apparaître un doublon, le temps de la génération qui
+        suit la mise à jour.
+
+        Le rapprochement est délibérément étroit : seul le titre d'un élément
+        neuf est écarté, et seulement du contenu libre de l'élément qui le
+        précède immédiatement. Deux parties homonymes ailleurs dans le document
+        ne se gênent donc pas.
+        """
+        promoted = self._promoted.get(element_id)
+        if not promoted:
+            return nodes
+        return [
+            node for node in nodes if not (_is_heading(node) and markers.digest(node) in promoted)
+        ]
+
+    def _segment(self, fresh: Segment | None, old: Segment | None, changed: bool) -> list:
+        """Contenu d'un bloc identifié, selon ce que le plan et le document en disent."""
+        if fresh is None:
+            # Bloc retiré du plan : ses données ne sont plus écrites, mais ce
+            # que l'utilisateur avait glissé dedans lui revient.
+            return self._salvaged(old, changed) if old is not None else []
+        if old is None:
+            # Bloc gagné par le plan : écrit tel qu'il vient d'être produit.
+            return list(fresh.nodes)
+        if fresh.kind == SEED:
+            return self._seed(fresh, old, changed)
+        return self._owned(fresh.nodes, old, changed)
+
+    def _seed(self, fresh: Segment, old: Segment, changed: bool) -> list:
+        """
+        Amorce : écrite à la première génération, puis laissée à l'utilisateur.
+
+        Tant qu'elle n'a pas été touchée, c'est la version du plan qui est
+        reprise — une formulation améliorée dans le YAML atteint ainsi les
+        documents existants. Dès qu'on y a écrit, le document l'emporte, et il
+        garde ses propres délimiteurs : eux seuls décrivent ce qu'il contient.
+        """
+        if _untouched(old):
+            return list(fresh.nodes)
+        return self._preserved(old.nodes, changed)
 
     def _owned(self, fresh: list, old: Segment, changed: bool) -> list:
         """
@@ -139,7 +218,7 @@ class _Merger:
             if marker is None:
                 nodes += self._preserved(pending.pop(rank, []), changed)
                 rank += 1
-            elif marker.kind == markers.GENERATED_END:
+            elif marker.kind in (markers.GENERATED_END, markers.SEED_END):
                 # Ce qui suivait la dernière donnée du script reste à
                 # l'intérieur de l'encadrement, donc devant le marqueur de fin.
                 nodes += self._preserved(_remaining(pending), changed)
@@ -147,14 +226,19 @@ class _Merger:
 
         return nodes + self._preserved(_remaining(pending), changed)
 
+    def _salvaged(self, old: Segment, changed: bool) -> list:
+        """Ce que l'utilisateur avait écrit dans un bloc que le plan a perdu."""
+        return self._preserved([node for _, node in salvage.of(old)], changed)
+
     def _preserved(self, nodes: list, changed: bool) -> list:
         """Recopie des contenus de l'utilisateur dans le document neuf."""
         copies = []
         for node in nodes:
             copied = self.transplanter.copy(node)
-            self._mark_review(copied, changed)
+            if markers.of(node) is None:
+                self._mark_review(copied, changed)
+                self.log.preserved += 1
             copies.append(copied)
-            self.log.preserved += 1
         return copies
 
     # ── Signalement visuel ────────────────────────────────────────
@@ -162,13 +246,15 @@ class _Merger:
         """
         Surligne un contenu utilisateur dont l'élément a changé techniquement.
 
-        Le surlignage précédent est retiré d'abord : il portait sur la version
-        d'avant et n'a plus lieu d'être si plus rien n'a bougé.
+        Le surlignage posé par le script est retiré d'abord : il portait sur la
+        version d'avant et n'a plus lieu d'être si plus rien n'a bougé. Celui
+        que l'utilisateur a posé lui-même est reconnaissable — il ne porte pas
+        les couleurs du signalement — et reste en place.
         """
         if node.tag != _PARAGRAPH or _is_heading(node):
             return
 
-        _clear_highlight(node)
+        _clear_highlight(node, _signal_colors(self.options))
         color = _HIGHLIGHTS.get(str(self.options.get("highlight_changed", "yellow")).lower())
         if changed and color is not None:
             _set_highlight(node, color)
@@ -181,10 +267,88 @@ class _Merger:
         if color is None:
             return
         for segment in block.segments:
-            if segment.kind == FREE:
+            if segment.kind in (FREE, SEED):
                 for node in segment.nodes:
-                    if node.tag == _PARAGRAPH and not _is_heading(node):
+                    if (
+                        node.tag == _PARAGRAPH
+                        and not _is_heading(node)
+                        and markers.of(node) is None
+                    ):
                         _set_highlight(node, color)
+
+
+# ─────────────────────────────────────────────────────────────
+#  Superposition des deux ordres
+# ─────────────────────────────────────────────────────────────
+
+
+def _weave(old_ids: list[str], fresh_ids: list[str]) -> list[str]:
+    """
+    Ordre des blocs d'un élément : celui du document, complété par le plan.
+
+    Les blocs que les deux connaissent gardent l'ordre du **document** — c'est
+    celui que l'utilisateur a voulu. Ceux que seul le **plan** connaît sont
+    insérés derrière le bloc commun qui les précède dans le plan : une rubrique
+    ajoutée au YAML retrouve ainsi sa place, et non la fin de l'élément.
+    """
+    common = set(old_ids) & set(fresh_ids)
+
+    # Blocs neufs, rangés derrière le bloc commun qui les précède dans le plan.
+    following: dict[str, list[str]] = {}
+    previous = _HEAD
+    for block_id in fresh_ids:
+        if block_id in common:
+            previous = block_id
+        elif block_id not in following.get(previous, ()):
+            following.setdefault(previous, []).append(block_id)
+
+    order = list(following.pop(_HEAD, []))
+    seen: set[str] = set()
+    for block_id in old_ids:
+        if block_id in seen:
+            continue
+        seen.add(block_id)
+        order.append(block_id)
+        order += following.pop(block_id, [])
+
+    # Blocs neufs dont le voisin de plan a disparu du document : à la suite.
+    for remaining in following.values():
+        order += remaining
+    return order
+
+
+def _promoted_headings(fresh: list[Block], old: dict[str, Block]) -> dict[str, set[str]]:
+    """
+    Titres d'éléments neufs, rangés sous l'élément qui les précède.
+
+    Une sous-partie que le plan n'ancrait pas encore voit son titre passer du
+    contenu libre à un bloc en propre. Le temps d'une génération, le document
+    porte les deux : l'ancien exemplaire traîne à la suite de l'élément
+    précédent, où il vivait. Ces empreintes disent lequel écarter, et où.
+    """
+    promoted: dict[str, set[str]] = {}
+    for position, block in enumerate(fresh):
+        if not block.element_id or block.element_id in old:
+            continue
+        before = fresh[position - 1].element_id if position else ""
+        if not before or before not in old:
+            continue
+        promoted.setdefault(before, set()).update(
+            markers.digest(node)
+            for segment in block.segments
+            for node in segment.content_nodes()
+            if _is_heading(node)
+        )
+    return promoted
+
+
+def _untouched(segment: Segment) -> bool:
+    """Le contenu du segment est-il exactement celui que le script y avait mis ?"""
+    if segment.digests is None:
+        # Document d'une version antérieure : sans empreintes, on ne sait pas.
+        # Dans le doute, ce qui s'y trouve appartient à l'utilisateur.
+        return False
+    return [markers.digest(node) for node in segment.content_nodes()] == list(segment.digests)
 
 
 # ─────────────────────────────────────────────────────────────
@@ -199,8 +363,19 @@ def _remaining(pending: dict[int, list]) -> list:
     return nodes
 
 
+def _signal_colors(options: dict[str, Any]) -> set[str]:
+    """Couleurs que le script emploie pour signaler — les seules qu'il retire."""
+    return {
+        color
+        for key in ("highlight_changed", "highlight_new")
+        if (color := _HIGHLIGHTS.get(str(options.get(key, "")).lower())) is not None
+    }
+
+
 def _is_heading(paragraph) -> bool:
     """Un titre n'est jamais surligné : il alimente la table des matières."""
+    if paragraph.tag != _PARAGRAPH:
+        return False
     properties = paragraph.find(qn("w:pPr"))
     if properties is None:
         return False
@@ -217,13 +392,13 @@ def _run_properties(run):
     return properties
 
 
-def _clear_highlight(paragraph) -> None:
+def _clear_highlight(paragraph, colors: set[str]) -> None:
     for run in paragraph.iter(qn("w:r")):
         properties = run.find(qn("w:rPr"))
         if properties is None:
             continue
         existing = properties.find(_HIGHLIGHT)
-        if existing is not None:
+        if existing is not None and existing.get(qn("w:val")) in colors:
             properties.remove(existing)
 
 

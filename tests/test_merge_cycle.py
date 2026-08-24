@@ -129,7 +129,13 @@ def context(**expressions: str) -> dict:
     }
 
 
-class MergeCycleTest(unittest.TestCase):
+class MergeHarness(unittest.TestCase):
+    """
+    Génère, laisse remanier le document comme le ferait un utilisateur, et
+    régénère. Les gestes sont ceux qu'on fait dans Word : reformuler un titre,
+    ajouter un paragraphe, coller une capture, écrire sous un tableau.
+    """
+
     def setUp(self):
         self._directory = tempfile.TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
@@ -239,7 +245,10 @@ class MergeCycleTest(unittest.TestCase):
         colors = {run.font.highlight_color for run in paragraph.runs if run.text.strip()} - {None}
         return next(iter(colors), None)
 
-    # ── Le contrat ────────────────────────────────────────────────
+
+class MergeCycleTest(MergeHarness):
+    """Le contrat : le script réécrit ses données, et ne touche à rien d'autre."""
+
     def test_premiere_generation(self):
         log = self.generate(CA="SUM(Ventes[Montant])")
         self.assertFalse(log.is_update)

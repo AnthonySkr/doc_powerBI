@@ -2,12 +2,21 @@
 Pose des marqueurs pendant l'écriture du document.
 
 Le builder délègue ici deux gestes, tous deux sans effet visible :
-  - ancrer un élément documenté et retenir s'il a changé (`element`) ;
-  - encadrer un contenu produit par le script (`owned`), pour que la
-    régénération sache qu'il peut le réécrire — et, par différence, que tout
-    le reste appartient à l'utilisateur, y compris ce qui a été glissé au
-    milieu : le marqueur de fermeture relève l'empreinte de chaque contenu
-    écrit, ce qui permet plus tard de reconnaître les ajouts.
+  - ancrer un élément documenté et retenir s'il a changé (`anchor`) ;
+  - encadrer un bloc du plan (`delimit`), pour lui donner une identité que la
+    régénération saura retrouver.
+
+Deux encadrements, selon à qui le contenu appartient une fois écrit :
+
+    gen    contenu du script — réécrit à chaque génération (`property`, `table`)
+    seed   amorce — écrite une fois, puis laissée à l'utilisateur (`paragraph`,
+           `image`, `user_fill`)
+
+Dans les deux cas le marqueur de fermeture relève l'empreinte de chaque contenu
+écrit : elle dit plus tard ce que le script avait posé là, donc ce qui a été
+ajouté ou rédigé depuis. C'est aussi cette identité qui permet à un bloc ajouté
+au plan d'apparaître dans les éléments déjà documentés : sans elle, il était
+indistinguable du contenu libre de l'utilisateur, et n'arrivait jamais.
 """
 
 from contextlib import contextmanager
@@ -37,39 +46,51 @@ class MergeWriter:
         # découpage du document à la relecture (voir `owned`).
         self._depth = 0
 
-    def anchor(self, section: dict[str, Any], context: dict[str, Any]) -> None:
+    def anchor(self, section: dict[str, Any], context: dict[str, Any], parent: str = "") -> str:
         """
-        Ancre un élément documenté.
+        Ancre un élément documenté, et retourne son identifiant.
 
         L'identifiant est le `bookmark:` du plan quand il en porte un
         (`measure:Marge`, `visual:<page>:<visuel>`), sinon `section:<id>` : des
-        identifiants stables, issus de Power BI ou du plan. Le `fingerprint:`
-        décrit l'état technique dont dépend la documentation rédigée.
+        identifiants stables, issus de Power BI ou du plan. Une section qui n'a
+        ni l'un ni l'autre est repérée par son titre sous la partie qui la
+        contient (`<parent>><titre>`) — faute de quoi elle n'aurait aucune
+        identité, et une sous-partie ajoutée au rapport n'apparaîtrait jamais
+        dans un document déjà généré.
+
+        Le `fingerprint:` décrit l'état technique dont dépend la documentation
+        rédigée.
         """
-        element_id = self._unique(self._identifier(section, context))
+        element_id = self._unique(self._identifier(section, context, parent))
         if not element_id:
-            return
+            return ""
 
         digest = markers.fingerprint(render(section.get("fingerprint"), context))
         self.log.record(element_id, self.previous.status(element_id, digest))
         markers.write(self.doc, markers.element(element_id, digest))
+        return element_id
 
     @contextmanager
-    def owned(self, block: dict[str, Any]):
+    def delimit(self, block: dict[str, Any]):
         """
-        Encadre un contenu produit par le script, donc réécrit à chaque
-        génération.
+        Encadre un bloc du plan, pour lui donner une identité.
 
-        Sont concernés les blocs qui n'exposent que des données du rapport :
-        `property` (code DAX, sources, usages) et `table` (champs d'un visuel).
-        Tout le reste — paragraphes, emplacements d'image, zones à compléter —
-        est une amorce : écrite à la première génération, puis laissée à
-        l'utilisateur. Le plan peut trancher explicitement avec `generated:`.
+        Les blocs qui n'exposent que des données du rapport — `property` (code
+        DAX, sources, usages) et `table` (champs d'un visuel) — appartiennent
+        au script : ils sont réécrits à chaque génération. Tout le reste —
+        paragraphes, emplacements d'image, zones à compléter — est une amorce :
+        écrite à la première génération, puis laissée à l'utilisateur. Le plan
+        peut trancher explicitement avec `generated:`.
+
+        Un bloc sans `id:` n'est pas encadré : il n'a pas d'identité, et le plan
+        ne pourra ni le réécrire ni le retrouver.
         """
         block_id = block.get("id")
-        if not self.enabled or not block_id or not _is_generated(block):
+        if not self.enabled or not block_id:
             yield
             return
+
+        kind = markers.GENERATED if _is_generated(block) else markers.SEED
 
         if self._depth:
             # Un encadrement imbriqué produirait un `endgen` orphelin, et le
@@ -83,20 +104,24 @@ class MergeWriter:
             yield
             return
 
-        opening = markers.write(self.doc, markers.generated(str(block_id)))
+        opening = markers.write(self.doc, markers.opening(kind, str(block_id)))
         self._depth += 1
         try:
             yield
         finally:
             self._depth -= 1
-            markers.write(self.doc, markers.generated_end(_digests(opening)))
+            markers.write(self.doc, markers.closing(kind, _digests(opening)))
 
-    def _identifier(self, section: dict[str, Any], context: dict[str, Any]) -> str:
+    def _identifier(self, section: dict[str, Any], context: dict[str, Any], parent: str) -> str:
         if not self.enabled:
             return ""
         if section.get("bookmark"):
             return render(section["bookmark"], context)
-        return f"section:{section['id']}" if section.get("id") else ""
+        if section.get("id"):
+            return f"section:{section['id']}"
+
+        title = render(section.get("title"), context)
+        return f"{parent}>{title}" if parent and title else ""
 
     def _unique(self, element_id: str) -> str:
         """

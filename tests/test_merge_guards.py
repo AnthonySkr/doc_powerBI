@@ -86,14 +86,14 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
 
     def test_bloc_simple_encadre(self):
         document, merge = writer()
-        with console.silenced(), merge.owned({"id": "table", "type": "table"}):
+        with console.silenced(), merge.delimit({"id": "table", "type": "table"}):
             document.add_paragraph("donnée")
         self.assertEqual(kinds(document), [markers.GENERATED, markers.GENERATED_END])
 
     def test_bloc_imbrique_non_encadre(self):
         document, merge = writer()
-        with console.silenced(), merge.owned({"id": "dehors", "generated": True}):
-            with merge.owned({"id": "dedans", "type": "table"}):
+        with console.silenced(), merge.delimit({"id": "dehors", "generated": True}):
+            with merge.delimit({"id": "dedans", "type": "table"}):
                 document.add_paragraph("donnée")
         self.assertEqual(kinds(document), [markers.GENERATED, markers.GENERATED_END])
 
@@ -103,8 +103,8 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
         original = console.warn
         console.warn = messages.append
         try:
-            with merge.owned({"id": "dehors", "generated": True}):
-                with merge.owned({"id": "dedans", "type": "table"}):
+            with merge.delimit({"id": "dehors", "generated": True}):
+                with merge.delimit({"id": "dedans", "type": "table"}):
                     document.add_paragraph("donnée")
         finally:
             console.warn = original
@@ -115,10 +115,10 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
         """Le compteur redescend : le bloc suivant est de nouveau encadré."""
         document, merge = writer()
         with console.silenced():
-            with merge.owned({"id": "dehors", "generated": True}):
-                with merge.owned({"id": "dedans", "type": "table"}):
+            with merge.delimit({"id": "dehors", "generated": True}):
+                with merge.delimit({"id": "dedans", "type": "table"}):
                     document.add_paragraph("donnée")
-            with merge.owned({"id": "apres", "type": "table"}):
+            with merge.delimit({"id": "apres", "type": "table"}):
                 document.add_paragraph("autre")
         self.assertEqual(
             kinds(document),
@@ -128,7 +128,7 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
     def test_marqueurs_exclus_des_empreintes(self):
         """Les empreintes ne portent que sur le contenu, jamais sur les marqueurs."""
         document, merge = writer()
-        with console.silenced(), merge.owned({"id": "table", "type": "table"}):
+        with console.silenced(), merge.delimit({"id": "table", "type": "table"}):
             document.add_paragraph("donnée")
         end = markers.parse(document.paragraphs[-1].text)
         self.assertEqual(end.digests, (markers.fingerprint("donnée"),))
