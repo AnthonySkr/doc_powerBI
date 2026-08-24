@@ -79,9 +79,7 @@ def _collect(project: PbipProject) -> PowerBIReport:
     report = parse_report(project.report_dir, report_name=project.name)  # type: ignore
     report.all_measures = all_measures
     report.tables = tables
-    report.measures_used_in_report = dependencies.measures_used_in_report(
-        report, all_measures
-    )
+    report.measures_used_in_report = dependencies.measures_used_in_report(report, all_measures)
 
     console.info(f"Mesures dans les visuels : {len(report.measures_in_visuals)}")
     console.info(f"Mesures totales (+ deps) : {len(report.measures_used_in_report)}")
@@ -90,9 +88,7 @@ def _collect(project: PbipProject) -> PowerBIReport:
     return report
 
 
-def _ask_inputs(
-    config: DocConfig, report: PowerBIReport, interactive: bool
-) -> dict[str, Any]:
+def _ask_inputs(config: DocConfig, report: PowerBIReport, interactive: bool) -> dict[str, Any]:
     # `choices` : ce que le rapport contient réellement, pour les questions qui
     # font choisir dans son contenu plutôt que dans une liste figée du YAML.
     base_context = {
