@@ -11,7 +11,7 @@ from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
-from src.merge import ChangeLog, apply_merge, read_previous
+from src.merge import ChangeLog, apply_merge, orphans, read_previous
 
 
 def generate_word_documentation(
@@ -55,11 +55,12 @@ def generate_word_documentation(
     if previous is not None and previous.exists:
         # Le document neuf porte ses ancres : il est maintenant recomposé en
         # suivant l'ordre du document précédent, dont seuls les contenus
-        # produits par le script sont remplacés.
-        apply_merge(doc, previous, merge_options, log)
+        # produits par le script sont remplacés. Ce qui n'a pas pu être
+        # replacé est rassemblé en annexe plutôt que perdu.
+        orphans.report(apply_merge(doc, previous, merge_options, log, builder.styles))
     archived = ""
     if previous is not None and previous.exists:
-        log.removed = previous.removed(log.written_ids)
+        log.removed = previous.removed(log.written_ids | log.renamed_ids)
         archived = _archive(output_path, merge_options)
 
     try:

@@ -26,8 +26,10 @@ class MarkerFormatTest(unittest.TestCase):
         self.assertEqual(markers.parse(markers.element("visual:p:v", "d1")).value, "visual:p:v")
 
     def test_contenu_genere(self):
-        self.assertEqual(markers.parse(markers.generated("mesure_code")).value, "mesure_code")
-        self.assertEqual(markers.parse(markers.generated_end()).kind, "endgen")
+        self.assertEqual(
+            markers.parse(markers.opening(markers.GENERATED, "mesure_code")).value, "mesure_code"
+        )
+        self.assertEqual(markers.parse(markers.closing(markers.GENERATED)).kind, "endgen")
 
     def test_texte_ordinaire_non_reconnu(self):
         self.assertIsNone(markers.parse("Chiffre d'affaires"))
@@ -49,7 +51,7 @@ class MarkerFormatTest(unittest.TestCase):
 
     def test_marqueur_relu_depuis_le_xml(self):
         doc = Document()
-        markers.write(doc, markers.generated("mesure_code"))
+        markers.write(doc, markers.opening(markers.GENERATED, "mesure_code"))
         self.assertEqual(markers.of(doc.paragraphs[-1]._p).value, "mesure_code")
 
     def test_paragraphe_ordinaire_sans_marqueur(self):
@@ -65,9 +67,9 @@ class BlockParsingTest(unittest.TestCase):
         markers.write(doc, markers.element("measure:Marge", "empreinte1"))
         doc.add_paragraph("Marge — titre reformulé")
         doc.add_paragraph("Note de l'utilisateur")
-        markers.write(doc, markers.generated("mesure_code"))
+        markers.write(doc, markers.opening(markers.GENERATED, "mesure_code"))
         doc.add_paragraph("DIVIDE([A], [B])")
-        markers.write(doc, markers.generated_end())
+        markers.write(doc, markers.closing(markers.GENERATED))
         doc.add_paragraph("Explication libre")
         markers.write(doc, markers.element("measure:CA", "empreinte2"))
         doc.add_paragraph("CA")
@@ -83,7 +85,7 @@ class BlockParsingTest(unittest.TestCase):
         self.assertEqual(self.blocks[1].fingerprint, "empreinte1")
 
     def test_contenu_du_script_isole(self):
-        self.assertEqual(self.blocks[1].owned_ids, ["mesure_code"])
+        self.assertEqual(self.blocks[1].block_ids, ["mesure_code"])
 
     def test_tout_le_reste_appartient_a_l_utilisateur(self):
         free = [
@@ -121,14 +123,16 @@ class SalvageTest(unittest.TestCase):
     def _segment(self, *contents: str, forget: bool = False):
         """Segment relu dans le document, `contents` étant ce qu'on y trouve."""
         doc = Document()
-        markers.write(doc, markers.generated("champs"))
+        markers.write(doc, markers.opening(markers.GENERATED, "champs"))
         for text in contents:
             if text == "[tableau]":
                 doc.add_table(rows=1, cols=1).cell(0, 0).text = "Ventes[Montant]"
             else:
                 doc.add_paragraph(text)
         # Un document produit par une version antérieure : marqueur de fin nu.
-        markers.write(doc, "pbi::endgen" if forget else markers.generated_end(self._digests()))
+        markers.write(
+            doc, "pbi::endgen" if forget else markers.closing(markers.GENERATED, self._digests())
+        )
 
         blocks = block_parser.parse(block_parser.body_nodes(doc))
         return blocks[0].segments[0]

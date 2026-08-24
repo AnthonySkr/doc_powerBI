@@ -1,8 +1,8 @@
 [project]
 name = "powerbi-doc"
-version = "0.3.0"
+version = "0.4.0"
 description = "Générateur automatique de documentation Power BI (.pbip)"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
     "python-docx>=1.2.0",
     "pyyaml>=6.0.3",
@@ -25,6 +25,7 @@ install = "pip install -e \".[dev]\""
 run = "python main.py"
 test = "python -m unittest discover -s tests -t ."
 lint = "ruff check ."
+format-check = "ruff format --check ."
 format = "ruff format ."
 check = "task format && task lint && task test"
 
@@ -32,7 +33,7 @@ check = "task format && task lint && task test"
 # à remettre aux utilisateurs. À lancer sous Windows — PyInstaller ne sait pas
 # construire un .exe depuis un autre système.
 build = "pyinstaller --noconfirm --clean powerbi-doc.spec"
-package = "task lint && task test && task build && python tools/package.py"
+package = "task format-check && task lint && task test && task build && python tools/package.py"
 
 clean = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in Path('.').rglob('__pycache__')]; [p.unlink(missing_ok=True) for p in Path('.').rglob('*.pyc')]; [shutil.rmtree(d, ignore_errors=True) for d in ['.pytest_cache', '.ruff_cache', 'build', 'dist']]; print('OK - Nettoyage terminé')\""
 help = "task --list"

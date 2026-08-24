@@ -16,6 +16,7 @@ from docx import Document
 
 from src import console
 from src.merge import blocks as block_parser
+from src.merge import markers
 from src.merge.blocks import Block
 
 # États d'un élément vis-à-vis du document précédent.
@@ -47,8 +48,18 @@ class PreviousDocument:
         return CHANGED if fingerprint and previous != fingerprint else UNCHANGED
 
     def removed(self, written_ids: set[str]) -> list[str]:
-        """Éléments présents dans le document précédent mais plus dans le rapport."""
-        return sorted(set(self.fingerprints) - written_ids)
+        """
+        Éléments présents dans le document précédent mais plus dans le rapport.
+
+        Les ancres internes à la fusion — l'annexe des contenus non replacés —
+        n'en font pas partie : elles ne décrivent rien du rapport, et se
+        reconnaissent à leur préfixe.
+        """
+        return sorted(
+            element_id
+            for element_id in set(self.fingerprints) - written_ids
+            if not element_id.startswith(markers.INTERNAL_PREFIX)
+        )
 
 
 def read(path: str) -> PreviousDocument:

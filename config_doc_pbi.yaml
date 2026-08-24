@@ -40,6 +40,13 @@ document:
   output_dir: "doc"
   output_name: "documentation_{{ report.name }}.docx"
 
+  # Les réponses aux questions ci-dessous (`inputs:`) sont conservées à côté du
+  # document et reproposées à la génération suivante : un Entrée les reconduit.
+  # C'est ce qui évite de faire disparaître une partie déjà rédigée en oubliant
+  # de re-cocher un visuel écarté. Le fichier se modifie et se supprime à la main.
+  remember_answers: true
+  answers_file: "reponses_{{ report.name }}.yaml"
+
   # Page de garde : le paragraphe contenant ce texte est remplacé.
   cover:
     placeholder: "Titre du document"
@@ -253,6 +260,16 @@ merge:
   # new     : zone à rédiger d'un élément apparu depuis la version précédente.
   highlight_changed: yellow
   highlight_new: green
+
+  # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
+  # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
+  # sont rassemblés en fin de document, avec leur provenance, plutôt que
+  # supprimés en silence. La partie disparaît d'elle-même une fois vidée.
+  orphans:
+    enabled: true
+    title: "Contenu non replacé"
+    # intro : laisser vide pour le texte d'explication par défaut.
+    intro: ""
 
 # =============================================================================
 #  6. INPUTS — questions posées à l'utilisateur au lancement du script

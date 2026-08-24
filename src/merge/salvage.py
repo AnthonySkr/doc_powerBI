@@ -15,7 +15,10 @@ relecture, on compare :
     empreinte retrouvée                 →  donnée du script, réécrite
     contenu en plus                     →  écrit par l'utilisateur, rendu
     contenu à la place d'une donnée     →  donnée du script remaniée à la main :
-                                           le script la réécrit (c'est la sienne)
+                                           le script la réécrit (c'est la
+                                           sienne), et la version retouchée
+                                           part en annexe plutôt qu'à la
+                                           corbeille (`merge.orphans`)
     contenu là où le script laissait     →  écrit par l'utilisateur, rendu
     un paragraphe vide
 
@@ -33,11 +36,6 @@ from src.merge import markers
 from src.merge.blocks import Segment
 
 _TABLE = qn("w:tbl")
-_TEXT = qn("w:t")
-
-# Empreinte d'un contenu sans texte ni image : la place laissée libre par le
-# script en fin de bloc.
-_EMPTY = markers.fingerprint("")
 
 
 def of(segment: Segment) -> list[tuple[int, object]]:
@@ -47,14 +45,32 @@ def of(segment: Segment) -> list[tuple[int, object]]:
     La place est le rang, parmi les contenus du script, devant lequel le
     contenu doit être reposé.
     """
+    return scan(segment)[0]
+
+
+def scan(segment: Segment) -> tuple[list[tuple[int, object]], list[tuple[int, object]]]:
+    """
+    Départage le contenu d'un segment du script, en un seul parcours.
+
+    Retourne d'une part ce qui a été écrit **en plus**, d'autre part les données
+    du script qu'on a **retouchées** à la main — le script les réécrit, elles
+    sont à lui, mais la version retouchée part en annexe plutôt qu'à la
+    corbeille (voir `merge.orphans`). Une correction faite dans une cellule d'un
+    tableau du script passe par là.
+
+    Chaque contenu vient avec son rang parmi les données du script : c'est ce
+    qui permet de le reposer au bon endroit, ou de le rapprocher de la donnée
+    qu'il remplaçait.
+    """
     nodes = segment.content_nodes()
     if segment.digests is None:
-        return _previous_version(nodes)
+        return _previous_version(nodes), []
 
     written = list(segment.digests)
     found = _common([markers.digest(node) for node in nodes], written)
 
     salvaged: list[tuple[int, object]] = []
+    retouched: list[tuple[int, object]] = []
     index = 0
     last = -1  # rang de la dernière donnée du script retrouvée
 
@@ -73,10 +89,11 @@ def of(segment: Segment) -> list[tuple[int, object]]:
             index += 1
 
         gap = written[last + 1 : found.get(index, len(written))]
-        reworked = sum(1 for digest in gap if digest != _EMPTY)
-        salvaged += [(last + 1, node) for node in unknown[reworked:] if _has_content(node)]
+        count = sum(1 for digest in gap if digest != markers.EMPTY)
+        retouched += [(last + 1, node) for node in unknown[:count] if markers.has_content(node)]
+        salvaged += [(last + 1, node) for node in unknown[count:] if markers.has_content(node)]
 
-    return salvaged
+    return salvaged, retouched
 
 
 def _previous_version(nodes: list) -> list[tuple[int, object]]:
@@ -92,7 +109,9 @@ def _previous_version(nodes: list) -> list[tuple[int, object]]:
     if not tables:
         return []
     return [
-        (rank, node) for rank, node in enumerate(nodes) if rank > tables[-1] and _has_content(node)
+        (rank, node)
+        for rank, node in enumerate(nodes)
+        if rank > tables[-1] and markers.has_content(node)
     ]
 
 
@@ -124,11 +143,3 @@ def _common(found: list[str], written: list[str]) -> dict[int, int]:
         else:
             j += 1
     return pairs
-
-
-def _has_content(node) -> bool:
-    """Y a-t-il quelque chose à sauver : du texte, une image, un tableau ?"""
-    if node.tag == _TABLE:
-        return True
-    text = "".join(run.text or "" for run in node.iter(_TEXT))
-    return bool(text.strip()) or markers.has_picture(node)

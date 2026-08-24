@@ -12,6 +12,10 @@ DEFAULT_CONFIG_PATH = "config_doc_pbi.yaml"
 
 DEFAULTS: dict[str, Any] = {
     "document": {
+        # Conserver les réponses aux questions à côté du document, et les
+        # reproposer à la génération suivante.
+        "remember_answers": True,
+        "answers_file": "reponses_{{ report.name }}.yaml",
         "template": "template-doc-pbib.docx",
         "output_dir": "output",
         "output_name": "documentation_{{ report.name }}.docx",
@@ -124,6 +128,14 @@ DEFAULTS: dict[str, Any] = {
         "backup_dir": ".versions",
         "highlight_changed": "yellow",
         "highlight_new": "none",
+        # Annexe recueillant, en fin de document, ce qui n'a pas pu être
+        # replacé : élément disparu du rapport, bloc retiré du plan, donnée du
+        # script retouchée à la main. Rien n'est jeté en silence.
+        "orphans": {
+            "enabled": True,
+            "title": "Contenu non replacé",
+            "intro": "",
+        },
     },
     "inputs": [],
     "sections": [],
