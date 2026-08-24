@@ -38,10 +38,10 @@ from docx.oxml.ns import qn
 
 from src import console
 from src.merge import blocks as block_parser
-from src.merge import markers, salvage
+from src.merge import markers, orphans, salvage
 from src.merge.blocks import FREE, SEED, Block, Segment
 from src.merge.changes import ChangeLog
-from src.merge.previous import CHANGED, NEW, PreviousDocument
+from src.merge.previous import CHANGED, INTERNAL_IDS, NEW, PreviousDocument
 from src.merge.transplant import Transplanter
 
 # Nom lisible dans la configuration -> valeur OOXML de `w:highlight`.
@@ -60,29 +60,50 @@ _STYLE = qn("w:pStyle")
 # Repère du contenu qui ouvre un bloc — le titre — dans `Block.free_after()`.
 _HEAD = ""
 
+# Empreinte d'un contenu vide : une ligne blanche n'est jamais à recueillir.
+_EMPTY = markers.fingerprint("")
 
-def merge(document, previous: PreviousDocument, options: dict[str, Any], log: ChangeLog) -> None:
+
+def merge(
+    document,
+    previous: PreviousDocument,
+    options: dict[str, Any],
+    log: ChangeLog,
+    styles=None,
+) -> orphans.Collector:
     """
     Réécrit le corps du document en superposant le document précédent.
 
     Le document vient d'être généré : il porte donc déjà toutes les ancres et
-    tous les marqueurs. Il est ici recomposé bloc par bloc.
+    tous les marqueurs. Il est ici recomposé bloc par bloc, et ce qui n'a pas
+    pu être replacé est rassemblé en annexe plutôt que perdu.
     """
+    collector = orphans.collector(options)
     if not previous.exists:
-        return
+        return collector
 
-    nodes = block_parser.body_nodes(document)
-    fresh = block_parser.parse(nodes)
+    fresh = block_parser.parse(block_parser.body_nodes(document))
     old = block_parser.index(previous.blocks)
 
-    merger = _Merger(document, previous, options, log, fresh, old)
+    merger = _Merger(document, previous, options, log, fresh, old, collector)
     rebuilt = [node for block in fresh for node in merger.rebuild(block, old.get(block.element_id))]
+    merger.collect_preamble(previous.blocks, fresh)
+    merger.collect_removed(old, {block.element_id for block in fresh if block.element_id})
 
+    if styles is not None:
+        rebuilt += orphans.render(
+            document, merger.transplanter, styles, collector, orphans.carried(old)
+        )
+
+    # Le corps est vidé de tout ce qu'il porte — y compris les paragraphes que
+    # l'annexe vient d'y ajouter — puis reçoit la composition finale.
     body = document.element.body
-    for node in nodes:
+    for node in block_parser.body_nodes(document):
         body.remove(node)
     for position, node in enumerate(rebuilt):
         body.insert(position, node)
+
+    return collector
 
 
 class _Merger:
@@ -94,10 +115,12 @@ class _Merger:
         log: ChangeLog,
         fresh: list[Block],
         old: dict[str, Block],
+        collector: orphans.Collector,
     ):
         self.transplanter = Transplanter(previous.document, document)
         self.options = options
         self.log = log
+        self.collector = collector
         self.keep_user_text = bool(options.get("keep_user_text", True))
         self._promoted = _promoted_headings(fresh, old)
 
@@ -171,6 +194,39 @@ class _Merger:
             node for node in nodes if not (_is_heading(node) and markers.digest(node) in promoted)
         ]
 
+    # ── Ce qui ne se replace pas ──────────────────────────────────
+    def collect_preamble(self, blocks: list[Block], fresh: list[Block]) -> None:
+        """
+        Ce qui a été écrit avant la première partie documentée.
+
+        Cette zone vient du template — page de garde, sommaire — et est
+        régénérée telle quelle. Ce qu'on y avait ajouté n'a donc pas de place
+        où revenir : c'est reconnu en comparant au préambule du document neuf,
+        et recueilli.
+        """
+        old_head = next((block for block in blocks if not block.element_id), None)
+        new_head = next((block for block in fresh if not block.element_id), None)
+        if old_head is None or new_head is None:
+            return
+
+        written = {
+            markers.digest(node) for segment in new_head.segments for node in segment.nodes
+        } | {_EMPTY}
+        extra = [
+            node
+            for segment in old_head.segments
+            for node in segment.nodes
+            if markers.digest(node) not in written
+        ]
+        self.collector.add("preamble", "", extra)
+
+    def collect_removed(self, old: dict[str, Block], written: set[str]) -> None:
+        """Rédaction des éléments que le rapport ne contient plus."""
+        for element_id, block in old.items():
+            if element_id in written or element_id in INTERNAL_IDS:
+                continue
+            self.collector.add("removed", element_id, _user_content(block))
+
     def _segment(self, fresh: Segment | None, old: Segment | None, changed: bool) -> list:
         """Contenu d'un bloc identifié, selon ce que le plan et le document en disent."""
         if fresh is None:
@@ -182,6 +238,10 @@ class _Merger:
             return list(fresh.nodes)
         if fresh.kind == SEED:
             return self._seed(fresh, old, changed)
+
+        # Une donnée du script retouchée à la main est réécrite — elle est à
+        # lui — mais la version retouchée part en annexe, pas à la corbeille.
+        self.collector.add("reworked", old.block_id, salvage.reworked(old))
         return self._owned(fresh.nodes, old, changed)
 
     def _seed(self, fresh: Segment, old: Segment, changed: bool) -> list:
@@ -340,6 +400,27 @@ def _promoted_headings(fresh: list[Block], old: dict[str, Block]) -> dict[str, s
             if _is_heading(node)
         )
     return promoted
+
+
+def _user_content(block: Block) -> list:
+    """
+    Ce qui, dans un bloc, appartient à l'utilisateur.
+
+    Les contenus du script sont écartés — ils seront réécrits ailleurs ou plus
+    du tout — ainsi que les amorces auxquelles personne n'a touché : archiver
+    un « [À compléter] » resté vide n'apprendrait rien.
+    """
+    nodes: list = []
+    for segment in block.segments:
+        if segment.kind == FREE:
+            nodes += segment.nodes
+        elif segment.kind == SEED:
+            if not _untouched(segment):
+                nodes += segment.content_nodes()
+        else:
+            nodes += [node for _, node in salvage.of(segment)]
+            nodes += salvage.reworked(segment)
+    return [node for node in nodes if markers.digest(node) != _EMPTY]
 
 
 def _untouched(segment: Segment) -> bool:

@@ -23,6 +23,7 @@ from docx.text.paragraph import Paragraph
 from src import console
 from src.config import DocConfig
 from src.generators.word import generate_word_documentation
+from src.merge import orphans
 from src.models.data_models import DaxMeasure, MeasureGroup, SemanticModel
 
 _DRAWING = qn("w:drawing")
@@ -152,6 +153,19 @@ class MergeHarness(unittest.TestCase):
 
     def texts(self) -> list[str]:
         return [p.text for p in Document(self.path).paragraphs if p.text.strip()]
+
+    def _split_annexe(self) -> tuple[list[str], list[str]]:
+        """Le document, de part et d'autre de l'annexe des contenus non replacés."""
+        texts = self.texts()
+        marker = f"pbi::elem|{orphans.ELEMENT_ID}|"
+        start = next((i for i, text in enumerate(texts) if text.startswith(marker)), len(texts))
+        return texts[:start], texts[start:]
+
+    def before_annexe(self) -> list[str]:
+        return self._split_annexe()[0]
+
+    def annexe(self) -> list[str]:
+        return self._split_annexe()[1]
 
     def find(self, needle: str):
         document = Document(self.path)
@@ -388,7 +402,16 @@ class MergeCycleTest(MergeHarness):
         self.generate(CA="SUM(Ventes[Montant])")
 
         self.assertIn("SUM(Ventes[Montant])", self.texts())
-        self.assertNotIn("SUM(Ventes[Autre])", self.texts())
+        self.assertNotIn("SUM(Ventes[Autre])", self.before_annexe())
+
+    def test_donnee_remaniee_a_la_main_recueillie_en_annexe(self):
+        """Réécrite à sa place, mais pas jetée : la version retouchée est gardée."""
+        self.generate(CA="SUM(Ventes[Montant])")
+        self.rewrite("SUM(Ventes[Montant])", "SUM(Ventes[Autre])")
+
+        self.generate(CA="SUM(Ventes[Montant])")
+
+        self.assertIn("SUM(Ventes[Autre])", self.annexe())
 
     def test_valeur_disparue_du_script_ne_revient_pas(self):
         self.generate(CA="SUM(Ventes[A]) + SUM(Ventes[B])")

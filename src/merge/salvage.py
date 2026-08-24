@@ -15,7 +15,10 @@ relecture, on compare :
     empreinte retrouvée                 →  donnée du script, réécrite
     contenu en plus                     →  écrit par l'utilisateur, rendu
     contenu à la place d'une donnée     →  donnée du script remaniée à la main :
-                                           le script la réécrit (c'est la sienne)
+                                           le script la réécrit (c'est la
+                                           sienne), et la version retouchée
+                                           part en annexe plutôt qu'à la
+                                           corbeille (`merge.orphans`)
     contenu là où le script laissait     →  écrit par l'utilisateur, rendu
     un paragraphe vide
 
@@ -47,14 +50,37 @@ def of(segment: Segment) -> list[tuple[int, object]]:
     La place est le rang, parmi les contenus du script, devant lequel le
     contenu doit être reposé.
     """
+    return _scan(segment)[0]
+
+
+def reworked(segment: Segment) -> list[object]:
+    """
+    Données du script retouchées à la main.
+
+    Le script les réécrit — elles sont à lui — mais la version retouchée n'est
+    pas jetée pour autant : elle part en annexe (voir `merge.orphans`), où
+    l'utilisateur la retrouve. Une correction faite dans une cellule d'un
+    tableau du script passe par là.
+    """
+    return _scan(segment)[1]
+
+
+def _scan(segment: Segment) -> tuple[list[tuple[int, object]], list[object]]:
+    """
+    Départage le contenu d'un segment du script.
+
+    Retourne d'une part ce qui a été écrit **en plus**, avec sa place, d'autre
+    part les données du script qu'on a **retouchées** à la main.
+    """
     nodes = segment.content_nodes()
     if segment.digests is None:
-        return _previous_version(nodes)
+        return _previous_version(nodes), []
 
     written = list(segment.digests)
     found = _common([markers.digest(node) for node in nodes], written)
 
     salvaged: list[tuple[int, object]] = []
+    retouched: list[object] = []
     index = 0
     last = -1  # rang de la dernière donnée du script retrouvée
 
@@ -73,10 +99,11 @@ def of(segment: Segment) -> list[tuple[int, object]]:
             index += 1
 
         gap = written[last + 1 : found.get(index, len(written))]
-        reworked = sum(1 for digest in gap if digest != _EMPTY)
-        salvaged += [(last + 1, node) for node in unknown[reworked:] if _has_content(node)]
+        count = sum(1 for digest in gap if digest != _EMPTY)
+        retouched += [node for node in unknown[:count] if _has_content(node)]
+        salvaged += [(last + 1, node) for node in unknown[count:] if _has_content(node)]
 
-    return salvaged
+    return salvaged, retouched
 
 
 def _previous_version(nodes: list) -> list[tuple[int, object]]:

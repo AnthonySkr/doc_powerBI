@@ -254,6 +254,16 @@ merge:
   highlight_changed: yellow
   highlight_new: green
 
+  # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
+  # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
+  # sont rassemblés en fin de document, avec leur provenance, plutôt que
+  # supprimés en silence. La partie disparaît d'elle-même une fois vidée.
+  orphans:
+    enabled: true
+    title: "Contenu non replacé"
+    # intro : laisser vide pour le texte d'explication par défaut.
+    intro: ""
+
 # =============================================================================
 #  6. INPUTS — questions posées à l'utilisateur au lancement du script
 # =============================================================================

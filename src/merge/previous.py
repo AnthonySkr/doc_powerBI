@@ -18,6 +18,9 @@ from src import console
 from src.merge import blocks as block_parser
 from src.merge.blocks import Block
 
+# Ancres posées par la fusion elle-même, et non par le plan.
+INTERNAL_IDS = frozenset({"merge:orphans"})
+
 # États d'un élément vis-à-vis du document précédent.
 NEW = "new"
 CHANGED = "changed"
@@ -47,8 +50,13 @@ class PreviousDocument:
         return CHANGED if fingerprint and previous != fingerprint else UNCHANGED
 
     def removed(self, written_ids: set[str]) -> list[str]:
-        """Éléments présents dans le document précédent mais plus dans le rapport."""
-        return sorted(set(self.fingerprints) - written_ids)
+        """
+        Éléments présents dans le document précédent mais plus dans le rapport.
+
+        Les ancres internes à la fusion — l'annexe des contenus non replacés —
+        n'en font pas partie : elles ne décrivent rien du rapport.
+        """
+        return sorted(set(self.fingerprints) - written_ids - INTERNAL_IDS)
 
 
 def read(path: str) -> PreviousDocument:

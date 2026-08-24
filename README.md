@@ -268,8 +268,36 @@ texte est retrouvé et reposé entre les mêmes données à la regénération.
 | --- | --- |
 | La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
 | Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
-| Élément retiré du rapport | Simplement absent du nouveau document |
+| Élément retiré du rapport | Ce que vous y aviez écrit part en annexe (voir ci-dessous) |
 | Bilan | Affiché **en console** en fin de génération |
+
+### Rien ne se perd — l'annexe
+
+Il reste des cas où un texte ne peut pas revenir là où il était : l'élément a
+disparu du rapport, le bloc a été retiré du plan, ou la donnée du script sur
+laquelle vous aviez écrit a été remaniée à la main. Ces contenus ne sont pas
+supprimés : ils sont rassemblés en fin de document, sous « Contenu non
+replacé », avec leur provenance.
+
+```
+Contenu non replacé
+  Retiré du rapport — measure:Ancienne marge
+    <ce que vous aviez écrit là>
+```
+
+Vous reprenez ce qui vous intéresse, puis vous supprimez la partie : elle ne
+revient pas. Tant qu'elle n'est pas vidée, elle se reconduit d'une génération à
+l'autre. Le bilan console dit combien de contenus y ont été déposés.
+
+C'est ce filet qui rend les cas suivants récupérables plutôt que définitifs :
+
+| Ce que vous faites | Où le retrouver |
+| --- | --- |
+| Écrire dans une cellule d'un tableau du script | En annexe — le tableau, lui, est réécrit |
+| Corriger à la main une valeur produite par le script | En annexe |
+| Écrire avant la première partie documentée (page de garde, sommaire) | En annexe |
+| Renommer une mesure dans Power BI | En annexe, sous l'ancien nom |
+| Écarter un visuel via la question posée au lancement | En annexe |
 
 Le surlignage est retiré à la génération suivante : il signale ce qui a changé
 *depuis le document que vous aviez en main*, pas un état à cocher.
@@ -283,6 +311,7 @@ Le surlignage est retiré à la génération suivante : il signale ce qui a chan
 | --- | --- |
 | `pbi::elem\|<id>\|<empreinte>` | Ancre un élément documenté et fige son état technique |
 | `pbi::gen\|<bloc>` … `pbi::endgen\|<empreintes>` | Encadrent un contenu produit par le script. Le marqueur de fin retient l'empreinte de chaque paragraphe et tableau écrits |
+| `pbi::seed\|<bloc>` … `pbi::endseed\|<empreintes>` | Encadrent une **amorce** : un contenu écrit à la première génération, puis laissé à vous. Même forme, politique inverse — c'est la version du document qui l'emporte |
 
 Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
 encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
@@ -296,7 +325,9 @@ revanche réécrite — elle reste la sienne.
 
 L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
 `visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
-des identifiants stables issus de Power BI ou du plan. L'empreinte est un
+des identifiants stables issus de Power BI ou du plan. Une section qui n'a ni
+l'un ni l'autre est repérée par son titre sous la partie qui la contient
+(`<parent>><titre>`). L'empreinte est un
 condensé du `fingerprint:` déclaré à côté :
 
 ```yaml
@@ -321,6 +352,14 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
   generated: true      # toujours réécrit depuis le YAML
 ```
 
+Une amorce à laquelle personne n'a touché suit le plan : améliorer une
+formulation dans le YAML atteint donc aussi les documents déjà générés. Dès que
+vous y écrivez, c'est votre version qui l'emporte.
+
+> **Donnez un `id:` à vos blocs.** C'est lui qui identifie le bloc d'une
+> génération à l'autre. Un bloc sans `id:` n'est pas repérable : le plan ne
+> pourra ni le réécrire, ni le faire apparaître dans un document existant.
+
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
@@ -330,16 +369,34 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
 | `backup` / `backup_dir` | Archive la version précédente avant d'écrire la nouvelle |
 | `highlight_changed` | Couleur des textes d'un élément qui a changé (`yellow`) |
 | `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
+| `orphans.enabled` | `false` : ne pas écrire l'annexe des contenus non replacés |
+| `orphans.title` / `orphans.intro` | Titre et texte d'explication de cette annexe |
+
+Le surlignage retiré d'une génération à l'autre est celui que le script a posé,
+reconnu à sa couleur. Celui que vous appliquez vous-même à votre texte reste en
+place.
+
+### Une rubrique ajoutée au plan
+
+Ajouter un bloc ou une sous-partie au YAML ne concerne pas que les documents à
+venir : la rubrique apparaît aussi dans les éléments **déjà rédigés**, à sa
+place dans le plan.
+
+La fusion superpose pour cela deux ordres. Les blocs que le plan et le document
+connaissent tous les deux gardent l'ordre du **document** — si vous avez
+déplacé la formule DAX sous le tableau, elle y reste. Ceux que seul le **plan**
+connaît sont insérés entre leurs voisins connus.
 
 ### Limites connues
 
-- L'ordre suit le plan : si vous déplacez un élément **entier** ailleurs dans
-  le document, il revient à sa place. Vos remaniements *à l'intérieur* d'un
-  élément sont respectés.
+- L'ordre des **éléments** suit le plan : si vous déplacez un élément entier
+  ailleurs dans le document, il revient à sa place. Vos remaniements *à
+  l'intérieur* d'un élément sont respectés.
 - Une mesure **renommée** dans Power BI est vue comme une suppression suivie
-  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom.
+  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom, mais ils
+  vous attendent en annexe.
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
-  et est régénéré.
+  et est régénéré ; ce que vous y aviez ajouté part en annexe.
 - Un document produit **avant** cette version ne porte pas encore les
   empreintes du marqueur de fin : ce qui y a été écrit à l'intérieur d'un
   contenu du script n'est retrouvé que sous un tableau. Dès la première
@@ -494,6 +551,7 @@ src/
       previous.py             relecture du document précédent
       salvage.py              textes retrouvés dans un contenu du script
       smart.py                fusion : données du script, reste de l'utilisateur
+      orphans.py              annexe des contenus qui n'ont plus de place
       transplant.py           recopie d'un contenu et de ses images
       changes.py              bilan des ajouts / modifications / retraits
 

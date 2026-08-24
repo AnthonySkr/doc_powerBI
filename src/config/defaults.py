@@ -124,6 +124,14 @@ DEFAULTS: dict[str, Any] = {
         "backup_dir": ".versions",
         "highlight_changed": "yellow",
         "highlight_new": "none",
+        # Annexe recueillant, en fin de document, ce qui n'a pas pu être
+        # replacé : élément disparu du rapport, bloc retiré du plan, donnée du
+        # script retouchée à la main. Rien n'est jeté en silence.
+        "orphans": {
+            "enabled": True,
+            "title": "Contenu non replacé",
+            "intro": "",
+        },
     },
     "inputs": [],
     "sections": [],
