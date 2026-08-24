@@ -36,12 +36,12 @@ class OrphansTest(MergeHarness):
             any("Retiré du rapport" in text and "measure:" in text for text in self.annexe())
         )
 
-    def test_mesure_renommee_ne_perd_pas_la_redaction(self):
-        """Un renommage est vu comme un retrait suivi d'un ajout : rien n'est jeté."""
-        self.generate(marge="SUM(T[a])")
+    def test_renommage_ambigu_recueilli(self):
+        """Deux mesures de même formule : le rapprochement serait un pari."""
+        self.generate(marge="SUM(T[a])", copie="SUM(T[a])")
         self.rewrite("[À compléter]", "Ma rédaction sur la marge")
 
-        self.generate(marge_nette="SUM(T[a])")
+        self.generate(marge_nette="SUM(T[a])", copie_nette="SUM(T[a])")
 
         self.assertIn("Ma rédaction sur la marge", self.annexe())
 

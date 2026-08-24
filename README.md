@@ -268,6 +268,7 @@ texte est retrouvé et reposé entre les mêmes données à la regénération.
 | --- | --- |
 | La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
 | Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
+| Élément renommé dans Power BI | Reconnu à son état technique : vos textes le suivent |
 | Élément retiré du rapport | Ce que vous y aviez écrit part en annexe (voir ci-dessous) |
 | Bilan | Affiché **en console** en fin de génération |
 
@@ -296,7 +297,7 @@ C'est ce filet qui rend les cas suivants récupérables plutôt que définitifs 
 | Écrire dans une cellule d'un tableau du script | En annexe — le tableau, lui, est réécrit |
 | Corriger à la main une valeur produite par le script | En annexe |
 | Écrire avant la première partie documentée (page de garde, sommaire) | En annexe |
-| Renommer une mesure dans Power BI | En annexe, sous l'ancien nom |
+| Renommer deux mesures de formule identique | En annexe : le rapprochement serait un pari |
 | Écarter un visuel via la question posée au lancement | En annexe |
 
 Le surlignage est retiré à la génération suivante : il signale ce qui a changé
@@ -392,9 +393,11 @@ connaît sont insérés entre leurs voisins connus.
 - L'ordre des **éléments** suit le plan : si vous déplacez un élément entier
   ailleurs dans le document, il revient à sa place. Vos remaniements *à
   l'intérieur* d'un élément sont respectés.
-- Une mesure **renommée** dans Power BI est vue comme une suppression suivie
-  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom, mais ils
-  vous attendent en annexe.
+- Une mesure **renommée** dans Power BI est reconnue par son état technique :
+  la formule DAX n'a pas bougé, donc c'est la même mesure, et vos textes la
+  suivent. Le rapprochement n'a lieu que s'il est sans ambiguïté — une seule
+  disparition et une seule apparition portant cette empreinte. Sinon, vos
+  textes vous attendent en annexe.
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
   et est régénéré ; ce que vous y aviez ajouté part en annexe.
 - Un document produit **avant** cette version ne porte pas encore les

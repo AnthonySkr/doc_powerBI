@@ -60,7 +60,7 @@ def generate_word_documentation(
         orphans.report(apply_merge(doc, previous, merge_options, log, builder.styles))
     archived = ""
     if previous is not None and previous.exists:
-        log.removed = previous.removed(log.written_ids)
+        log.removed = previous.removed(log.written_ids | log.renamed_ids)
         archived = _archive(output_path, merge_options)
 
     try:

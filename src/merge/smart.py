@@ -85,10 +85,16 @@ def merge(
     fresh = block_parser.parse(block_parser.body_nodes(document))
     old = block_parser.index(previous.blocks)
 
+    for before, after in _renames(fresh, old):
+        log.record_rename(before, after)
+
     merger = _Merger(document, previous, options, log, fresh, old, collector)
-    rebuilt = [node for block in fresh for node in merger.rebuild(block, old.get(block.element_id))]
+    rebuilt = [
+        node for block in fresh for node in merger.rebuild(block, _previous_of(block, old, log))
+    ]
     merger.collect_preamble(previous.blocks, fresh)
-    merger.collect_removed(old, {block.element_id for block in fresh if block.element_id})
+    written = {block.element_id for block in fresh if block.element_id} | log.renamed_ids
+    merger.collect_removed(old, written)
 
     if styles is not None:
         rebuilt += orphans.render(
@@ -375,6 +381,46 @@ def _weave(old_ids: list[str], fresh_ids: list[str]) -> list[str]:
     for remaining in following.values():
         order += remaining
     return order
+
+
+def _renames(fresh: list[Block], old: dict[str, Block]) -> list[tuple[str, str]]:
+    """
+    Rapproche un élément apparu d'un élément disparu, par son état technique.
+
+    Renommer une mesure dans Power BI change son identifiant : le document
+    voyait une suppression suivie d'un ajout, et la rédaction ne suivait pas.
+    Or l'empreinte, elle, ne bouge pas — c'est la même formule DAX. Le
+    rapprochement n'est fait que s'il est **sans ambiguïté** : une seule
+    disparition et une seule apparition portant cette empreinte.
+    """
+    present = {block.element_id for block in fresh if block.element_id}
+    appeared = _by_fingerprint(
+        block for block in fresh if block.element_id and block.element_id not in old
+    )
+    vanished = _by_fingerprint(
+        block for element_id, block in old.items() if element_id not in present
+    )
+
+    return [
+        (vanished[digest][0].element_id, blocks[0].element_id)
+        for digest, blocks in appeared.items()
+        if len(blocks) == 1 and len(vanished.get(digest, ())) == 1
+    ]
+
+
+def _by_fingerprint(blocks) -> dict[str, list[Block]]:
+    """Blocs regroupés par empreinte technique, celle-ci renseignée."""
+    grouped: dict[str, list[Block]] = {}
+    for block in blocks:
+        if block.fingerprint and block.fingerprint != _EMPTY:
+            grouped.setdefault(block.fingerprint, []).append(block)
+    return grouped
+
+
+def _previous_of(block: Block, old: dict[str, Block], log: ChangeLog) -> Block | None:
+    """Le bloc du document précédent qui correspond, sous son nom d'alors."""
+    before = dict((after, before) for before, after in log.renamed).get(block.element_id)
+    return old.get(before or block.element_id)
 
 
 def _promoted_headings(fresh: list[Block], old: dict[str, Block]) -> dict[str, set[str]]:
