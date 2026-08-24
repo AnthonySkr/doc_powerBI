@@ -15,6 +15,7 @@ from typing import Any
 
 from docx.oxml.ns import qn
 
+from src import console
 from src.config import DocConfig, render
 from src.merge import ChangeLog, PreviousDocument, markers
 
@@ -29,6 +30,12 @@ class MergeWriter:
         self.options = config.merge
         self.enabled = bool(self.options.get("enabled", True))
         self.log = ChangeLog(is_update=self.previous.exists)
+        # Identifiants déjà posés : deux ancres de même identifiant rendraient
+        # la relecture ambiguë (voir `_unique`).
+        self._used: dict[str, int] = {}
+        # Profondeur d'encadrement : un `gen` dans un `gen` casserait le
+        # découpage du document à la relecture (voir `owned`).
+        self._depth = 0
 
     def anchor(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         """
@@ -39,7 +46,7 @@ class MergeWriter:
         identifiants stables, issus de Power BI ou du plan. Le `fingerprint:`
         décrit l'état technique dont dépend la documentation rédigée.
         """
-        element_id = self._identifier(section, context)
+        element_id = self._unique(self._identifier(section, context))
         if not element_id:
             return
 
@@ -64,10 +71,24 @@ class MergeWriter:
             yield
             return
 
+        if self._depth:
+            # Un encadrement imbriqué produirait un `endgen` orphelin, et le
+            # découpage perdrait le contenu du bloc extérieur. Le bloc reste
+            # écrit, simplement sans être revendiqué par le script.
+            console.warn(
+                f"Bloc '{block_id}' imbriqué dans un autre contenu généré : "
+                "il ne sera pas réécrit automatiquement. Retirez `generated:` "
+                "du bloc qui l'englobe."
+            )
+            yield
+            return
+
         opening = markers.write(self.doc, markers.generated(str(block_id)))
+        self._depth += 1
         try:
             yield
         finally:
+            self._depth -= 1
             markers.write(self.doc, markers.generated_end(_digests(opening)))
 
     def _identifier(self, section: dict[str, Any], context: dict[str, Any]) -> str:
@@ -76,6 +97,32 @@ class MergeWriter:
         if section.get("bookmark"):
             return render(section["bookmark"], context)
         return f"section:{section['id']}" if section.get("id") else ""
+
+    def _unique(self, element_id: str) -> str:
+        """
+        Garantit qu'un identifiant n'est posé qu'une fois.
+
+        Un `id:` de section placé dans une boucle produit le même
+        `section:<id>` à chaque tour : les blocs deviendraient indistinguables
+        et la rédaction reprise irait au mauvais endroit — ou nulle part. Les
+        occurrences suivantes sont donc suffixées, et le cas est signalé : la
+        vraie réponse est un `bookmark:` bâti sur la donnée parcourue.
+        """
+        if not element_id:
+            return ""
+
+        seen = self._used.get(element_id, 0)
+        self._used[element_id] = seen + 1
+        if not seen:
+            return element_id
+
+        if seen == 1:
+            console.warn(
+                f"Identifiant '{element_id}' posé plusieurs fois : les occurrences "
+                "suivantes sont numérotées. Donnez à cette section un `bookmark:` "
+                "construit sur l'élément parcouru pour un repérage stable."
+            )
+        return f"{element_id}#{seen + 1}"
 
 
 def _digests(opening) -> list[str]:
@@ -89,7 +136,7 @@ def _digests(opening) -> list[str]:
     return [
         markers.digest(node)
         for node in opening._p.itersiblings()
-        if node.tag in (_PARAGRAPH, _TABLE)
+        if node.tag in (_PARAGRAPH, _TABLE) and markers.of(node) is None
     ]
 
 
