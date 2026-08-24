@@ -38,7 +38,7 @@ from docx.oxml.ns import qn
 
 from src import console
 from src.merge import blocks as block_parser
-from src.merge import markers, orphans, salvage
+from src.merge import cells, markers, orphans, salvage
 from src.merge.blocks import FREE, SEED, Block, Segment
 from src.merge.changes import ChangeLog
 from src.merge.previous import CHANGED, INTERNAL_IDS, NEW, PreviousDocument
@@ -54,6 +54,7 @@ _HIGHLIGHTS = {
 }
 
 _PARAGRAPH = qn("w:p")
+_TABLE = qn("w:tbl")
 _HIGHLIGHT = qn("w:highlight")
 _STYLE = qn("w:pStyle")
 
@@ -247,8 +248,29 @@ class _Merger:
 
         # Une donnée du script retouchée à la main est réécrite — elle est à
         # lui — mais la version retouchée part en annexe, pas à la corbeille.
-        self.collector.add("reworked", old.block_id, salvage.reworked(old))
+        # Un tableau annoté de l'intérieur fait exception : ses annotations
+        # retrouvent leur cellule dans le tableau à jour.
+        self.collector.add("reworked", old.block_id, self._reconcile(fresh.nodes, old))
         return self._owned(fresh.nodes, old, changed)
+
+    def _reconcile(self, fresh: list, old: Segment) -> list:
+        """
+        Ramène dans le tableau à jour ce qu'on avait écrit dans ses cellules.
+
+        Retourne ce qui reste à recueillir : les données retouchées qui ne sont
+        pas des tableaux, et les tableaux dont les annotations n'ont pas pu être
+        rattachées à une ligne sûre.
+        """
+        tables = iter([node for node in fresh if node.tag == _TABLE])
+        return [node for node in salvage.reworked(old) if not self._reconcile_table(node, tables)]
+
+    def _reconcile_table(self, node, tables) -> bool:
+        if node.tag != _TABLE:
+            return False
+        fresh_table = next(tables, None)
+        if fresh_table is None:
+            return False
+        return cells.reconcile(node, fresh_table, self.transplanter.copy)
 
     def _seed(self, fresh: Segment, old: Segment, changed: bool) -> list:
         """
