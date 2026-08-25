@@ -141,6 +141,9 @@ class DocumentBuilder:
         `parent` est l'identifiant de la partie qui la contient : il sert à
         repérer une sous-partie que le plan n'identifie pas autrement (ni
         `bookmark:`, ni `id:`), et se transmet à ses propres filles.
+
+        Une partie déclarée `seed:` fait exception : son contenu — sous-parties
+        comprises — n'est pas repéré du tout, et lui revient en bloc.
         """
         if section.get("generate") is False or section.get("source") == "template":
             return
@@ -155,11 +158,15 @@ class DocumentBuilder:
         element_id = self.merge.anchor(section, context, parent) or parent
         self._write_title(section, context)
 
-        for block in section.get("blocks") or []:
-            self._write_block(block, context, element_id)
+        # `seed:` — la partie est écrite une fois, puis appartient entièrement
+        # à l'utilisateur : ses sous-titres et ses textes ne sont plus repérés,
+        # et lui reviennent tels qu'il les a laissés.
+        with self.merge.freeform(bool(section.get("seed"))):
+            for block in section.get("blocks") or []:
+                self._write_block(block, context, element_id)
 
-        for child in section.get("sections") or []:
-            self._write_section(child, context, element_id)
+            for child in section.get("sections") or []:
+                self._write_section(child, context, element_id)
 
     def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         title = render(section.get("title"), context)
@@ -263,9 +270,10 @@ class DocumentBuilder:
                 ),
             )
 
+        shown = block.get("show_placeholder", options.get("show_placeholder"))
         text = (
             render(block.get("placeholder_text") or options.get("placeholder_text"), context)
-            if options.get("show_placeholder")
+            if shown
             else ""
         )
         style = block.get("style") or options.get("style") or "todo"

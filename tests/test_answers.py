@@ -118,6 +118,40 @@ class RememberedPromptsTest(unittest.TestCase):
         ):
             return prompts.ask_inputs(config(), context, remembered)
 
+    def test_valeur_du_plan_substituee(self):
+        """Un `default:` est une expression : sans substitution, c'est `{{ ... }}`
+        qui s'écrirait dans le document."""
+        retained = self.ask(["", "", ""], {})
+        self.assertEqual(retained["titre"], "Rapport")
+
+    def test_valeur_du_plan_construite_sur_une_reponse_precedente(self):
+        plan = {
+            **PLAN,
+            "inputs": [
+                {"id": "titre", "type": "text", "label": "Titre", "default": "{{ report.name }}"},
+                {
+                    "id": "entete",
+                    "type": "text",
+                    "label": "En-tête",
+                    "default": "{{ inputs.titre }}",
+                },
+            ],
+        }
+        keyboard = io.StringIO("\n\n")
+        context = {"report": Report(), "inputs": {}, "styles": {}, "choices": {"visuals": []}}
+        with (
+            mock.patch("sys.stdin", keyboard),
+            contextlib.redirect_stdout(io.StringIO()),
+            console.silenced(),
+        ):
+            retained = prompts.ask_inputs(DocConfig(plan), context, {})
+        self.assertEqual(retained, {"titre": "RapportDemo", "entete": "RapportDemo"})
+
+    def test_reponse_memorisee_reprise_telle_quelle(self):
+        """Une réponse est du texte de l'utilisateur : elle n'est pas réinterprétée."""
+        retained = self.ask(["", "", ""], {"titre": "Marge {{ brute }}"})
+        self.assertEqual(retained["titre"], "Marge {{ brute }}")
+
     def test_entree_reconduit_tout(self):
         remembered = {"titre": "Ventes 2026", "detail": True, "ecartes": ["Bandeau", "Menu"]}
         retained = self.ask(["", "", ""], remembered)
