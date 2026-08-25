@@ -37,11 +37,15 @@ version: 1
 # =============================================================================
 document:
   template: "template-doc-pbib.docx"
-  output_dir: "doc"
+  # Dossier de sortie, à côté du fichier .pbip. La question `dossier_sortie`
+  # le demande au lancement ; un chemin absolu est accepté tel quel.
+  output_dir: "{{ inputs.dossier_sortie }}"
   output_name: "documentation_{{ report.name }}.docx"
 
   # Les réponses aux questions ci-dessous (`inputs:`) sont conservées à côté du
-  # document et reproposées à la génération suivante : un Entrée les reconduit.
+  # fichier .pbip et reproposées à la génération suivante : un Entrée les
+  # reconduit. Elles y vivent plutôt que dans le dossier de sortie, puisque
+  # c'est l'une d'elles qui le désigne — et changer de dossier ne les perd pas.
   # C'est ce qui évite de faire disparaître une partie déjà rédigée en oubliant
   # de re-cocher un visuel écarté. Le fichier se modifie et se supprime à la main.
   remember_answers: true
@@ -280,6 +284,11 @@ merge:
 #  `choices.visuals` liste ce que le rapport contient réellement.
 # =============================================================================
 inputs:
+  - id: dossier_sortie
+    type: text
+    label: "Dossier où écrire la documentation (à côté du .pbip)"
+    default: "doc"
+
   - id: nom_rapport
     type: text
     label: "Nom du rapport à afficher sur la page de garde"
@@ -323,11 +332,45 @@ sections:
   # ---------------------------------------------------------------------------
   #  INITIALISATION
   # ---------------------------------------------------------------------------
+  # Partie entièrement rédigée à la main. `seed: true` : le script écrit les
+  # titres à la première génération, puis n'y touche plus — ni aux sous-titres,
+  # ni aux textes. Vous pouvez en ajouter, en retirer, en déplacer : toute la
+  # partie est reprise telle que vous l'avez laissée.
   - id: initialisation
     title: "Initialisation"
     level: 1
-    source: template          # le contenu vient du template
-    generate: false           # aucune écriture : le contenu du template est conservé
+    seed: true
+    sections:
+      - title: "Contexte"
+        level: 2
+        blocks: [{ type: user_fill, id: init_contexte, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Objet"
+        level: 2
+        blocks: [{ type: user_fill, id: init_objet, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Objectif"
+        level: 2
+        blocks: [{ type: user_fill, id: init_objectif, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Acteurs"
+        level: 2
+        sections:
+          - title: "Parties Prenantes"
+            level: 3
+            blocks: [{ type: user_fill, id: init_prenantes, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+          - title: "Parties intéressées"
+            level: 3
+            blocks: [{ type: user_fill, id: init_interessees, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Périmètre"
+        level: 2
+        blocks: [{ type: user_fill, id: init_perimetre, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Source"
+        level: 2
+        blocks: [{ type: user_fill, id: init_source, show_placeholder: false, style: "{{ styles.normal }}" }]
 
   # ---------------------------------------------------------------------------
   #  ORGANISATION GRAPHIQUE
@@ -487,10 +530,13 @@ sections:
   # ---------------------------------------------------------------------------
   #  ACQUISITION DES DONNÉES — rédigée manuellement après génération
   # ---------------------------------------------------------------------------
+  # Comme « Initialisation » : tout ce que vous écrivez ici vous revient en
+  # bloc, sous-titres compris (`seed: true`).
   - id: acquisition_donnees
     title: "Acquisition des données"
     level: 1
     page_break_before: true
+    seed: true
     blocks:
       - type: user_fill
         id: acquisition_contenu

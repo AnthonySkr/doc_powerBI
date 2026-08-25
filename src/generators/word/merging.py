@@ -45,6 +45,9 @@ class MergeWriter:
         # Un encadrement dans un autre casserait le découpage du document à la
         # relecture (voir `delimit`).
         self._enclosed = False
+        # Dans une partie déclarée `seed:`, rien n'est repéré : tout ce qui s'y
+        # trouve appartient à l'utilisateur (voir `freeform`).
+        self._freeform = False
 
     def anchor(self, section: dict[str, Any], context: dict[str, Any], parent: str = "") -> str:
         """
@@ -61,6 +64,9 @@ class MergeWriter:
         Le `fingerprint:` décrit l'état technique dont dépend la documentation
         rédigée.
         """
+        if self._freeform:
+            return ""
+
         title = render(section.get("title"), context)
         element_id = self._unique(self._identifier(section, context, parent, title), title)
         if not element_id:
@@ -70,6 +76,29 @@ class MergeWriter:
         self.log.record(element_id, self.previous.status(element_id, digest))
         markers.write(self.doc, markers.element(element_id, digest))
         return element_id
+
+    @contextmanager
+    def freeform(self, active: bool = True):
+        """
+        Suspend tout repérage : la partie entière appartient à l'utilisateur.
+
+        Une partie déclarée `seed:` dans le plan est écrite à la première
+        génération — ses sous-titres compris — puis laissée telle quelle. Ses
+        sous-parties ne sont donc pas ancrées et ses blocs pas encadrés : tout
+        son contenu est libre, et revient intact à chaque régénération, y
+        compris les titres que l'utilisateur a ajoutés, déplacés ou supprimés.
+
+        Seule la partie elle-même reste ancrée, pour qu'on sache où la reposer.
+        """
+        if not active:
+            yield
+            return
+
+        previous, self._freeform = self._freeform, True
+        try:
+            yield
+        finally:
+            self._freeform = previous
 
     @contextmanager
     def delimit(self, block: dict[str, Any]):
@@ -87,7 +116,7 @@ class MergeWriter:
         ne pourra ni le réécrire ni le retrouver.
         """
         block_id = block.get("id")
-        if not self.enabled or not block_id:
+        if not self.enabled or not block_id or self._freeform:
             yield
             return
 

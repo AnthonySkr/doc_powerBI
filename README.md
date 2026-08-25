@@ -30,7 +30,8 @@ Options :
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
 
-Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.pbip`.
+Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
+demandé au lancement (`doc` par défaut), à côté du `.pbip`.
 
 ## Ce que fait le script
 
@@ -80,7 +81,7 @@ la section `visuels` du plan.
 
 | Bloc | Rôle |
 | --- | --- |
-| `document` | Template, dossier et nom de sortie, page de garde, en-tête / pied de page, propriétés du fichier |
+| `document` | Template, dossier et nom de sortie, mémoire des réponses, page de garde, en-tête / pied de page, propriétés du fichier |
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, groupes de visuels, tables et mesures |
@@ -90,13 +91,22 @@ la section `visuels` du plan.
 
 ### Sections et blocs
 
-Une `section` = un titre + des `blocks` + des `sections` filles. Types de blocs :
+Une `section` = un titre + des `blocks` + des `sections` filles.
+
+Une section peut déclarer `seed: true` : toute la partie — ses sous-titres
+compris — est alors écrite à la première génération, puis **vous appartient
+entièrement**. Rien n'y est repéré : vous ajoutez, renommez, supprimez et
+déplacez les sous-titres comme vous voulez, tout revient tel quel. C'est ce
+qu'emploient « Initialisation » et « Acquisition des données », qui sont
+rédigées de bout en bout.
+
+Types de blocs :
 
 | Type | Effet |
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
 | `image` | Emplacement réservé pour une capture, avec sa description |
-| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération |
+| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
 | `loop` | Répétition d'un sous-plan sur une collection (pages, visuels, tables, mesures) |
@@ -152,7 +162,7 @@ data:
 Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
 proposés sont dédoublonnés, et en écarter un l'écarte partout à la fois.
 
-**Vos réponses sont conservées.** Elles sont écrites à côté du document
+**Vos réponses sont conservées.** Elles sont écrites à côté du `.pbip`
 (`reponses_<rapport>.yaml`) et reproposées à la génération suivante — marquées
 d'une flèche pour les listes : un Entrée les reconduit. Sans cela, oublier de
 re-cocher un visuel écarté ferait disparaître la partie qui lui correspond, et
@@ -258,6 +268,7 @@ juste. Tout le reste vous appartient et est recopié tel quel :
 | Ce que vous faites dans Word | À la regénération |
 | --- | --- |
 | Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
+| Ajouter, renommer ou supprimer un sous-titre d'une partie `seed:` | Conservé tel quel |
 | Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
 | Écrire une description sous un tableau du script, ou entre ses valeurs | Conservée, remise au même endroit |
 | Annoter une ligne **dans** une cellule du tableau du script | Conservée, dans sa cellule |
@@ -419,7 +430,9 @@ connaît sont insérés entre leurs voisins connus.
   disparition et une seule apparition portant cette empreinte. Sinon, vos
   textes vous attendent en annexe.
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
-  et est régénéré ; ce que vous y aviez ajouté part en annexe.
+  et est régénéré ; ce que vous y aviez ajouté part en annexe. La table des
+  matières fait exception : Word la recalcule à chaque ouverture, elle n'est
+  donc jamais prise pour de la rédaction.
 - Un document produit **avant** cette version ne porte pas encore les
   empreintes du marqueur de fin : ce qui y a été écrit à l'intérieur d'un
   contenu du script n'est retrouvé que sous un tableau. Dès la première

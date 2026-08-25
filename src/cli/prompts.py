@@ -13,7 +13,7 @@ La valeur proposée est celle de la génération précédente quand il y en a un
 from typing import Any
 
 from src import console
-from src.config import DocConfig, render, resolve_items
+from src.config import DocConfig, evaluate, render, resolve_items
 
 # Callback proposant de réécrire le texte d'un bloc `editable`.
 TextProvider = Any
@@ -40,17 +40,20 @@ def ask_inputs(
         kind = item.get("type", "text")
 
         options = resolve_items(item.get("options"), context)
-        proposed = remembered.get(key, item.get("default"))
+        # La réponse d'hier est reprise telle quelle — c'est du texte de
+        # l'utilisateur. Le `default:` du plan, lui, est une expression : il
+        # est substitué, faute de quoi c'est `{{ ... }}` qui s'écrirait dans le
+        # document.
+        proposed = remembered[key] if key in remembered else _rendered(item.get("default"), context)
 
         if kind == "confirm":
-            answers[key] = ask_confirm(label, bool(proposed))
+            answers[key] = ask_confirm(label, evaluate(proposed, context))
         elif kind == "choice":
             answers[key] = _ask_choice(label, options, proposed)
         elif kind == "multi_choice":
             answers[key] = _ask_multi_choice(label, options, _as_list(proposed))
         else:
-            default = proposed if isinstance(proposed, str) else render(proposed, context)
-            answers[key] = _ask_text(label, default, multiline=(kind == "textarea"))
+            answers[key] = _ask_text(label, proposed, multiline=(kind == "textarea"))
 
     console.blank()
     return answers
@@ -75,10 +78,14 @@ def default_inputs(
         if key in remembered:
             answers[key] = remembered[key]
             continue
-        value = item.get("default")
         context = {**base_context, "inputs": answers}
-        answers[key] = render(value, context) if isinstance(value, str) else value
+        answers[key] = _rendered(item.get("default"), context)
     return answers
+
+
+def _rendered(value: Any, context: dict[str, Any]) -> Any:
+    """Valeur par défaut du plan, ses `{{ ... }}` substitués."""
+    return render(value, context) if isinstance(value, str) else value
 
 
 def _as_list(value: Any) -> list[Any]:

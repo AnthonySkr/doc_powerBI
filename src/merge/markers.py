@@ -74,6 +74,10 @@ _PICTURE_MARK = "\u0001image"
 
 _TABLE = qn("w:tbl")
 
+# Contenus que Word calcule lui-même : table des matières, renvois, numéros. Le
+# texte qu'on y lit est le sien, pas celui de l'utilisateur.
+_FIELDS = (qn("w:fldChar"), qn("w:instrText"), qn("w:fldSimple"), qn("w:sdt"))
+
 
 @dataclass(frozen=True)
 class Marker:
@@ -147,6 +151,17 @@ def text(node) -> str:
 def has_content(node) -> bool:
     """L'élément porte-t-il quelque chose : du texte, une image, un tableau ?"""
     return node.tag == _TABLE or bool(text(node).strip()) or has_picture(node)
+
+
+def is_field(node) -> bool:
+    """
+    L'élément est-il un contenu que Word calcule — table des matières, renvoi ?
+
+    Son texte change tout seul d'une ouverture à l'autre : le comparer à ce que
+    le script avait écrit n'a pas de sens, et le prendre pour de la rédaction
+    en ferait un doublon à chaque génération.
+    """
+    return node.tag in _FIELDS or any(next(node.iter(tag), None) is not None for tag in _FIELDS)
 
 
 def has_picture(node) -> bool:

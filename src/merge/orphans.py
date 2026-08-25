@@ -100,6 +100,10 @@ def collect_preamble(collector: Collector, blocks: list[Block], fresh: list[Bloc
     Cette zone vient du template — page de garde, sommaire — et est régénérée
     telle quelle. Ce qu'on y avait ajouté n'a donc pas de place où revenir :
     c'est reconnu en comparant au préambule du document neuf, et recueilli.
+
+    La table des matières en est écartée : Word la recalcule à chaque
+    ouverture, si bien qu'elle ne ressemble jamais à celle que le script avait
+    posée. La recueillir en ferait un doublon à chaque génération.
     """
     old_head = next((block for block in blocks if not block.element_id), None)
     new_head = next((block for block in fresh if not block.element_id), None)
@@ -107,7 +111,11 @@ def collect_preamble(collector: Collector, blocks: list[Block], fresh: list[Bloc
         return
 
     written = {markers.digest(node) for node in _nodes(new_head)} | {markers.EMPTY}
-    extra = [node for node in _nodes(old_head) if markers.digest(node) not in written]
+    extra = [
+        node
+        for node in _nodes(old_head)
+        if markers.digest(node) not in written and not markers.is_field(node)
+    ]
     collector.add("preamble", "", extra)
 
 
@@ -139,8 +147,10 @@ def render(document, transplanter, styles, collector: Collector, previous: list)
     Écrit l'annexe et retourne ses éléments, prêts à rejoindre le corps.
 
     Retourne une liste vide quand il n'y a rien à recueillir : l'annexe ne
-    s'écrit que si elle a quelque chose à dire, et disparaît une fois vidée.
+    s'écrit que si elle a quelque chose à dire, et disparaît une fois vidée —
+    y compris lorsque ce qu'elle avait recueilli se réduit à des lignes vides.
     """
+    previous = [node for node in previous if markers.has_content(node)]
     if not collector.enabled or (not collector.groups and not previous):
         return []
 

@@ -10,6 +10,9 @@ from typing import Any
 
 DEFAULT_CONFIG_PATH = "config_doc_pbi.yaml"
 
+# Dossier de sortie retenu si le plan n'en désigne aucun.
+DEFAULT_OUTPUT_DIR = "doc"
+
 DEFAULTS: dict[str, Any] = {
     "document": {
         # Conserver les réponses aux questions à côté du document, et les
@@ -17,7 +20,7 @@ DEFAULTS: dict[str, Any] = {
         "remember_answers": True,
         "answers_file": "reponses_{{ report.name }}.yaml",
         "template": "template-doc-pbib.docx",
-        "output_dir": "output",
+        "output_dir": DEFAULT_OUTPUT_DIR,
         "output_name": "documentation_{{ report.name }}.docx",
         "cover": {"placeholder": "", "text": "", "bold": True},
         "header_footer": {"replacements": []},
