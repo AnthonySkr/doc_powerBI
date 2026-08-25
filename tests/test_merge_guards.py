@@ -58,7 +58,10 @@ class IdentifiantsUniquesTest(unittest.TestCase):
     def test_ordre_des_iterations_sans_effet_sur_les_identifiants(self):
         first, second = writer()[1], writer()[1]
         with console.silenced():
-            for merge, names in ((first, ("Ventes", "Achats")), (second, ("Achats", "Ventes"))):
+            for merge, names in (
+                (first, ("Ventes", "Achats")),
+                (second, ("Achats", "Ventes")),
+            ):
                 for name in names:
                     merge.anchor({"id": "fiche", "title": name}, {})
         # Chaque titre garde le même identifiant quel que soit son rang.
@@ -75,7 +78,7 @@ class IdentifiantsUniquesTest(unittest.TestCase):
         self.assertEqual(anchors(document), ["section:fiche", "section:fiche#2", "section:fiche#3"])
 
     def test_repetition_signalee_une_seule_fois(self):
-        document, merge = writer()
+        _document, merge = writer()
         messages: list[str] = []
         original = console.warn
         console.warn = messages.append
@@ -112,7 +115,10 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
 
     def test_bloc_imbrique_non_encadre(self):
         document, merge = writer()
-        with console.silenced(), merge.delimit({"id": "dehors", "generated": True}):
+        with (  # noqa: SIM117
+            console.silenced(),
+            merge.delimit({"id": "dehors", "generated": True}),
+        ):
             with merge.delimit({"id": "dedans", "type": "table"}):
                 document.add_paragraph("donnée")
         self.assertEqual(kinds(document), [markers.GENERATED, markers.GENERATED_END])
@@ -123,7 +129,7 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
         original = console.warn
         console.warn = messages.append
         try:
-            with merge.delimit({"id": "dehors", "generated": True}):
+            with merge.delimit({"id": "dehors", "generated": True}):  # noqa: SIM117
                 with merge.delimit({"id": "dedans", "type": "table"}):
                     document.add_paragraph("donnée")
         finally:
@@ -135,14 +141,19 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
         """Le compteur redescend : le bloc suivant est de nouveau encadré."""
         document, merge = writer()
         with console.silenced():
-            with merge.delimit({"id": "dehors", "generated": True}):
+            with merge.delimit({"id": "dehors", "generated": True}):  # noqa: SIM117
                 with merge.delimit({"id": "dedans", "type": "table"}):
                     document.add_paragraph("donnée")
             with merge.delimit({"id": "apres", "type": "table"}):
                 document.add_paragraph("autre")
         self.assertEqual(
             kinds(document),
-            [markers.GENERATED, markers.GENERATED_END, markers.GENERATED, markers.GENERATED_END],
+            [
+                markers.GENERATED,
+                markers.GENERATED_END,
+                markers.GENERATED,
+                markers.GENERATED_END,
+            ],
         )
 
     def test_marqueurs_exclus_des_empreintes(self):
@@ -151,6 +162,7 @@ class EncadrementsNonImbriquesTest(unittest.TestCase):
         with console.silenced(), merge.delimit({"id": "table", "type": "table"}):
             document.add_paragraph("donnée")
         end = markers.parse(document.paragraphs[-1].text)
+        assert end is not None
         self.assertEqual(end.digests, (markers.fingerprint("donnée"),))
 
 

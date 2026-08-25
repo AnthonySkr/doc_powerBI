@@ -8,9 +8,8 @@ from docx import Document
 from docx.oxml.ns import qn
 
 from src import console
-from src.merge import CHANGED, NEW, UNCHANGED, ChangeLog, markers, read_previous
+from src.merge import CHANGED, NEW, UNCHANGED, ChangeLog, markers, read_previous, salvage
 from src.merge import blocks as block_parser
-from src.merge import salvage
 from src.merge.blocks import FREE, OWNED
 from src.merge.previous import PreviousDocument
 

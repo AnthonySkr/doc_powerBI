@@ -257,7 +257,7 @@ class _Merger:
             node
             for rank, node in retouched
             if not (
-                node.tag == _TABLE
+                node.tag == _TABLE  # type: ignore
                 and rank in tables
                 and cells.reconcile(node, tables[rank], self.transplanter.copy)
             )
@@ -427,7 +427,7 @@ def _by_fingerprint(blocks) -> dict[str, list[Block]]:
 
 def _previous_of(block: Block, old: dict[str, Block], log: ChangeLog) -> Block | None:
     """Le bloc du document précédent qui correspond, sous son nom d'alors."""
-    before = dict((after, before) for before, after in log.renamed).get(block.element_id)
+    before = {after: before for before, after in log.renamed}.get(block.element_id)
     return old.get(before or block.element_id)
 
 
