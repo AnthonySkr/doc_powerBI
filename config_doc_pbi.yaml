@@ -521,7 +521,7 @@ sections:
   - id: acquisition_donnees
     title: "Acquisition des données"
     level: 1
-    page_break_before: true
+    page_break_before: false
     seed: true
     blocks:
       - type: user_fill
@@ -534,7 +534,7 @@ sections:
   - id: visuels
     title: "Visuels"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: paragraph
         id: visuels_intro
@@ -746,7 +746,7 @@ sections:
   - id: table_de_donnees
     title: "Table de données"
     level: 1
-    page_break_before: true
+    page_break_before: false
     sections:
 
       - id: source_donnees
@@ -851,7 +851,7 @@ sections:
   - id: definition_mesures
     title: "Définition des mesures"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: loop
         id: boucle_tables_mesures
