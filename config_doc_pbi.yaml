@@ -44,10 +44,7 @@ document:
 
   # Les réponses aux questions ci-dessous (`inputs:`) sont conservées à côté du
   # fichier .pbip et reproposées à la génération suivante : un Entrée les
-  # reconduit. Elles y vivent plutôt que dans le dossier de sortie, puisque
-  # c'est l'une d'elles qui le désigne — et changer de dossier ne les perd pas.
-  # C'est ce qui évite de faire disparaître une partie déjà rédigée en oubliant
-  # de re-cocher un visuel écarté. Le fichier se modifie et se supprime à la main.
+  # reconduit.
   remember_answers: true
   answers_file: "reponses_{{ report.name }}.yaml"
 
@@ -90,17 +87,15 @@ styles:
   normal: "Normal"
   bullet: "List Bullet"
   code: "Code DAX"
-
-  # Styles apportés par le template v2
   image: "Image Placeholder"   # encadré pointillé réservant la capture
   caption: "Legende"           # légende sous l'emplacement d'image
-  todo: "A completer"          # zones à rédiger après génération
+  todo: "A completer"
   table: "Tableau Reference"   # tableau des références d'un visuel
-  table_data: "Tableau Donnees"  # tableau neutre (autres tableaux du plan)
+  table_data: "Tableau Donnees"
   ref_header: "Ref Entete"     # ligne d'en-tête du tableau des références
-  ref_number: "Ref Numero"     # colonne N°
-  ref_role: "Ref Role"         # colonne Rôle
-  ref_value: "Ref Valeur"      # colonne Élément référencé
+  ref_number: "Ref Numero"
+  ref_role: "Ref Role"
+  ref_value: "Ref Valeur"
   technical_id: "Id technique" # type et identifiant à côté d'un titre
 
   fallback: "Normal"           # utilisé si un style ci-dessus est introuvable
@@ -121,14 +116,9 @@ rendering:
     numbering: true            # numérotation continue des figures du document
     empty_paragraph_after: false
 
-  # Table des matières du template (page 2). Les numéros de page dépendent de
-  # la mise en page : seul Word sait les calculer. Le champ est donc marqué
-  # « à recalculer », ce que Word applique à l'ouverture du document.
   table_of_contents:
     update: true
     update_all_fields: false  # true = Word recalcule aussi les autres champs
-    # true = pilote Word en fin de script pour livrer un document déjà à jour
-    # (Windows, Word installé et paquet pywin32 ; sinon l'option est ignorée).
     update_with_word: false
     levels: ""                # ex. "1-3" pour inclure les visuels et les mesures
 
@@ -188,13 +178,13 @@ data:
     # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
     # une seconde fois page par page.
     exclude_titles: "{{ inputs.visuels_non_detailles }}"
-    only_with_measures: false  # true = ne documenter que les visuels avec mesures
+    only_with_measures: false     # true = ne documenter que les visuels avec mesures
     sort_by: position             # title | position
 
     # Groupes Power BI (`visualGroup` d'un visual.json). Les visuels qui
     # portent un `parentGroupName` sont documentés à l'intérieur de leur
     # groupe : capture d'ensemble, légende du contenu, puis le détail visuel
-    # par visuel. Les autres suivent, comme avant, à la suite de la page.
+    # par visuel.
     groups:
       enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
       keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
@@ -206,7 +196,7 @@ data:
 
   tables:
     exclude_hidden: true
-    exclude_names: []          # tables techniques à ne pas documenter
+    exclude_names: []          # tables à ne pas documenter
     sort_by: name
 
     # Sources qui n'apprennent rien : la table de mesures créée à la main a
@@ -246,8 +236,7 @@ data:
 # =============================================================================
 #  Si le fichier de sortie existe déjà, il est lu avant d'être régénéré : les
 #  zones rédigées à la main sont reprises, et ce qui a changé dans le rapport
-#  est signalé. Le repérage passe par des marqueurs invisibles (texte masqué)
-#  posés à la génération — ne pas les supprimer dans Word.
+#  est signalé.
 # =============================================================================
 merge:
   enabled: true
@@ -267,8 +256,7 @@ merge:
 
   # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
   # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
-  # sont rassemblés en fin de document, avec leur provenance, plutôt que
-  # supprimés en silence. La partie disparaît d'elle-même une fois vidée.
+  # sont rassemblés en fin de document, avec leur provenance.
   orphans:
     enabled: true
     title: "Contenu non replacé"
@@ -333,9 +321,7 @@ sections:
   #  INITIALISATION
   # ---------------------------------------------------------------------------
   # Partie entièrement rédigée à la main. `seed: true` : le script écrit les
-  # titres à la première génération, puis n'y touche plus — ni aux sous-titres,
-  # ni aux textes. Vous pouvez en ajouter, en retirer, en déplacer : toute la
-  # partie est reprise telle que vous l'avez laissée.
+  # titres à la première génération, puis n'y touche plus.
   - id: initialisation
     title: "Initialisation"
     level: 1
@@ -378,7 +364,7 @@ sections:
   - id: organisation_graphique
     title: "Organisation Graphique"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: paragraph
         id: og_intro
@@ -543,7 +529,7 @@ sections:
         hint: "Décrire l'origine et le mode d'acquisition des données"
 
   # ---------------------------------------------------------------------------
-  #  VISUELS — une h2 par page, une h3 par visuel
+  #  VISUELS — un h2 par page, un h3 par visuel
   # ---------------------------------------------------------------------------
   - id: visuels
     title: "Visuels"

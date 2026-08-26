@@ -30,8 +30,7 @@ format = "ruff format ."
 check = "task format && task lint && task test"
 
 # Distribution : `task package` produit dist/powerbi-doc-<version>-windows.zip
-# à remettre aux utilisateurs. À lancer sous Windows — PyInstaller ne sait pas
-# construire un .exe depuis un autre système.
+# à remettre aux utilisateurs.
 build = "pyinstaller --noconfirm --clean powerbi-doc.spec"
 package = "task format-check && task lint && task test && task build && python tools/package.py"
 

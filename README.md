@@ -4,16 +4,15 @@ Génère la documentation Word d'un rapport Power BI (`.pbip`) à partir du
 template `template-doc-pbib.docx` et d'un plan décrit en YAML.
 
 Le script ne contient aucune structure de document : **tout le plan est dans
-`config_doc_pbi.yaml`**. Pour documenter un rapport différemment, on modifie le
-YAML, pas le code.
+`config_doc_pbi.yaml`**.
 
 ## Mise en place
 
 ```bash
 python -m venv .venv
-.venv\Scripts\Activate.ps1        # Windows
+.venv\Scripts\Activate        # Windows
 pip install taskipy
-task install                      # dépendances + outils de développement
+task install                  # dépendances + outils de développement
 ```
 
 ## Lancer le script
@@ -31,7 +30,7 @@ Options :
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
 
 Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
-demandé au lancement (`doc` par défaut), à côté du `.pbip`.
+demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
 
 ## Ce que fait le script
 
@@ -62,11 +61,10 @@ documentés ensemble, dans une partie au nom du groupe :
    groupe, y compris les visuels écartés par `data.visuals.exclude_types`
    (boutons, formes, images) : le lecteur retrouve ainsi chaque élément vu sur
    l'image, sans que ceux-ci soient détaillés pour autant ;
-3. puis, d'un cran plus bas, le **détail habituel de chaque visuel documenté**
+3. puis, d'un cran plus bas, le **détail de chaque visuel documenté**
    du groupe (capture, tableau des références, lecture du visuel).
 
-Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite, à
-plat, exactement comme avant.
+Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite.
 
 Un groupe imbriqué ne crée pas de partie supplémentaire : son contenu rejoint
 son groupe racine, et la légende garde trace du chemin
@@ -258,12 +256,9 @@ y avez mis.
 
 ### Le contrat
 
-> **Le script est propriétaire de ses données, vous êtes propriétaire du
-> reste.**
-
 À chaque génération le script réécrit ce qu'il produit — formule DAX, tableau
 des champs d'un visuel, sources, mesures appelantes — pour qu'il soit toujours
-juste. Tout le reste vous appartient et est recopié tel quel :
+juste. Tout le reste est recopié tel quel :
 
 | Ce que vous faites dans Word | À la regénération |
 | --- | --- |
@@ -278,12 +273,6 @@ juste. Tout le reste vous appartient et est recopié tel quel :
 | Faire une liste à puces ou numérotée | Conservée, numérotation comprise |
 | Appliquer un style que vous avez créé dans le document | Conservé, définition comprise |
 | Poser un commentaire de révision | Conservé, avec son auteur |
-
-Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
-paragraphe repère et en créer d'autres, le contenu est repris quand même. Et
-aucune contrainte sur l'*endroit* : même écrit au milieu d'un contenu produit
-par le script — sous le tableau d'un groupe, sous une formule DAX — votre
-texte est retrouvé et reposé entre les mêmes données à la regénération.
 
 ### Ce qui est signalé
 
@@ -338,29 +327,11 @@ Le surlignage est retiré à la génération suivante : il signale ce qui a chan
 | `pbi::gen\|<bloc>` … `pbi::endgen\|<empreintes>` | Encadrent un contenu produit par le script. Le marqueur de fin retient l'empreinte de chaque paragraphe et tableau écrits |
 | `pbi::seed\|<bloc>` … `pbi::endseed\|<empreintes>` | Encadrent une **amorce** : un contenu écrit à la première génération, puis laissé à vous. Même forme, politique inverse — c'est la version du document qui l'emporte |
 
-Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
-encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
-aucune attente sur la forme de ce contenu.
-
-Et *à l'intérieur* d'un `gen` ? Les empreintes du marqueur de fin disent, ligne
-par ligne, ce que le script avait écrit là. À la relecture, ce qui s'y trouve
-en plus n'est donc pas de lui : c'est rendu et reposé au même rang, entre les
-données remises à jour. Une donnée du script retouchée à la main est en
-revanche réécrite — elle reste la sienne, et la version retouchée part en
-annexe.
-
-Et *dans une cellule* d'un tableau du script ? La première ligne d'une cellule
-est sa donnée ; ce qui a été ajouté en dessous est à vous. Une ligne du tableau
-est reconnue par les données qu'elle porte : tant qu'elles n'ont pas bougé,
-l'annotation retrouve sa cellule. Si la ligne a changé, l'annotation ne
-commenterait plus la même chose : elle part en annexe.
-
 L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
 `visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
 des identifiants stables issus de Power BI ou du plan. Une section qui n'a ni
 l'un ni l'autre est repérée par son titre sous la partie qui la contient
-(`<parent>><titre>`). L'empreinte est un
-condensé du `fingerprint:` déclaré à côté :
+(`<parent>><titre>`). L'empreinte est un condensé du `fingerprint:` déclaré à côté :
 
 ```yaml
 bookmark: "measure:{{ measure.name }}"
@@ -388,10 +359,6 @@ Une amorce à laquelle personne n'a touché suit le plan : améliorer une
 formulation dans le YAML atteint donc aussi les documents déjà générés. Dès que
 vous y écrivez, c'est votre version qui l'emporte.
 
-> **Donnez un `id:` à vos blocs.** C'est lui qui identifie le bloc d'une
-> génération à l'autre. Un bloc sans `id:` n'est pas repérable : le plan ne
-> pourra ni le réécrire, ni le faire apparaître dans un document existant.
-
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
@@ -403,21 +370,6 @@ vous y écrivez, c'est votre version qui l'emporte.
 | `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
 | `orphans.enabled` | `false` : ne pas écrire l'annexe des contenus non replacés |
 | `orphans.title` / `orphans.intro` | Titre et texte d'explication de cette annexe |
-
-Le surlignage retiré d'une génération à l'autre est celui que le script a posé,
-reconnu à sa couleur. Celui que vous appliquez vous-même à votre texte reste en
-place.
-
-### Une rubrique ajoutée au plan
-
-Ajouter un bloc ou une sous-partie au YAML ne concerne pas que les documents à
-venir : la rubrique apparaît aussi dans les éléments **déjà rédigés**, à sa
-place dans le plan.
-
-La fusion superpose pour cela deux ordres. Les blocs que le plan et le document
-connaissent tous les deux gardent l'ordre du **document** — si vous avez
-déplacé la formule DAX sous le tableau, elle y reste. Ceux que seul le **plan**
-connaît sont insérés entre leurs voisins connus.
 
 ### Limites connues
 
@@ -433,10 +385,6 @@ connaît sont insérés entre leurs voisins connus.
   et est régénéré ; ce que vous y aviez ajouté part en annexe. La table des
   matières fait exception : Word la recalcule à chaque ouverture, elle n'est
   donc jamais prise pour de la rédaction.
-- Un document produit **avant** cette version ne porte pas encore les
-  empreintes du marqueur de fin : ce qui y a été écrit à l'intérieur d'un
-  contenu du script n'est retrouvé que sous un tableau. Dès la première
-  regénération, l'endroit n'a plus d'importance.
 
 ## Template
 
@@ -501,15 +449,11 @@ powerbi-doc-1.0.0-windows.zip
 Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
 double-clique sur l'exe — ou y glisse-dépose son fichier `.pbip`.
 
-> **À construire sous Windows.** PyInstaller ne sait pas produire un `.exe`
-> depuis Linux ou macOS ; il construit pour le système sur lequel il tourne.
-> Le nom de l'archive rappelle la plateforme utilisée.
-
 ### Configuration et template restent modifiables
 
-C'est le principe du projet : le plan est dans le YAML, pas dans le code. Les
-deux fichiers sont donc livrés **en clair à côté de l'exe**, pas seulement
-enfermés dedans. L'utilisateur les édite et relance — sans rien reconstruire.
+Le plan est dans le YAML, pas dans le code. Les deux fichiers sont donc 
+livrés **en clair à côté de l'exe**, pas seulement enfermés dedans. 
+L'utilisateur les édite et relance — sans rien reconstruire.
 
 L'exécutable en embarque tout de même une copie, utilisée si les fichiers
 livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
@@ -518,30 +462,6 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 1. le chemin donné (absolu, ou relatif au dossier courant) ;
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
-
-### Comportement de l'exécutable chez l'utilisateur
-
-**La fenêtre reste ouverte à la fin.** Lancé par double-clic ou par
-glisser-déposer, l'exécutable obtient une console qui se refermerait aussitôt
-le travail terminé — emportant le compte rendu et les éventuelles erreurs. Il
-attend donc une touche avant de rendre la main, y compris lorsqu'il s'arrête
-sur une erreur. La condition est simple : l'attente a lieu dès lors que le
-programme tourne depuis l'exécutable, jamais en développement. `--no-pause` la
-désactive pour une exécution automatisée.
-
-**Le dossier courant n'est pas fiable.** Un glisser-déposer donne à
-l'exécutable un dossier courant sans rapport avec l'endroit où il est
-installé. La configuration et le template sont donc cherchés dans cet ordre
-(`src/paths.py`) :
-
-1. le chemin tel quel — utile en développement ;
-2. à côté du fichier qui le désigne : un template nommé dans une
-   configuration est cherché à côté de cette configuration ;
-3. à côté de l'exécutable — le cas normal en distribution ;
-4. à l'intérieur de l'exécutable — copie de secours.
-
-Si le template reste introuvable, le message d'erreur énumère les emplacements
-consultés.
 
 ### Étapes séparées
 
