@@ -58,6 +58,7 @@ DEFAULTS: dict[str, Any] = {
         },
         "user_fill": {
             "placeholder_text": "[À compléter]",
+            "hint_format": "[{hint}]",
             "show_placeholder": True,
             "style": "{{ styles.todo }}",
         },

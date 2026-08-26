@@ -10,6 +10,7 @@
 #     paragraph        texte fixe (éventuellement proposé à l'édition)
 #     image            emplacement réservé pour une capture (texte descriptif)
 #     user_fill        zone laissée vide, à compléter par l'utilisateur ensuite
+#                      (`hint:` = ce qu'on attend, écrit en guise d'amorce)
 #     table            tableau construit à partir des données extraites
 #     property         libellé (sous-titre) + valeur, ou liste de valeurs
 #     loop             répétition d'un sous-plan sur une collection de données
@@ -125,6 +126,10 @@ rendering:
   # Zones laissées vides pour rédaction manuelle après génération.
   user_fill:
     placeholder_text: "[À compléter]"
+    # Un bloc `user_fill` qui porte un `hint:` écrit cette indication à la
+    # place de l'amorce générique — même mise en forme, mais elle dit ce
+    # qu'on attend à cet endroit.
+    hint_format: "[{hint}]"
     show_placeholder: true     # false = laisse un paragraphe vide sans texte
 
   # Liens hypertextes internes (toute mention d'une mesure → sa définition).

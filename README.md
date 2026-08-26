@@ -104,7 +104,7 @@ Types de blocs :
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
 | `image` | Emplacement réservé pour une capture, avec sa description |
-| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `show_placeholder: false` laisse une ligne vraiment vide |
+| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `hint:` remplace cette amorce par ce qu'on attend à cet endroit ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
 | `loop` | Répétition d'un sous-plan sur une collection (pages, visuels, tables, mesures) |
