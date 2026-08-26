@@ -276,7 +276,7 @@ def _part_element(part, reltype: str):
         return None
     try:
         return part.part_related_by(reltype).element
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         return None
 
 
@@ -294,7 +294,7 @@ def _attach_comments(source, target) -> bool:
 
     try:
         target.relate_to(source.part_related_by(RT.COMMENTS), RT.COMMENTS)
-    except (KeyError, AttributeError):
+    except KeyError, AttributeError:
         return False
     return True
 

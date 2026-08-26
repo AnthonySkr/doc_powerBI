@@ -46,7 +46,7 @@ def marker(
     shape: str = "ellipse",
     fill: str = "0070C0",
     text_color: str = "FFFFFF",
-    font_size: Pt = Pt(9),
+    font_size: Pt = Pt(9),  # noqa: B008
 ):
     """
     Une pastille numérotée, flottante, posée à `left`/`top` du paragraphe.

@@ -47,7 +47,7 @@ class DocConfig:
         return self.raw["sections"]
 
     # ── Helpers ───────────────────────────────────────────────────
-    def resolve_data(self, context: dict[str, Any]) -> "DocConfig":
+    def resolve_data(self, context: dict[str, Any]) -> DocConfig:
         """
         Retourne la configuration dont les filtres `data:` sont résolus.
 

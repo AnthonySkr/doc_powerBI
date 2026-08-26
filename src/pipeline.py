@@ -72,13 +72,9 @@ def run(options: Options) -> str:
 # ─────────────────────────────────────────────────────────────
 
 
-def _output_dir(
-    config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]
-) -> str:
+def _output_dir(config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]) -> str:
     """Dossier de sortie déclaré par le plan, une fois les réponses connues."""
-    declared = render(
-        config.document.get("output_dir"), {"report": report, "inputs": inputs}
-    )
+    declared = render(config.document.get("output_dir"), {"report": report, "inputs": inputs})
     return declared or DEFAULT_OUTPUT_DIR
 
 
@@ -98,9 +94,7 @@ def _collect(project: PbipProject) -> PowerBIReport:
     report = parse_report(project.report_dir, report_name=project.name)  # type: ignore
     report.all_measures = all_measures
     report.tables = tables
-    report.measures_used_in_report = dependencies.measures_used_in_report(
-        report, all_measures
-    )
+    report.measures_used_in_report = dependencies.measures_used_in_report(report, all_measures)
 
     console.info(f"Mesures dans les visuels : {len(report.measures_in_visuals)}")
     console.info(f"Mesures totales (+ deps) : {len(report.measures_used_in_report)}")

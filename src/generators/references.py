@@ -106,7 +106,7 @@ def index_usages(
 
 
 def build_references(
-    visual: Visual, options: dict[str, Any], counter: "_Counter"
+    visual: Visual, options: dict[str, Any], counter: _Counter
 ) -> list[VisualReference]:
     """Construit les lignes du tableau des références d'un visuel."""
     labels = options.get("labels") or {}

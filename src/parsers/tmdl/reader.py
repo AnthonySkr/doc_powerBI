@@ -53,7 +53,7 @@ def read_file(path: str) -> str | None:
         try:
             with open(path, "r", encoding=encoding) as f:
                 return f.read()
-        except (UnicodeDecodeError, LookupError):
+        except UnicodeDecodeError, LookupError:
             continue
     console.warn(f"Impossible de lire '{path}'")
     return None
