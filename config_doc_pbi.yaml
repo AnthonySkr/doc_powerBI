@@ -9,6 +9,7 @@
 #  block   : un élément de contenu. Types disponibles :
 #     paragraph        texte fixe (éventuellement proposé à l'édition)
 #     image            emplacement réservé pour une capture (texte descriptif)
+#                      (`markers:` = repères numérotés à glisser sur l'image)
 #     user_fill        zone laissée vide, à compléter par l'utilisateur ensuite
 #                      (`hint:` = ce qu'on attend, écrit en guise d'amorce)
 #     table            tableau construit à partir des données extraites
@@ -114,8 +115,31 @@ rendering:
     text_format: "🖼  {description}"
     caption_format: "Figure {n} — {description}"
     show_caption: true         # légende numérotée sous l'emplacement (style Legende)
-    numbering: true            # numérotation continue des figures du document
+    # Le `{n}` de la légende est un champ Word, pas un texte : supprimer une
+    # capture renumérote les suivantes à l'ouverture du document (ou tout de
+    # suite avec Ctrl+A puis F9). Aucun numéro n'est donc à reprendre à la main.
+    #   auto  = champ Word (recommandé)
+    #   fixed = numéro figé à la génération
+    #   false = pas de numérotation ({n} disparaît de la légende)
+    numbering: auto
+    sequence: "Figure"         # nom de la séquence Word — celui de ses légendes
     empty_paragraph_after: false
+
+    # Repères à faire glisser sur la capture. Un bloc `image` qui porte
+    # `markers:` (voir la partie 7) fait dessiner une pastille par ligne du
+    # tableau qui suit : elles sont posées en rangée sous l'emplacement, et se
+    # déplacent à la souris sur l'image — au clavier pour l'ajustement fin.
+    # Réglages d'aspect communs à toutes :
+    markers:
+      shape: ellipse           # ellipse | roundRect
+      size_cm: 0.62            # diamètre de la pastille
+      spacing_cm: 0.9          # pas entre deux repères de la rangée
+      line_cm: 0.9             # hauteur d'une rangée
+      per_row: 12              # au-delà, les repères passent à la rangée suivante
+      fill: "0070C0"           # bleu de la colonne « N° » du tableau
+      text_color: "FFFFFF"
+      font_size_pt: 9
+      style: "{{ styles.normal }}"   # style du paragraphe qui les porte
 
   table_of_contents:
     update: true
@@ -586,6 +610,12 @@ sections:
                   - type: image
                     id: groupe_capture
                     description: "Capture du groupe « {{ group.title }} »"
+                    # Un repère par ligne de la légende ci-dessous, à faire
+                    # glisser sur la capture (voir rendering.image_placeholder).
+                    markers:
+                      over: group.members
+                      item: member
+                      label: "{{ member.number }}"
 
                   # Légende du groupe : elle relie les numéros reportés sur la
                   # capture ci-dessus aux visuels qui composent le groupe. Les
@@ -641,6 +671,12 @@ sections:
                         - type: image
                           id: visuel_capture
                           description: "Capture du visuel « {{ visual.title }} »"
+                          # Un repère par ligne du tableau ci-dessous, à faire
+                          # glisser sur la capture pour situer chaque champ.
+                          markers:
+                            over: visual.references
+                            item: ref
+                            label: "{{ ref.number }}"
 
                         # Tableau des références du visuel : le numéro de la
                         # première colonne est reporté à la main sur la capture.

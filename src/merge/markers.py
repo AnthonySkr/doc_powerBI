@@ -72,11 +72,21 @@ _PARAGRAPH = qn("w:p")
 _PICTURES = (qn("w:drawing"), qn("w:pict"), qn("w:object"))
 _PICTURE_MARK = "\u0001image"
 
+# Formes flottantes — les repères numérotés posés sous une capture. Elles ne
+# portent que leur numéro : seule leur position dit qu'on y a touché.
+_ANCHOR = qn("wp:anchor")
+_POSITIONS = (qn("wp:posOffset"), qn("wp:align"))
+_ANCHOR_MARK = "\u0001repere"
+
 _TABLE = qn("w:tbl")
 
 # Contenus que Word calcule lui-même : table des matières, renvois, numéros. Le
 # texte qu'on y lit est le sien, pas celui de l'utilisateur.
 _FIELDS = (qn("w:fldChar"), qn("w:instrText"), qn("w:fldSimple"), qn("w:sdt"))
+
+_FIELD_CHAR = qn("w:fldChar")
+_FIELD_CHAR_TYPE = qn("w:fldCharType")
+_SIMPLE_FIELD = qn("w:fldSimple")
 
 
 @dataclass(frozen=True)
@@ -136,16 +146,71 @@ def digest(node) -> str:
     Empreinte du contenu d'un élément de corps (paragraphe ou tableau).
 
     Elle est prise au moment de l'écriture, puis retrouvée telle quelle à la
-    relecture tant que personne n'a touché à l'élément. Une image est notée :
-    une capture collée dans un paragraphe laissé vide doit se voir.
+    relecture tant que personne n'a touché à l'élément. Trois choses la
+    composent, chacune parce qu'un geste de l'utilisateur doit se voir :
+
+      - le texte écrit, sans les résultats de champs — un numéro de figure que
+        Word recalcule ne dit rien de ce que l'utilisateur a fait ;
+      - la présence d'une image : une capture collée dans un paragraphe laissé
+        vide doit se voir ;
+      - la position des formes flottantes : un repère glissé sur la capture ne
+        change rien d'autre, et c'est pourtant tout le travail.
     """
-    content = text(node)
-    return fingerprint(f"{_PICTURE_MARK} {content}" if has_picture(node) else content)
+    marks = []
+    if has_picture(node):
+        marks.append(_PICTURE_MARK)
+    positions = _positions(node)
+    if positions:
+        marks.append(f"{_ANCHOR_MARK} {positions}")
+
+    content = written_text(node)
+    return fingerprint(" ".join([*marks, content]) if marks else content)
 
 
 def text(node) -> str:
     """Texte porté par un élément XML, tous ses descendants réunis."""
     return "".join(run.text or "" for run in node.iter(_TEXT))
+
+
+def written_text(node) -> str:
+    """
+    Le texte de l'élément, sans ce que Word calcule lui-même.
+
+    Le résultat d'un champ — numéro de figure, renvoi, numéro de page — change
+    d'une ouverture à l'autre sans que personne n'y touche. Le retenir ferait
+    passer pour rédigée une légende que Word vient simplement de renuméroter.
+    """
+    parts: list[str] = []
+    depth = 0
+    for element in node.iter(_TEXT, _FIELD_CHAR):
+        if element.tag == _FIELD_CHAR:
+            kind = element.get(_FIELD_CHAR_TYPE)
+            if kind == "begin":
+                depth += 1
+            elif kind == "end":
+                depth = max(depth - 1, 0)
+        elif depth == 0 and not _inside_simple_field(element, node):
+            parts.append(element.text or "")
+    return "".join(parts)
+
+
+def _inside_simple_field(element, root) -> bool:
+    """Le nœud est-il dans un champ de forme condensée (`w:fldSimple`) ?"""
+    parent = element.getparent()
+    while parent is not None and parent is not root:
+        if parent.tag == _SIMPLE_FIELD:
+            return True
+        parent = parent.getparent()
+    return False
+
+
+def _positions(node) -> str:
+    """Positions des formes flottantes que porte l'élément, dans leur ordre."""
+    return " ".join(
+        position.text or ""
+        for anchor in node.iter(_ANCHOR)
+        for position in anchor.iter(*_POSITIONS)
+    )
 
 
 def has_content(node) -> bool:
