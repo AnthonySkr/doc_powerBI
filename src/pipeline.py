@@ -11,9 +11,9 @@ import os
 from typing import Any
 
 from src import console
-from src.cli import prompts
+from src.cli import answers, prompts
 from src.cli.arguments import Options
-from src.config import DocConfig, load_config, render
+from src.config import DEFAULT_OUTPUT_DIR, DocConfig, load_config, render
 from src.generators import filters
 from src.generators.context import build_context
 from src.generators.word import DocumentError, generate_word_documentation
@@ -51,9 +51,18 @@ def run(options: Options) -> str:
     console.blank()
 
     report = _collect(project)
-    inputs = _ask_inputs(config, report, options.interactive)
-    output_dir = project.output_dir(config.document.get("output_dir", "output"))
 
+    # Les réponses de la dernière génération sont reproposées : re-cocher à
+    # l'identique une liste de visuels écartés n'est pas une chose à confier à
+    # la mémoire de l'utilisateur. Elles vivent à côté du .pbip, et non dans le
+    # dossier de sortie — que l'une d'elles désigne.
+    answers_path = answers.path(config, {"report": report}, project.directory)
+    remembered = answers.read(answers_path)
+
+    inputs = _ask_inputs(config, report, options.interactive, remembered)
+    answers.write(answers_path, inputs)
+
+    output_dir = project.output_dir(_output_dir(config, report, inputs))
     _generate(config, report, inputs, output_dir, project.name, options.interactive)
     return output_dir
 
@@ -61,6 +70,16 @@ def run(options: Options) -> str:
 # ─────────────────────────────────────────────────────────────
 #  Étapes
 # ─────────────────────────────────────────────────────────────
+
+
+def _output_dir(
+    config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]
+) -> str:
+    """Dossier de sortie déclaré par le plan, une fois les réponses connues."""
+    declared = render(
+        config.document.get("output_dir"), {"report": report, "inputs": inputs}
+    )
+    return declared or DEFAULT_OUTPUT_DIR
 
 
 def _collect(project: PbipProject) -> PowerBIReport:
@@ -91,7 +110,10 @@ def _collect(project: PbipProject) -> PowerBIReport:
 
 
 def _ask_inputs(
-    config: DocConfig, report: PowerBIReport, interactive: bool
+    config: DocConfig,
+    report: PowerBIReport,
+    interactive: bool,
+    remembered: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     # `choices` : ce que le rapport contient réellement, pour les questions qui
     # font choisir dans son contenu plutôt que dans une liste figée du YAML.
@@ -102,8 +124,8 @@ def _ask_inputs(
         "choices": {"visuals": filters.documentable_titles(report, config)},
     }
     if interactive:
-        return prompts.ask_inputs(config, base_context)
-    return prompts.default_inputs(config, base_context)
+        return prompts.ask_inputs(config, base_context, remembered)
+    return prompts.default_inputs(config, base_context, remembered)
 
 
 def _generate(

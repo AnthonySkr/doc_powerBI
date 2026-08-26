@@ -49,7 +49,6 @@ class DocumentBuilder:
             "user_fill": self._write_user_fill,
             "property": self._write_property,
             "table": self._write_table,
-            "loop": self._write_loop,
         }
 
     # ── Point d'entrée ────────────────────────────────────────────
@@ -58,7 +57,7 @@ class DocumentBuilder:
         self._write_properties()
         self._write_header_footer()
         for section in self.config.sections:
-            self._write_section(section, self.context)
+            self._write_section(section, self.context, "")
         self._update_table_of_contents()
         self.links.report()
 
@@ -133,7 +132,19 @@ class DocumentBuilder:
         console.info(f"Table des matières{detail} : recalculée à l'ouverture dans Word")
 
     # ── Sections ──────────────────────────────────────────────────
-    def _write_section(self, section: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_section(
+        self, section: dict[str, Any], context: dict[str, Any], parent: str = ""
+    ) -> None:
+        """
+        Écrit une section du plan.
+
+        `parent` est l'identifiant de la partie qui la contient : il sert à
+        repérer une sous-partie que le plan n'identifie pas autrement (ni
+        `bookmark:`, ni `id:`), et se transmet à ses propres filles.
+
+        Une partie déclarée `seed:` fait exception : son contenu — sous-parties
+        comprises — n'est pas repéré du tout, et lui revient en bloc.
+        """
         if section.get("generate") is False or section.get("source") == "template":
             return
         if not evaluate(section.get("when"), context):
@@ -144,14 +155,18 @@ class DocumentBuilder:
 
         # L'ancre précède le titre : à la relecture, tout ce qui suit lui
         # appartient jusqu'à l'ancre suivante.
-        self.merge.anchor(section, context)
+        element_id = self.merge.anchor(section, context, parent) or parent
         self._write_title(section, context)
 
-        for block in section.get("blocks") or []:
-            self._write_block(block, context)
+        # `seed:` — la partie est écrite une fois, puis appartient entièrement
+        # à l'utilisateur : ses sous-titres et ses textes ne sont plus repérés,
+        # et lui reviennent tels qu'il les a laissés.
+        with self.merge.freeform(bool(section.get("seed"))):
+            for block in section.get("blocks") or []:
+                self._write_block(block, context, element_id)
 
-        for child in section.get("sections") or []:
-            self._write_section(child, context)
+            for child in section.get("sections") or []:
+                self._write_section(child, context, element_id)
 
     def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         title = render(section.get("title"), context)
@@ -183,8 +198,17 @@ class DocumentBuilder:
         )
 
     # ── Blocs ─────────────────────────────────────────────────────
-    def _write_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_block(
+        self, block: dict[str, Any], context: dict[str, Any], parent: str = ""
+    ) -> None:
         if not evaluate(block.get("when"), context):
+            return
+
+        if block.get("type") == "loop":
+            # Une boucle n'écrit rien elle-même : elle déroule un sous-plan,
+            # dont chaque section porte sa propre identité. Elle n'est donc
+            # jamais encadrée.
+            self._write_loop(block, context, parent)
             return
 
         writer = self._block_writers.get(block.get("type", ""))
@@ -192,7 +216,7 @@ class DocumentBuilder:
             console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
 
-        with self.merge.owned(block):
+        with self.merge.delimit(block):
             writer(block, context)
 
     def _write_paragraph(self, block: dict[str, Any], context: dict[str, Any]) -> None:
@@ -246,9 +270,10 @@ class DocumentBuilder:
                 ),
             )
 
+        shown = block.get("show_placeholder", options.get("show_placeholder"))
         text = (
             render(block.get("placeholder_text") or options.get("placeholder_text"), context)
-            if options.get("show_placeholder")
+            if shown
             else ""
         )
         style = block.get("style") or options.get("style") or "todo"
@@ -403,7 +428,7 @@ class DocumentBuilder:
 
         self._write_rich_text(paragraph, text, context, links=self._links_allowed(column, ""))
 
-    def _write_loop(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_loop(self, block: dict[str, Any], context: dict[str, Any], parent: str = "") -> None:
         """Répète une section et/ou des blocs sur chaque élément d'une collection."""
         item_name = block.get("item") or "item"
         section = block.get("section")
@@ -411,9 +436,9 @@ class DocumentBuilder:
         for item in resolve_items(block.get("over"), context):
             item_context = {**context, item_name: item}
             if section:
-                self._write_section(section, item_context)
+                self._write_section(section, item_context, parent)
             for inner in block.get("blocks") or []:
-                self._write_block(inner, item_context)
+                self._write_block(inner, item_context, parent)
 
     # ── Écriture du texte ─────────────────────────────────────────
     def _write_value(self, paragraph, value: Any, context: dict[str, Any], links: bool) -> None:

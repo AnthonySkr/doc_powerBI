@@ -4,16 +4,15 @@ Génère la documentation Word d'un rapport Power BI (`.pbip`) à partir du
 template `template-doc-pbib.docx` et d'un plan décrit en YAML.
 
 Le script ne contient aucune structure de document : **tout le plan est dans
-`config_doc_pbi.yaml`**. Pour documenter un rapport différemment, on modifie le
-YAML, pas le code.
+`config_doc_pbi.yaml`**.
 
 ## Mise en place
 
 ```bash
 python -m venv .venv
-.venv\Scripts\Activate.ps1        # Windows
+.venv\Scripts\Activate        # Windows
 pip install taskipy
-task install                      # dépendances + outils de développement
+task install                  # dépendances + outils de développement
 ```
 
 ## Lancer le script
@@ -30,7 +29,8 @@ Options :
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
 
-Le document est écrit dans `doc/documentation_<rapport>.docx`, à côté du `.pbip`.
+Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
+demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
 
 ## Ce que fait le script
 
@@ -61,11 +61,10 @@ documentés ensemble, dans une partie au nom du groupe :
    groupe, y compris les visuels écartés par `data.visuals.exclude_types`
    (boutons, formes, images) : le lecteur retrouve ainsi chaque élément vu sur
    l'image, sans que ceux-ci soient détaillés pour autant ;
-3. puis, d'un cran plus bas, le **détail habituel de chaque visuel documenté**
+3. puis, d'un cran plus bas, le **détail de chaque visuel documenté**
    du groupe (capture, tableau des références, lecture du visuel).
 
-Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite, à
-plat, exactement comme avant.
+Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite.
 
 Un groupe imbriqué ne crée pas de partie supplémentaire : son contenu rejoint
 son groupe racine, et la légende garde trace du chemin
@@ -80,7 +79,7 @@ la section `visuels` du plan.
 
 | Bloc | Rôle |
 | --- | --- |
-| `document` | Template, dossier et nom de sortie, page de garde, en-tête / pied de page, propriétés du fichier |
+| `document` | Template, dossier et nom de sortie, mémoire des réponses, page de garde, en-tête / pied de page, propriétés du fichier |
 | `styles` | Correspondance avec les styles du template (`Heading 1`, `Ref Valeur`, `Code DAX`…) |
 | `rendering` | Mise en forme commune : sauts de page, emplacements d'images, zones à compléter, liens internes, table des matières |
 | `data` | Filtres et tris appliqués aux pages, visuels, groupes de visuels, tables et mesures |
@@ -90,13 +89,22 @@ la section `visuels` du plan.
 
 ### Sections et blocs
 
-Une `section` = un titre + des `blocks` + des `sections` filles. Types de blocs :
+Une `section` = un titre + des `blocks` + des `sections` filles.
+
+Une section peut déclarer `seed: true` : toute la partie — ses sous-titres
+compris — est alors écrite à la première génération, puis **vous appartient
+entièrement**. Rien n'y est repéré : vous ajoutez, renommez, supprimez et
+déplacez les sous-titres comme vous voulez, tout revient tel quel. C'est ce
+qu'emploient « Initialisation » et « Acquisition des données », qui sont
+rédigées de bout en bout.
+
+Types de blocs :
 
 | Type | Effet |
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
 | `image` | Emplacement réservé pour une capture, avec sa description |
-| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération |
+| `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
 | `loop` | Répétition d'un sous-plan sur une collection (pages, visuels, tables, mesures) |
@@ -151,6 +159,14 @@ data:
 
 Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
 proposés sont dédoublonnés, et en écarter un l'écarte partout à la fois.
+
+**Vos réponses sont conservées.** Elles sont écrites à côté du `.pbip`
+(`reponses_<rapport>.yaml`) et reproposées à la génération suivante — marquées
+d'une flèche pour les listes : un Entrée les reconduit. Sans cela, oublier de
+re-cocher un visuel écarté ferait disparaître la partie qui lui correspond, et
+la rédaction qui allait avec. `--no-input` s'en sert aussi, plutôt que des
+valeurs figées du plan. Le fichier se modifie et se supprime à la main ;
+`document.remember_answers: false` désactive la mémoire.
 
 ### Table de données : ce qui est écrit, et ce qui ne l'est pas
 
@@ -240,23 +256,23 @@ y avez mis.
 
 ### Le contrat
 
-> **Le script est propriétaire de ses données, vous êtes propriétaire du
-> reste.**
-
 À chaque génération le script réécrit ce qu'il produit — formule DAX, tableau
 des champs d'un visuel, sources, mesures appelantes — pour qu'il soit toujours
-juste. Tout le reste vous appartient et est recopié tel quel :
+juste. Tout le reste est recopié tel quel :
 
 | Ce que vous faites dans Word | À la regénération |
 | --- | --- |
 | Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
+| Ajouter, renommer ou supprimer un sous-titre d'une partie `seed:` | Conservé tel quel |
 | Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
+| Écrire une description sous un tableau du script, ou entre ses valeurs | Conservée, remise au même endroit |
+| Annoter une ligne **dans** une cellule du tableau du script | Conservée, dans sa cellule |
 | Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
 | Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
 | Changer une mise en forme, un style, ajouter un tableau | Conservés |
-
-Aucune contrainte sur la *manière* de remplir : vous pouvez supprimer le
-paragraphe repère et en créer d'autres, le contenu est repris quand même.
+| Faire une liste à puces ou numérotée | Conservée, numérotation comprise |
+| Appliquer un style que vous avez créé dans le document | Conservé, définition comprise |
+| Poser un commentaire de révision | Conservé, avec son auteur |
 
 ### Ce qui est signalé
 
@@ -264,8 +280,38 @@ paragraphe repère et en créer d'autres, le contenu est repris quand même.
 | --- | --- |
 | La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
 | Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
-| Élément retiré du rapport | Simplement absent du nouveau document |
+| Élément renommé dans Power BI | Reconnu à son état technique : vos textes le suivent |
+| Élément retiré du rapport | Ce que vous y aviez écrit part en annexe (voir ci-dessous) |
 | Bilan | Affiché **en console** en fin de génération |
+
+### Rien ne se perd — l'annexe
+
+Il reste des cas où un texte ne peut pas revenir là où il était : l'élément a
+disparu du rapport, le bloc a été retiré du plan, ou la donnée du script sur
+laquelle vous aviez écrit a été remaniée à la main. Ces contenus ne sont pas
+supprimés : ils sont rassemblés en fin de document, sous « Contenu non
+replacé », avec leur provenance.
+
+```
+Contenu non replacé
+  Retiré du rapport — measure:Ancienne marge
+    <ce que vous aviez écrit là>
+```
+
+Vous reprenez ce qui vous intéresse, puis vous supprimez la partie : elle ne
+revient pas. Tant qu'elle n'est pas vidée, elle se reconduit d'une génération à
+l'autre. Le bilan console dit combien de contenus y ont été déposés.
+
+C'est ce filet qui rend les cas suivants récupérables plutôt que définitifs :
+
+| Ce que vous faites | Où le retrouver |
+| --- | --- |
+| Annoter une ligne du tableau dont les données ont changé | En annexe : l'annotation ne commenterait plus la même chose |
+| Écrire **à la suite** de la donnée du script, dans sa ligne à lui | En annexe — c'est sa ligne, il la réécrit |
+| Corriger à la main une valeur produite par le script | En annexe |
+| Écrire avant la première partie documentée (page de garde, sommaire) | En annexe |
+| Renommer deux mesures de formule identique | En annexe : le rapprochement serait un pari |
+| Écarter un visuel via la question posée au lancement | En annexe |
 
 Le surlignage est retiré à la génération suivante : il signale ce qui a changé
 *depuis le document que vous aviez en main*, pas un état à cocher.
@@ -278,16 +324,14 @@ Le surlignage est retiré à la génération suivante : il signale ce qui a chan
 | Marqueur | Rôle |
 | --- | --- |
 | `pbi::elem\|<id>\|<empreinte>` | Ancre un élément documenté et fige son état technique |
-| `pbi::gen\|<bloc>` … `pbi::endgen` | Encadrent un contenu produit par le script |
-
-Un élément va de son ancre à la suivante. À l'intérieur, ce qui n'est pas
-encadré par `gen` est à vous — c'est là toute la souplesse : le script n'a
-aucune attente sur la forme de ce contenu.
+| `pbi::gen\|<bloc>` … `pbi::endgen\|<empreintes>` | Encadrent un contenu produit par le script. Le marqueur de fin retient l'empreinte de chaque paragraphe et tableau écrits |
+| `pbi::seed\|<bloc>` … `pbi::endseed\|<empreintes>` | Encadrent une **amorce** : un contenu écrit à la première génération, puis laissé à vous. Même forme, politique inverse — c'est la version du document qui l'emporte |
 
 L'identifiant est le `bookmark:` déclaré dans le plan (`measure:<nom>`,
 `visual:<page>:<visuel>`, `page:<page>`, `table:<nom>`), sinon `section:<id>` :
-des identifiants stables issus de Power BI ou du plan. L'empreinte est un
-condensé du `fingerprint:` déclaré à côté :
+des identifiants stables issus de Power BI ou du plan. Une section qui n'a ni
+l'un ni l'autre est repérée par son titre sous la partie qui la contient
+(`<parent>><titre>`). L'empreinte est un condensé du `fingerprint:` déclaré à côté :
 
 ```yaml
 bookmark: "measure:{{ measure.name }}"
@@ -311,6 +355,10 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
   generated: true      # toujours réécrit depuis le YAML
 ```
 
+Une amorce à laquelle personne n'a touché suit le plan : améliorer une
+formulation dans le YAML atteint donc aussi les documents déjà générés. Dès que
+vous y écrivez, c'est votre version qui l'emporte.
+
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
@@ -320,18 +368,25 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
 | `backup` / `backup_dir` | Archive la version précédente avant d'écrire la nouvelle |
 | `highlight_changed` | Couleur des textes d'un élément qui a changé (`yellow`) |
 | `highlight_new` | Couleur de la zone à rédiger d'un nouvel élément (`green`) |
+| `orphans.enabled` | `false` : ne pas écrire l'annexe des contenus non replacés |
+| `orphans.title` / `orphans.intro` | Titre et texte d'explication de cette annexe |
 
 ### Limites connues
 
-- L'ordre suit le plan : si vous déplacez un élément **entier** ailleurs dans
-  le document, il revient à sa place. Vos remaniements *à l'intérieur* d'un
-  élément sont respectés.
-- Une mesure **renommée** dans Power BI est vue comme une suppression suivie
-  d'un ajout : vos textes ne sont pas reportés sur le nouveau nom.
+- L'ordre des **éléments** suit le plan : si vous déplacez un élément entier
+  ailleurs dans le document, il revient à sa place. Vos remaniements *à
+  l'intérieur* d'un élément sont respectés.
+- Une mesure **renommée** dans Power BI est reconnue par son état technique :
+  la formule DAX n'a pas bougé, donc c'est la même mesure, et vos textes la
+  suivent. Le rapprochement n'a lieu que s'il est sans ambiguïté — une seule
+  disparition et une seule apparition portant cette empreinte. Sinon, vos
+  textes vous attendent en annexe.
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
-  et est régénéré.
+  et est régénéré ; ce que vous y aviez ajouté part en annexe. La table des
+  matières fait exception : Word la recalcule à chaque ouverture, elle n'est
+  donc jamais prise pour de la rédaction.
 
-## Template## Template
+## Template
 
 Le plan pointe sur `template-doc-pbib.docx`, qui apporte des styles nommés
 repris par la configuration :
@@ -394,15 +449,11 @@ powerbi-doc-1.0.0-windows.zip
 Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
 double-clique sur l'exe — ou y glisse-dépose son fichier `.pbip`.
 
-> **À construire sous Windows.** PyInstaller ne sait pas produire un `.exe`
-> depuis Linux ou macOS ; il construit pour le système sur lequel il tourne.
-> Le nom de l'archive rappelle la plateforme utilisée.
-
 ### Configuration et template restent modifiables
 
-C'est le principe du projet : le plan est dans le YAML, pas dans le code. Les
-deux fichiers sont donc livrés **en clair à côté de l'exe**, pas seulement
-enfermés dedans. L'utilisateur les édite et relance — sans rien reconstruire.
+Le plan est dans le YAML, pas dans le code. Les deux fichiers sont donc 
+livrés **en clair à côté de l'exe**, pas seulement enfermés dedans. 
+L'utilisateur les édite et relance — sans rien reconstruire.
 
 L'exécutable en embarque tout de même une copie, utilisée si les fichiers
 livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
@@ -411,30 +462,6 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 1. le chemin donné (absolu, ou relatif au dossier courant) ;
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
-
-### Comportement de l'exécutable chez l'utilisateur
-
-**La fenêtre reste ouverte à la fin.** Lancé par double-clic ou par
-glisser-déposer, l'exécutable obtient une console qui se refermerait aussitôt
-le travail terminé — emportant le compte rendu et les éventuelles erreurs. Il
-attend donc une touche avant de rendre la main, y compris lorsqu'il s'arrête
-sur une erreur. La condition est simple : l'attente a lieu dès lors que le
-programme tourne depuis l'exécutable, jamais en développement. `--no-pause` la
-désactive pour une exécution automatisée.
-
-**Le dossier courant n'est pas fiable.** Un glisser-déposer donne à
-l'exécutable un dossier courant sans rapport avec l'endroit où il est
-installé. La configuration et le template sont donc cherchés dans cet ordre
-(`src/paths.py`) :
-
-1. le chemin tel quel — utile en développement ;
-2. à côté du fichier qui le désigne : un template nommé dans une
-   configuration est cherché à côté de cette configuration ;
-3. à côté de l'exécutable — le cas normal en distribution ;
-4. à l'intérieur de l'exécutable — copie de secours.
-
-Si le template reste introuvable, le message d'erreur énumère les emplacements
-consultés.
 
 ### Étapes séparées
 
@@ -463,6 +490,7 @@ src/
   cli/
       arguments.py            options de la ligne de commande
       prompts.py              questions déclarées dans `inputs:`
+      answers.py              mémoire des réponses d'une génération à l'autre
 
   config/
       defaults.py             valeurs par défaut de la configuration
@@ -478,8 +506,11 @@ src/
       markers.py              marqueurs invisibles posés dans le document
       blocks.py               découpage du corps en blocs ancrés
       previous.py             relecture du document précédent
+      salvage.py              textes retrouvés dans un contenu du script
+      cells.py                annotations retrouvées dans un tableau du script
       smart.py                fusion : données du script, reste de l'utilisateur
-      transplant.py           recopie d'un contenu et de ses images
+      orphans.py              annexe des contenus qui n'ont plus de place
+      transplant.py           recopie d'un contenu et de ce dont il dépend
       changes.py              bilan des ajouts / modifications / retraits
 
   parsers/
@@ -510,7 +541,7 @@ src/
           fields.py             table des matières, en-têtes, pieds de page
           word_app.py           recalcul des champs par Word (optionnel)
 
-tests/                        tests unitaires (231)
+tests/                        tests unitaires
 tools/package.py              assemblage du dossier distribué
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
@@ -526,6 +557,7 @@ template-doc-pbib.docx        template Word
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
 | ajouter un type de question | `cli/prompts.py` → `ask_inputs` |
+| changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 

@@ -8,7 +8,7 @@ from docx import Document
 from docx.oxml.ns import qn
 
 from src import console
-from src.merge import CHANGED, NEW, UNCHANGED, ChangeLog, markers, read_previous
+from src.merge import CHANGED, NEW, UNCHANGED, ChangeLog, markers, read_previous, salvage
 from src.merge import blocks as block_parser
 from src.merge.blocks import FREE, OWNED
 from src.merge.previous import PreviousDocument
@@ -25,8 +25,10 @@ class MarkerFormatTest(unittest.TestCase):
         self.assertEqual(markers.parse(markers.element("visual:p:v", "d1")).value, "visual:p:v")
 
     def test_contenu_genere(self):
-        self.assertEqual(markers.parse(markers.generated("mesure_code")).value, "mesure_code")
-        self.assertEqual(markers.parse(markers.generated_end()).kind, "endgen")
+        self.assertEqual(
+            markers.parse(markers.opening(markers.GENERATED, "mesure_code")).value, "mesure_code"
+        )
+        self.assertEqual(markers.parse(markers.closing(markers.GENERATED)).kind, "endgen")
 
     def test_texte_ordinaire_non_reconnu(self):
         self.assertIsNone(markers.parse("Chiffre d'affaires"))
@@ -48,7 +50,7 @@ class MarkerFormatTest(unittest.TestCase):
 
     def test_marqueur_relu_depuis_le_xml(self):
         doc = Document()
-        markers.write(doc, markers.generated("mesure_code"))
+        markers.write(doc, markers.opening(markers.GENERATED, "mesure_code"))
         self.assertEqual(markers.of(doc.paragraphs[-1]._p).value, "mesure_code")
 
     def test_paragraphe_ordinaire_sans_marqueur(self):
@@ -64,9 +66,9 @@ class BlockParsingTest(unittest.TestCase):
         markers.write(doc, markers.element("measure:Marge", "empreinte1"))
         doc.add_paragraph("Marge — titre reformulé")
         doc.add_paragraph("Note de l'utilisateur")
-        markers.write(doc, markers.generated("mesure_code"))
+        markers.write(doc, markers.opening(markers.GENERATED, "mesure_code"))
         doc.add_paragraph("DIVIDE([A], [B])")
-        markers.write(doc, markers.generated_end())
+        markers.write(doc, markers.closing(markers.GENERATED))
         doc.add_paragraph("Explication libre")
         markers.write(doc, markers.element("measure:CA", "empreinte2"))
         doc.add_paragraph("CA")
@@ -82,7 +84,7 @@ class BlockParsingTest(unittest.TestCase):
         self.assertEqual(self.blocks[1].fingerprint, "empreinte1")
 
     def test_contenu_du_script_isole(self):
-        self.assertEqual(self.blocks[1].owned_ids, ["mesure_code"])
+        self.assertEqual(self.blocks[1].block_ids, ["mesure_code"])
 
     def test_tout_le_reste_appartient_a_l_utilisateur(self):
         free = [
@@ -103,6 +105,76 @@ class BlockParsingTest(unittest.TestCase):
 
     def test_index_ecarte_le_contenu_hors_ancre(self):
         self.assertEqual(sorted(block_parser.index(self.blocks)), ["measure:CA", "measure:Marge"])
+
+
+class SalvageTest(unittest.TestCase):
+    """Ce que l'utilisateur a écrit à l'intérieur d'un contenu du script."""
+
+    # Ce que le script avait écrit : un sous-titre, une valeur, une ligne vide.
+    WRITTEN = ("Champs", "Ventes[Montant]", "")
+
+    def _digests(self) -> list[str]:
+        doc = Document()
+        for text in self.WRITTEN:
+            doc.add_paragraph(text)
+        return [markers.digest(paragraph._p) for paragraph in doc.paragraphs]
+
+    def _segment(self, *contents: str, forget: bool = False):
+        """Segment relu dans le document, `contents` étant ce qu'on y trouve."""
+        doc = Document()
+        markers.write(doc, markers.opening(markers.GENERATED, "champs"))
+        for text in contents:
+            if text == "[tableau]":
+                doc.add_table(rows=1, cols=1).cell(0, 0).text = "Ventes[Montant]"
+            else:
+                doc.add_paragraph(text)
+        # Un document produit par une version antérieure : marqueur de fin nu.
+        markers.write(
+            doc, "pbi::endgen" if forget else markers.closing(markers.GENERATED, self._digests())
+        )
+
+        blocks = block_parser.parse(block_parser.body_nodes(doc))
+        return blocks[0].segments[0]
+
+    def _salvaged(self, segment) -> list[tuple[int, str]]:
+        return [
+            (rank, "".join(t.text or "" for t in node.iter(qn("w:t"))))
+            for rank, node in salvage.of(segment)
+        ]
+
+    def test_rien_a_recuperer_quand_le_script_se_retrouve(self):
+        self.assertEqual(self._salvaged(self._segment(*self.WRITTEN)), [])
+
+    def test_texte_ecrit_dans_la_ligne_laissee_vide(self):
+        segment = self._segment("Champs", "Ventes[Montant]", "Lecture du tableau.")
+        self.assertEqual(self._salvaged(segment), [(2, "Lecture du tableau.")])
+
+    def test_paragraphe_ajoute_au_milieu(self):
+        segment = self._segment("Champs", "Une remarque.", "Ventes[Montant]", "")
+        self.assertEqual(self._salvaged(segment), [(1, "Une remarque.")])
+
+    def test_donnee_du_script_remaniee_a_la_main_abandonnee(self):
+        """Le script reste propriétaire de ses données, même retouchées."""
+        self.assertEqual(self._salvaged(self._segment("Champs", "Ventes[Autre]", "")), [])
+
+    def test_donnee_remaniee_et_note_ajoutee(self):
+        segment = self._segment("Champs", "Ventes[Autre]", "Ma note.", "")
+        self.assertEqual(self._salvaged(segment), [(1, "Ma note.")])
+
+    def test_valeur_disparue_du_script_abandonnee(self):
+        self.assertEqual(self._salvaged(self._segment("Champs", "")), [])
+
+    def test_ligne_vide_ajoutee_ignoree(self):
+        segment = self._segment("Champs", "Ventes[Montant]", "", "")
+        self.assertEqual(self._salvaged(segment), [])
+
+    def test_version_anterieure_sans_tableau_ne_devine_rien(self):
+        segment = self._segment("Champs", "Ventes[Montant]", "Ma note.", forget=True)
+        self.assertEqual(self._salvaged(segment), [])
+
+    def test_version_anterieure_rend_ce_qui_suit_le_tableau(self):
+        segment = self._segment("Champs", "[tableau]", "Lecture du tableau.", forget=True)
+        self.assertEqual(self._salvaged(segment), [(2, "Lecture du tableau.")])
 
 
 class ReadPreviousTest(unittest.TestCase):

@@ -5,23 +5,29 @@ Les questions ne sont pas codées ici : elles sont déclarées dans la section
 `inputs:` de la configuration. Ce module se contente de les afficher selon leur
 `type` (text, textarea, confirm, choice, multi_choice) et de collecter les
 réponses.
+
+La valeur proposée est celle de la génération précédente quand il y en a une
+(voir `cli.answers`), sinon le `default:` du plan : on valide d'un Entrée.
 """
 
 from typing import Any
 
 from src import console
-from src.config import DocConfig, render, resolve_items
+from src.config import DocConfig, evaluate, render, resolve_items
 
 # Callback proposant de réécrire le texte d'un bloc `editable`.
 TextProvider = Any
 
 
-def ask_inputs(config: DocConfig, base_context: dict[str, Any]) -> dict[str, Any]:
+def ask_inputs(
+    config: DocConfig, base_context: dict[str, Any], remembered: dict[str, Any] | None = None
+) -> dict[str, Any]:
     """Pose les questions déclarées dans la configuration."""
     if not config.inputs:
         return {}
 
     console.step("Renseignements")
+    remembered = remembered or {}
 
     answers: dict[str, Any] = {}
     for item in config.inputs:
@@ -34,32 +40,58 @@ def ask_inputs(config: DocConfig, base_context: dict[str, Any]) -> dict[str, Any
         kind = item.get("type", "text")
 
         options = resolve_items(item.get("options"), context)
+        # La réponse d'hier est reprise telle quelle — c'est du texte de
+        # l'utilisateur. Le `default:` du plan, lui, est une expression : il
+        # est substitué, faute de quoi c'est `{{ ... }}` qui s'écrirait dans le
+        # document.
+        proposed = remembered[key] if key in remembered else _rendered(item.get("default"), context)
 
         if kind == "confirm":
-            answers[key] = ask_confirm(label, bool(item.get("default", False)))
+            answers[key] = ask_confirm(label, evaluate(proposed, context))
         elif kind == "choice":
-            answers[key] = _ask_choice(label, options, item.get("default"))
+            answers[key] = _ask_choice(label, options, proposed)
         elif kind == "multi_choice":
-            answers[key] = _ask_multi_choice(label, options, item.get("default") or [])
+            answers[key] = _ask_multi_choice(label, options, _as_list(proposed))
         else:
-            default = render(item.get("default"), context)
-            answers[key] = _ask_text(label, default, multiline=(kind == "textarea"))
+            answers[key] = _ask_text(label, proposed, multiline=(kind == "textarea"))
 
     console.blank()
     return answers
 
 
-def default_inputs(config: DocConfig, base_context: dict[str, Any]) -> dict[str, Any]:
-    """Valeurs par défaut des `inputs`, utilisées en mode non interactif."""
+def default_inputs(
+    config: DocConfig, base_context: dict[str, Any], remembered: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """
+    Réponses retenues sans rien demander (`--no-input`).
+
+    Celles de la génération précédente d'abord : une exécution automatisée
+    reconduit ainsi les choix faits la dernière fois, plutôt que de repartir des
+    valeurs figées du plan et de défaire le document.
+    """
+    remembered = remembered or {}
     answers: dict[str, Any] = {}
     for item in config.inputs:
         key = item.get("id")
         if not key:
             continue
-        value = item.get("default")
+        if key in remembered:
+            answers[key] = remembered[key]
+            continue
         context = {**base_context, "inputs": answers}
-        answers[key] = render(value, context) if isinstance(value, str) else value
+        answers[key] = _rendered(item.get("default"), context)
     return answers
+
+
+def _rendered(value: Any, context: dict[str, Any]) -> Any:
+    """Valeur par défaut du plan, ses `{{ ... }}` substitués."""
+    return render(value, context) if isinstance(value, str) else value
+
+
+def _as_list(value: Any) -> list[Any]:
+    if value is None:
+        return []
+    return list(value) if isinstance(value, (list, tuple, set)) else [value]
 
 
 def make_text_provider(enabled: bool):
@@ -108,7 +140,8 @@ def _ask_text(label: str, default: str, multiline: bool = False) -> str:
 def _ask_choice(label: str, options: list[Any], default: Any) -> Any:
     print(f"  {label}")
     for index, option in enumerate(options, start=1):
-        print(f"    {index}. {option}")
+        retained = "  ←" if default is not None and option == default else ""
+        print(f"    {index}. {option}{retained}")
 
     answer = input(f"  Choix [1-{len(options)}] : ").strip()
     if answer.isdigit() and 1 <= int(answer) <= len(options):
@@ -122,15 +155,22 @@ def _ask_multi_choice(label: str, options: list[Any], default: list[Any]) -> lis
 
     Sans option à proposer, la question n'est pas posée — il n'y a rien à
     choisir dans ce rapport.
+
+    Une réponse vide reconduit la sélection précédente : c'est le geste le plus
+    naturel, et il ne doit rien défaire.
     """
     if not options:
         return list(default)
 
     print(f"  {label}")
     for index, option in enumerate(options, start=1):
-        print(f"    {index}. {option}")
+        retained = "  ←" if option in default else ""
+        print(f"    {index}. {option}{retained}")
 
-    answer = input("  Numéros séparés par une virgule (vide = aucun) : ").strip()
+    # Les réponses de la dernière génération sont marquées d'une flèche : les
+    # reconduire d'un Entrée évite de faire disparaître une partie déjà rédigée.
+    keep = f"vide = {'inchangé' if default else 'aucun'}"
+    answer = input(f"  Numéros séparés par une virgule ({keep}) : ").strip()
     if not answer:
         return list(default)
 
