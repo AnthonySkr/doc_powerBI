@@ -271,13 +271,24 @@ class DocumentBuilder:
             )
 
         shown = block.get("show_placeholder", options.get("show_placeholder"))
-        text = (
-            render(block.get("placeholder_text") or options.get("placeholder_text"), context)
-            if shown
-            else ""
-        )
+        text = self._user_fill_text(block, context, options) if shown else ""
         style = block.get("style") or options.get("style") or "todo"
         self.doc.add_paragraph(text, style=self.styles.paragraph(style))
+
+    def _user_fill_text(
+        self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
+    ) -> str:
+        """
+        Amorce d'une zone à rédiger.
+
+        Le bloc du plan dit ce qu'on attend à cet endroit (`hint:`) : autant
+        l'écrire, plutôt qu'un « [À compléter] » qui ne guide personne. Même
+        mise en forme dans les deux cas — c'est la même invitation à écrire.
+        """
+        hint = render(block.get("hint"), context)
+        if hint:
+            return str(options.get("hint_format", "[{hint}]")).format(hint=hint)
+        return render(block.get("placeholder_text") or options.get("placeholder_text"), context)
 
     def _write_property(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Sous-titre + valeur, ou sous-titre + liste de valeurs."""
