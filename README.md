@@ -51,6 +51,44 @@ Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
 capture correspondante une fois le document généré.
 
+### Captures : numéros de figure et repères
+
+**Le numéro d'une légende est un champ Word**, pas un texte. Supprimer une
+capture dont vous n'avez pas l'usage renumérote donc les suivantes toutes
+seules : à la prochaine ouverture du document, ou tout de suite avec Ctrl+A
+puis F9. Rien à reprendre à la main. `rendering.image_placeholder.numbering`
+donne le choix : `auto` (le champ), `fixed` (numéro figé à la génération) ou
+`false` (pas de numéro).
+
+**Les numéros des tableaux sont dessinés sous la capture**, une pastille par
+ligne, prêtes à être posées sur l'image : attrapez-en une à la souris et
+déposez-la sur l'indicateur correspondant — les flèches du clavier l'ajustent
+au pixel près. Ce sont des formes flottantes : elles passent par-dessus la
+capture sans déplacer une ligne du document. Une fois déplacée, une pastille
+reste où vous l'avez mise, régénération comprise.
+
+Un bloc `image` du plan les demande en désignant la liste à numéroter — la
+même que le tableau qui suit la capture :
+
+```yaml
+- type: image
+  id: visuel_capture
+  description: "Capture du visuel « {{ visual.title }} »"
+  markers:
+    over: visual.references
+    item: ref
+    label: "{{ ref.number }}"
+```
+
+Leur aspect (taille, couleur, forme, nombre par rangée) se règle une fois pour
+toutes sous `rendering.image_placeholder.markers`. Un bloc `image` sans
+`markers:` n'en reçoit aucune — c'est le cas des captures d'illustration.
+
+> À savoir : si les champs d'un visuel changent **après** que vous avez placé
+> ses pastilles, la rangée n'est pas refaite (ce serait défaire votre travail).
+> Le tableau, lui, est à jour : dupliquez une pastille pour le numéro qui
+> manque. Le titre du visuel est de toute façon surligné en jaune dans ce cas.
+
 ### Groupes de visuels
 
 Les visuels regroupés dans Power BI (`parentGroupName` d'un `visual.json`) sont
@@ -103,7 +141,7 @@ Types de blocs :
 | Type | Effet |
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
-| `image` | Emplacement réservé pour une capture, avec sa description |
+| `image` | Emplacement réservé pour une capture, avec sa description ; `markers:` y ajoute les repères numérotés à glisser sur l'image |
 | `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `hint:` remplace cette amorce par ce qu'on attend à cet endroit ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
@@ -268,6 +306,8 @@ juste. Tout le reste est recopié tel quel :
 | Écrire une description sous un tableau du script, ou entre ses valeurs | Conservée, remise au même endroit |
 | Annoter une ligne **dans** une cellule du tableau du script | Conservée, dans sa cellule |
 | Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
+| Déplacer un repère numéroté sur la capture | Conservé, à l'endroit exact |
+| Supprimer une capture dont vous n'avez pas l'usage | Les numéros de figure suivants se renumérotent seuls |
 | Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
 | Changer une mise en forme, un style, ajouter un tableau | Conservés |
 | Faire une liste à puces ou numérotée | Conservée, numérotation comprise |
@@ -538,7 +578,8 @@ src/
           styles.py             clés de style → styles du template
           links.py              signets et liens internes
           tables.py             réglages OOXML des tableaux
-          fields.py             table des matières, en-têtes, pieds de page
+          shapes.py             repères numérotés à glisser sur une capture
+          fields.py             champs Word : sommaire, numéros de figure, en-têtes
           word_app.py           recalcul des champs par Word (optionnel)
 
 tests/                        tests unitaires

@@ -6,14 +6,15 @@ et les `blocks` de la configuration et écrit ce qu'elles décrivent, à la suit
 du contenu déjà présent dans le template.
 """
 
+import math
 from collections.abc import Callable
 from typing import Any
 
-from docx.shared import Cm
+from docx.shared import Cm, Emu, Pt
 
 from src import console
 from src.config import DocConfig, evaluate, render, render_list, resolve_items
-from src.generators.word import fields, tables
+from src.generators.word import fields, shapes, tables
 from src.generators.word.links import LinkIndex
 from src.generators.word.merging import MergeWriter
 from src.generators.word.styles import StyleResolver
@@ -42,6 +43,9 @@ class DocumentBuilder:
         self.links = LinkIndex(config, context, self.styles.ids)
         self.merge = MergeWriter(doc, config, previous)
         self._figure_number = 0
+        # Word refuse deux formes de même identifiant : la numérotation des
+        # repères reprend au-dessus de ce que le template contient déjà.
+        self._shape_id = shapes.last_id(doc)
 
         self._block_writers = {
             "paragraph": self._write_paragraph,
@@ -234,23 +238,102 @@ class DocumentBuilder:
         """Réserve l'emplacement d'une capture, avec sa description."""
         options = self.config.rendering["image_placeholder"]
         description = render(block.get("description"), context)
+        numbering = _numbering_mode(options.get("numbering"))
 
-        if options.get("numbering"):
+        if numbering != "none":
             self._figure_number += 1
 
+        number = str(self._figure_number) if numbering != "none" else ""
         text = str(options.get("text_format", "[IMAGE] {description}")).format(
-            description=description, n=self._figure_number
+            description=description, n=number
         )
         self.doc.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
 
         if options.get("show_caption"):
-            caption = str(options.get("caption_format", "{description}")).format(
-                description=description, n=self._figure_number
-            )
-            self.doc.add_paragraph(caption, style=self.styles.paragraph("caption"))
+            self._write_caption(options, description, number, numbering)
+
+        self._write_markers(block, context, options)
 
         if options.get("empty_paragraph_after"):
             self.doc.add_paragraph()
+
+    def _write_caption(
+        self, options: dict[str, Any], description: str, number: str, numbering: str
+    ) -> None:
+        """
+        Légende numérotée de la capture.
+
+        Le numéro est un champ Word (`SEQ`), pas un texte : supprimer une
+        capture renumérote les suivantes à l'ouverture du document, sans
+        reprise à la main. `numbering: fixed` le fige dans le texte, pour un
+        document destiné à un lecteur qui ne recalcule pas les champs.
+        """
+        template = str(options.get("caption_format", "{description}"))
+        values = {"description": description, "n": number}
+        paragraph = self.doc.add_paragraph(style=self.styles.paragraph("caption"))
+
+        head, field, tail = template.partition("{n}")
+        if numbering != "auto" or not field:
+            paragraph.add_run(template.format(**values))
+            return
+
+        paragraph.add_run(head.format(**values))
+        fields.write_sequence_field(paragraph, str(options.get("sequence") or "Figure"), number)
+        paragraph.add_run(tail.format(**values))
+
+    def _write_markers(
+        self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
+    ) -> None:
+        """
+        Repères numérotés à faire glisser sur la capture.
+
+        Les numéros sont ceux du tableau qui suit la capture — le plan désigne
+        la même liste. Ils sont posés en rangée sous l'emplacement, et n'ont
+        plus qu'à être déplacés un à un sur l'image : ce sont des formes
+        flottantes, elles ne bousculent rien en route.
+        """
+        plan = block.get("markers")
+        if not plan:
+            return
+
+        item = plan.get("item") or "item"
+        labels = [
+            render(plan.get("label") or f"{{{{ {item}.number }}}}", {**context, item: value})
+            for value in resolve_items(plan.get("over"), context)
+        ]
+        labels = [label for label in labels if label]
+        if not labels:
+            return
+
+        look = options.get("markers") or {}
+        size = Cm(float(look.get("size_cm", 0.62)))
+        spacing = Cm(float(look.get("spacing_cm", 0.9)))
+        line = Cm(float(look.get("line_cm", 0.9)))
+        per_row = max(int(look.get("per_row", 12) or 1), 1)
+
+        paragraph = self.doc.add_paragraph(style=self.styles.paragraph(look.get("style")))
+        # Les repères flottent : sans hauteur réservée, ils déborderaient sur
+        # le tableau qui suit. Le paragraphe porte donc celle de leurs rangées.
+        paragraph.paragraph_format.line_spacing = Emu(int(line) * math.ceil(len(labels) / per_row))
+        paragraph.paragraph_format.space_before = Pt(0)
+        paragraph.paragraph_format.space_after = Pt(0)
+
+        positions = shapes.row_positions(len(labels), spacing, per_row, line)
+        for label, (left, top) in zip(labels, positions):
+            self._shape_id += 1
+            paragraph._p.append(
+                shapes.marker(
+                    label,
+                    self._shape_id,
+                    left,
+                    top,
+                    size,
+                    shape=str(look.get("shape") or "ellipse"),
+                    fill=str(look.get("fill") or "0070C0"),
+                    text_color=str(look.get("text_color") or "FFFFFF"),
+                    font_size=Pt(float(look.get("font_size_pt", 9))),
+                )
+            )
 
     def _write_user_fill(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """
@@ -498,6 +581,20 @@ class DocumentBuilder:
         if not self.links.auto.get("in_code", True):
             return style_name != self.styles.paragraph("code")
         return True
+
+
+def _numbering_mode(value: Any) -> str:
+    """
+    Mode de numérotation des figures : `auto`, `fixed` ou `none`.
+
+    `auto` confie le numéro à un champ Word, qui le tient à jour lui-même —
+    c'est le comportement voulu dans la quasi-totalité des cas. Les anciens
+    plans écrivaient un booléen : `true` vaut `auto`, `false` vaut `none`.
+    """
+    if isinstance(value, bool) or value is None:
+        return "auto" if value is not False else "none"
+    mode = str(value).strip().lower()
+    return mode if mode in ("auto", "fixed", "none") else "auto"
 
 
 def _header_footer_parts(section) -> dict[str, tuple]:
