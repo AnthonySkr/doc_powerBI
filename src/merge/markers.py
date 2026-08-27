@@ -37,9 +37,10 @@ aussi. C'est la seconde qui décide de la mise en page — masquer le seul texte
 laisse la ligne vide et l'écart d'après-paragraphe du style, quelques
 millimètres par marqueur et une bonne respiration de trop entre deux blocs.
 Marque masquée, Word joint le paragraphe au suivant : le marqueur ne prend
-plus aucune place. Et quand l'utilisateur affiche le texte masqué pour voir
-ce que le script a posé, le paragraphe est déjà réduit au minimum — 1 pt,
-sans écart ni interligne (voir `collapse`).
+plus aucune place. Restent les écarts nuls et la petite taille du texte : ils
+ne servent qu'au moment où l'utilisateur affiche le texte masqué pour voir ce
+que le script a posé — les marqueurs y sont lisibles sans écarter le document
+(voir `collapse`).
 """
 
 import hashlib
@@ -76,9 +77,14 @@ _PARAGRAPH = qn("w:p")
 _RUN_PROPERTIES = qn("w:rPr")
 _SECTION = qn("w:sectPr")
 
-# Taille du texte d'un marqueur, et hauteur de sa ligne : le minimum que Word
-# accepte. Elle ne se voit que si l'utilisateur affiche le texte masqué.
-_MARKER_SIZE = Pt(1)
+# Taille du texte d'un marqueur. Elle ne se voit qu'en affichage du texte
+# masqué : le reste du temps le paragraphe n'existe pas pour la mise en page,
+# on peut donc la garder lisible plutôt que minuscule.
+_MARKER_SIZE = Pt(5)
+
+# Hauteur de sa ligne, fixée un peu au-dessus du texte : à l'exacte taille de
+# la police, Word rogne le haut des caractères.
+_MARKER_LINE = Pt(6)
 
 # Contenus qui ne laissent aucun texte derrière eux : image, objet incorporé,
 # forme dessinée. Un paragraphe qui n'en porte pas et n'a pas de texte est vide.
@@ -256,7 +262,7 @@ def write(doc, text: str):
 
 
 def hide(run) -> None:
-    """Applique l'attribut « masqué » à un run, et le réduit à 1 pt."""
+    """Applique l'attribut « masqué » à un run, et le réduit à la taille d'un marqueur."""
     _vanish(run._r.get_or_add_rPr())
 
 
@@ -271,9 +277,9 @@ def collapse(node) -> None:
     ligne entière : Word joint le paragraphe au suivant tant que l'affichage du
     texte masqué est désactivé.
 
-    Le reste — écarts nuls, interligne fixé à 1 pt — vaut pour le moment où
-    l'utilisateur affiche le texte masqué : les marqueurs se voient alors, mais
-    sans écarter le document qu'ils encadrent.
+    Le reste — écarts nuls, interligne fixe — vaut pour le moment où
+    l'utilisateur affiche le texte masqué : les marqueurs se voient alors, en
+    petit mais lisibles, sans écarter le document qu'ils encadrent.
 
     Rien n'est demandé au template : un marqueur ne doit pas dépendre d'un
     style que le document de l'utilisateur pourrait ne pas avoir.
@@ -283,7 +289,7 @@ def collapse(node) -> None:
     spacing = properties.get_or_add_spacing()
     spacing.set(qn("w:before"), "0")
     spacing.set(qn("w:after"), "0")
-    spacing.set(qn("w:line"), str(_MARKER_SIZE.twips))
+    spacing.set(qn("w:line"), str(_MARKER_LINE.twips))
     spacing.set(qn("w:lineRule"), "exact")
 
     _vanish(_mark_properties(properties))
@@ -318,7 +324,7 @@ def _mark_properties(properties):
 
 
 def _vanish(properties) -> None:
-    """Masque un texte et le réduit à 1 pt, marque de paragraphe comprise."""
+    """Masque un texte et le met à la taille d'un marqueur, marque de paragraphe comprise."""
     properties.get_or_add_vanish()
     properties.get_or_add_sz().val = _MARKER_SIZE
 
