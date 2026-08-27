@@ -251,12 +251,17 @@ class _Merger:
         parmi les contenus du bloc, et non par l'ordre des tableaux : un bloc
         qui en écrit plusieurs verrait sinon l'annotation du second reposée
         dans le premier.
+
+        Une donnée que le script réécrit à l'identique est écartée d'abord :
+        elle n'a pas été retouchée, c'est son empreinte qui n'a pas survécu au
+        passage dans Word (voir `_rewritten`).
         """
         tables = {rank: node for rank, node in enumerate(content) if node.tag == _TABLE}
         return [
             node
             for rank, node in retouched
-            if not (
+            if not _rewritten(node, content)
+            and not (
                 node.tag == _TABLE  # type: ignore
                 and rank in tables
                 and cells.reconcile(node, tables[rank], self.transplanter.copy)
@@ -389,6 +394,26 @@ def _weave(old_ids: list[str], fresh_ids: list[str]) -> list[str]:
     for remaining in following.values():
         order += remaining
     return order
+
+
+def _rewritten(node, content: list) -> bool:
+    """
+    La donnée retrouvée est-elle celle que le script vient d'écrire à nouveau ?
+
+    L'empreinte relevée à la génération précédente est le seul témoin de ce que
+    le script avait posé, et elle ne survit pas à tout : Word recoupe les runs,
+    perd une espace de bord, réécrit un lien interne sous forme de champ. La
+    donnée passe alors pour retouchée à la main, et sa version d'avant part en
+    annexe — un code DAX auquel personne n'a touché, recopié en fin de document
+    à chaque génération.
+
+    Le contenu du bloc neuf, lui, est là : si le script s'apprête à réécrire ce
+    même contenu, il n'y a rien à recueillir. La comparaison porte sur le bloc
+    entier plutôt que sur le seul rang correspondant — le nombre de contenus
+    qu'un bloc écrit peut avoir changé entre deux versions du plan, et ce qui
+    compte est qu'aucun texte ne se perde.
+    """
+    return any(markers.same_content(node, fresh) for fresh in content)
 
 
 def _renames(fresh: list[Block], old: dict[str, Block]) -> list[tuple[str, str]]:

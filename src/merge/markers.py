@@ -110,6 +110,14 @@ _FIELDS = (qn("w:fldChar"), qn("w:instrText"), qn("w:fldSimple"), qn("w:sdt"))
 _FIELD_CHAR = qn("w:fldChar")
 _FIELD_CHAR_TYPE = qn("w:fldCharType")
 _SIMPLE_FIELD = qn("w:fldSimple")
+_INSTRUCTION_TEXT = qn("w:instrText")
+_INSTRUCTION = qn("w:instr")
+
+# Champs dont le résultat ne bouge pas : Word ne le recalcule jamais. Un lien
+# en fait partie — son libellé est le texte que le script a posé. Word réécrit
+# volontiers un lien interne sous cette forme ; l'écarter de l'empreinte ferait
+# passer pour rédigé un contenu auquel personne n'a touché.
+_STABLE_FIELDS = ("HYPERLINK",)
 
 
 @dataclass(frozen=True)
@@ -222,31 +230,82 @@ def _floats_over(element, node) -> bool:
 
 def written_text(node) -> str:
     """
-    Le texte de l'élément, sans ce que Word calcule lui-même.
+    Le texte de l'élément, sans ce que Word recalcule lui-même.
 
     Le résultat d'un champ — numéro de figure, renvoi, numéro de page — change
     d'une ouverture à l'autre sans que personne n'y touche. Le retenir ferait
     passer pour rédigée une légende que Word vient simplement de renuméroter.
+
+    Un lien fait exception. Word réécrit volontiers un lien interne sous forme
+    de champ `HYPERLINK`, mais son résultat est le libellé posé par le script,
+    et il ne bouge plus : l'écarter ferait passer pour retouché un code DAX
+    dont Word a seulement changé la façon d'écrire les liens.
     """
     parts: list[str] = []
-    depth = 0
-    for element in node.iter(_TEXT, _FIELD_CHAR):
+    # Champs ouverts, du plus englobant au plus imbriqué : chacun retient son
+    # instruction, puis si son résultat compte comme du texte écrit.
+    fields: list[list] = []
+
+    for element in node.iter(_TEXT, _FIELD_CHAR, _INSTRUCTION_TEXT):
         if element.tag == _FIELD_CHAR:
             kind = element.get(_FIELD_CHAR_TYPE)
             if kind == "begin":
-                depth += 1
-            elif kind == "end":
-                depth = max(depth - 1, 0)
-        elif depth == 0 and not _inside_simple_field(element, node):
+                fields.append(["", False])
+            elif kind == "separate" and fields:
+                # L'instruction est complète : elle dit si ce qui suit est un
+                # texte écrit une fois pour toutes ou un calcul de Word.
+                fields[-1][1] = _is_stable(fields[-1][0])
+            elif kind == "end" and fields:
+                fields.pop()
+        elif element.tag == _INSTRUCTION_TEXT:
+            if fields:
+                fields[-1][0] += element.text or ""
+        elif all(stable for _, stable in fields) and not _recomputed_field(element, node):
             parts.append(element.text or "")
+
     return "".join(parts)
 
 
-def _inside_simple_field(element, root) -> bool:
-    """Le nœud est-il dans un champ de forme condensée (`w:fldSimple`) ?"""
+def same_content(left, right) -> bool:
+    """
+    Deux éléments portent-ils le même contenu, aux retouches de Word près ?
+
+    L'empreinte relevée à l'écriture ne survit pas à tout : Word recoupe les
+    runs, perd une espace de bord, réécrit un lien interne sous forme de champ.
+    Rien de tout cela n'est un geste de l'utilisateur, et la fusion doit
+    pouvoir reconnaître, dans le document relu, la donnée qu'elle s'apprête à
+    réécrire à l'identique.
+
+    La comparaison est donc volontairement tolérante : les espaces ne comptent
+    pas — une différence qui ne tient qu'à elles ne vaut pas la peine d'être
+    archivée — et les deux lectures du texte sont acceptées, avec et sans les
+    résultats de champs, puisque Word peut avoir changé de forme entre les deux
+    générations. Ce qui relève du geste de l'utilisateur, en revanche, se voit :
+    une capture collée dans une donnée du script n'est pas la même chose que la
+    donnée seule, et un repère qu'on a fait glisser non plus.
+    """
+    if has_picture(left) != has_picture(right) or _positions(left) != _positions(right):
+        return False
+    return _squeezed(written_text(left)) == _squeezed(written_text(right)) or _squeezed(
+        text(left)
+    ) == _squeezed(text(right))
+
+
+def _squeezed(value: str) -> str:
+    """Le texte débarrassé de toutes ses espaces."""
+    return "".join((value or "").split())
+
+
+def _is_stable(instruction: str) -> bool:
+    """Le résultat de ce champ est-il un texte écrit, que Word ne recalcule pas ?"""
+    return (instruction or "").strip().upper().startswith(_STABLE_FIELDS)
+
+
+def _recomputed_field(element, root) -> bool:
+    """Le nœud est-il dans un champ de forme condensée (`w:fldSimple`) recalculé ?"""
     parent = element.getparent()
     while parent is not None and parent is not root:
-        if parent.tag == _SIMPLE_FIELD:
+        if parent.tag == _SIMPLE_FIELD and not _is_stable(parent.get(_INSTRUCTION)):
             return True
         parent = parent.getparent()
     return False
