@@ -25,6 +25,13 @@ relecture, on compare :
 Un paragraphe vide n'est pas une donnée : ce qu'on y écrit ne remplace rien et
 appartient donc à l'utilisateur.
 
+L'empreinte ne survit pas à tout : en enregistrant, Word recoupe les runs, perd
+une espace de bord, réécrit un lien interne sous forme de champ. Une donnée
+intacte passe alors pour remaniée. La fusion tranche donc en dernier ressort
+sur le contenu du bloc neuf, qu'elle a sous la main : ce que le script
+s'apprête à réécrire à l'identique n'a pas été retouché (voir
+`merge.smart._rewritten`).
+
 Chaque contenu récupéré revient avec sa place — le rang qu'il occupait parmi
 les contenus du script — pour être reposé au même endroit : les données
 techniques restent où elles sont, le reste retrouve son voisinage.

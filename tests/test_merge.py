@@ -5,6 +5,7 @@ import tempfile
 import unittest
 
 from docx import Document
+from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
@@ -93,6 +94,108 @@ class MarkerFormatTest(unittest.TestCase):
         doc = Document()
         doc.add_paragraph("Texte libre")
         self.assertIsNone(markers.of(doc.paragraphs[-1]._p))
+
+
+class FieldDigestTest(unittest.TestCase):
+    """
+    Ce que Word recalcule ne compte pas dans l'empreinte — sauf un lien, dont le
+    résultat est le libellé que le script a posé une fois pour toutes.
+    """
+
+    def paragraph(self, instruction: str, result: str):
+        document = Document()
+        paragraph = document.add_paragraph()
+        paragraph.add_run("Marge = ")
+        for node in (
+            _field_char("begin"),
+            _instruction(instruction),
+            _field_char("separate"),
+            _run(result),
+            _field_char("end"),
+        ):
+            paragraph._p.append(node)
+        return paragraph._p
+
+    def test_numero_recalcule_ecarte(self):
+        node = self.paragraph(" SEQ Figure \\* ARABIC ", "12")
+        self.assertEqual(markers.written_text(node), "Marge = ")
+
+    def test_libelle_d_un_lien_conserve(self):
+        node = self.paragraph(' HYPERLINK \\l "measure_CA" ', "CA")
+        self.assertEqual(markers.written_text(node), "Marge = CA")
+
+    def test_lien_reecrit_en_champ_garde_son_empreinte(self):
+        """Le geste de Word ne doit rien changer à ce que le script reconnaît."""
+        document = Document()
+        paragraph = document.add_paragraph("Marge = ")
+        link = OxmlElement("w:hyperlink")
+        link.set(qn("w:anchor"), "measure_CA")
+        link.append(_run("CA"))
+        paragraph._p.append(link)
+
+        self.assertEqual(
+            markers.digest(paragraph._p),
+            markers.digest(self.paragraph(' HYPERLINK \\l "measure_CA" ', "CA")),
+        )
+
+
+class SameContentTest(unittest.TestCase):
+    """La comparaison qui reconnaît, dans le document relu, une donnée intacte."""
+
+    def paragraph(self, *chunks: str):
+        document = Document()
+        paragraph = document.add_paragraph()
+        for chunk in chunks:
+            paragraph.add_run(chunk)
+        return paragraph._p
+
+    def test_espaces_de_bord_perdues(self):
+        self.assertTrue(
+            markers.same_content(
+                self.paragraph("VAR total =", "SUM(T[a])"),
+                self.paragraph("VAR total = SUM(T[a])"),
+            )
+        )
+
+    def test_texte_reellement_different(self):
+        self.assertFalse(
+            markers.same_content(self.paragraph("SUM(T[a])"), self.paragraph("SUM(T[b])"))
+        )
+
+    def test_capture_collee_dans_une_donnee_du_script(self):
+        document = Document()
+        with_picture = document.add_paragraph()
+        with_picture.add_run("SUM(T[a])")
+        with_picture.add_run().add_break()
+        with_picture._p.append(OxmlElement("w:pict"))
+
+        self.assertFalse(markers.same_content(with_picture._p, self.paragraph("SUM(T[a])")))
+
+
+def _run(text: str):
+    run = OxmlElement("w:r")
+    node = OxmlElement("w:t")
+    node.text = text
+    node.set(qn("xml:space"), "preserve")
+    run.append(node)
+    return run
+
+
+def _field_char(kind: str):
+    run = OxmlElement("w:r")
+    char = OxmlElement("w:fldChar")
+    char.set(qn("w:fldCharType"), kind)
+    run.append(char)
+    return run
+
+
+def _instruction(text: str):
+    run = OxmlElement("w:r")
+    node = OxmlElement("w:instrText")
+    node.set(qn("xml:space"), "preserve")
+    node.text = text
+    run.append(node)
+    return run
 
 
 class BlockParsingTest(unittest.TestCase):
