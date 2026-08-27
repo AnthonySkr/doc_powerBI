@@ -14,10 +14,13 @@ import unittest
 
 from docx import Document
 from docx.oxml.ns import qn
+from docx.shared import Cm
 
 from src import console
 from src.config import DocConfig
 from src.generators.word import generate_word_documentation
+from src.merge import markers
+from tests.test_merge_cycle import png
 
 ANCHOR = qn("wp:anchor")
 OFFSET = qn("wp:posOffset")
@@ -177,6 +180,33 @@ class ARegenerationTest(Harness):
         horizontal.text, vertical.text = left, top
         document.save(self.path)
 
+    def anchor_marker_to(self, needle: str) -> None:
+        """
+        Reproduit un repère déposé sur la capture, que Word ré-ancre ailleurs.
+
+        Une forme flotte : elle n'appartient pas au paragraphe, elle y est
+        ancrée, et Word déplace cette ancre vers le paragraphe le plus proche de
+        l'endroit où on la dépose. Le paragraphe masqué du marqueur, juste
+        au-dessus de la capture, est un candidat tout trouvé.
+        """
+        document = self.document()
+        paragraph = next(p for p in document.paragraphs if needle in p.text)
+        run = next(document.element.body.iter(ANCHOR))
+        while run.tag != qn("w:r"):
+            run = run.getparent()
+        paragraph._p.insert(1, run)
+        document.save(self.path)
+
+    def paste_image(self) -> None:
+        """Colle une capture à la place du texte de l'emplacement réservé."""
+        document = self.document()
+        paragraph = next(p for p in document.paragraphs if p.text.startswith("[IMAGE]"))
+        for run in list(paragraph.runs):
+            run._element.getparent().remove(run._element)
+        image = png(os.path.join(self._directory.name, "capture.png"))
+        paragraph.add_run().add_picture(image, width=Cm(2))
+        document.save(self.path)
+
     def renumber_caption(self, number: str = "7") -> None:
         """Reproduit Word recalculant le champ après une capture supprimée."""
         document = self.document()
@@ -208,6 +238,28 @@ class ARegenerationTest(Harness):
         self.renumber_caption()
         self.generate(block={"description": "Capture du visuel refondu"})
         self.assertIn("Figure 1 — Capture du visuel refondu", self.texts())
+
+    def test_un_repere_ancre_au_marqueur_ne_lui_prend_pas_son_identite(self):
+        """
+        Le numéro d'un repère n'est pas le texte du marqueur qui l'héberge.
+
+        Sans cette distinction, le bloc perdait son identité : la régénération
+        ne retrouvait plus la capture collée, et reposait un emplacement neuf —
+        avec sa légende et ses repères — par-dessus le travail déjà fait.
+        """
+        self.generate()
+        self.paste_image()
+        self.anchor_marker_to("pbi::seed")
+        self.generate()
+
+        self.assertEqual([t for t in self.texts() if t.startswith("[IMAGE]")], [])
+        self.assertEqual(len([t for t in self.texts() if t.startswith("Figure")]), 1)
+
+    def test_le_marqueur_reste_reconnu_sous_un_repere(self):
+        self.generate()
+        self.anchor_marker_to("pbi::seed")
+        node = next(p._p for p in self.document().paragraphs if p.text.startswith("pbi::seed"))
+        self.assertEqual(markers.of(node).value, "capture")
 
     def test_une_legende_reecrite_a_la_main_est_conservee(self):
         self.generate()

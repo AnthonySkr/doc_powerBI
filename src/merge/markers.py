@@ -41,6 +41,10 @@ plus aucune place. Restent les écarts nuls et la petite taille du texte : ils
 ne servent qu'au moment où l'utilisateur affiche le texte masqué pour voir ce
 que le script a posé — les marqueurs y sont lisibles sans écarter le document
 (voir `collapse`).
+
+Un marqueur se lit sur le seul texte du paragraphe : celui d'une forme
+flottante qu'on y a ancrée — un repère déposé sur une capture — ne lui
+appartient pas (voir `own_text`).
 """
 
 import hashlib
@@ -189,6 +193,31 @@ def digest(node) -> str:
 def text(node) -> str:
     """Texte porté par un élément XML, tous ses descendants réunis."""
     return "".join(run.text or "" for run in node.iter(_TEXT))
+
+
+def own_text(node) -> str:
+    """
+    Le texte du paragraphe lui-même, sans celui que portent les formes flottantes.
+
+    Une forme est *ancrée* dans un paragraphe, elle ne lui appartient pas : elle
+    flotte au-dessus de la page, et Word change son ancre pour le paragraphe le
+    plus proche de l'endroit où on la dépose. Un repère glissé sur une capture
+    atterrit donc volontiers dans le paragraphe masqué qui précède l'image —
+    celui du marqueur. Son numéro se collait alors au texte du marqueur, qui
+    n'était plus reconnu : le bloc perdait son identité, et la régénération
+    reposait un emplacement de capture par-dessus la capture déjà collée.
+    """
+    return "".join(run.text or "" for run in node.iter(_TEXT) if not _floats_over(run, node))
+
+
+def _floats_over(element, node) -> bool:
+    """Le texte est-il celui d'une forme ancrée dans l'élément, non le sien ?"""
+    parent = element.getparent()
+    while parent is not None and parent is not node:
+        if parent.tag in _PICTURES:
+            return True
+        parent = parent.getparent()
+    return False
 
 
 def written_text(node) -> str:
@@ -354,4 +383,4 @@ def parse(text: str) -> Marker | None:
 
 def of(node) -> Marker | None:
     """Marqueur porté par un élément XML de corps de document (`w:p`), sinon None."""
-    return parse(text(node)) if node.tag == _PARAGRAPH else None
+    return parse(own_text(node)) if node.tag == _PARAGRAPH else None
