@@ -63,14 +63,14 @@ class MarkerFormatTest(unittest.TestCase):
         self.assertEqual(spacing.get(qn("w:after")), "0")
         self.assertEqual(spacing.get(qn("w:lineRule")), "exact")
 
-    def test_marqueur_reduit_a_un_point(self):
+    def test_marqueur_ecrit_en_petit(self):
         """Affiché, un marqueur reste lisible sans écarter ce qu'il encadre."""
         doc = Document()
         markers.write(doc, markers.closing(markers.GENERATED))
 
         run = doc.paragraphs[-1].runs[0]
-        self.assertEqual(run.font.size, Pt(1))
-        self.assertEqual(doc.paragraphs[-1]._p.pPr.find(qn("w:spacing")).get(qn("w:line")), "20")
+        self.assertEqual(run.font.size, Pt(5))
+        self.assertEqual(doc.paragraphs[-1]._p.pPr.find(qn("w:spacing")).get(qn("w:line")), "120")
 
     def test_marqueurs_d_une_version_anterieure_resserres(self):
         """Un marqueur recopié d'un ancien document est resserré à son tour."""

@@ -99,9 +99,7 @@ class DocumentBuilder:
         Remplace dans les en-têtes / pieds de page du template les textes
         déclarés dans `document.header_footer.replacements`.
         """
-        rules = (self.config.document.get("header_footer") or {}).get(
-            "replacements"
-        ) or []
+        rules = (self.config.document.get("header_footer") or {}).get("replacements") or []
         if not rules:
             return
 
@@ -184,27 +182,19 @@ class DocumentBuilder:
             return
 
         level = int(section.get("level", 1))
-        paragraph = self.doc.add_paragraph(
-            title, style=self.styles.paragraph(f"heading_{level}")
-        )
+        paragraph = self.doc.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
         self._add_title_suffix(paragraph, section, context)
         if section.get("bookmark"):
             self.links.add_bookmark(paragraph, render(section["bookmark"], context))
 
-    def _add_title_suffix(
-        self, paragraph, section: dict[str, Any], ctx: dict[str, Any]
-    ) -> None:
+    def _add_title_suffix(self, paragraph, section: dict[str, Any], ctx: dict[str, Any]) -> None:
         """Complète un titre par une mention technique discrète (type du visuel...)."""
         suffix = render(section.get("title_suffix"), ctx)
         if not suffix:
             return
 
-        run = paragraph.add_run(
-            f"{section.get('title_suffix_separator', '   ')}{suffix}"
-        )
-        style = self.styles.character(
-            section.get("title_suffix_style") or "technical_id"
-        )
+        run = paragraph.add_run(f"{section.get('title_suffix_separator', '   ')}{suffix}")
+        style = self.styles.character(section.get("title_suffix_style") or "technical_id")
         if style:
             run.style = style
 
@@ -231,9 +221,7 @@ class DocumentBuilder:
 
         writer = self._block_writers.get(block.get("type", ""))
         if writer is None:
-            console.warn(
-                f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})"
-            )
+            console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
 
         with self.merge.delimit(block):
@@ -248,9 +236,7 @@ class DocumentBuilder:
 
         style = self.styles.paragraph(block.get("style") or "normal")
         paragraph = self.doc.add_paragraph(style=style)
-        self._write_rich_text(
-            paragraph, text, context, links=self._links_allowed(block, style)
-        )
+        self._write_rich_text(paragraph, text, context, links=self._links_allowed(block, style))
 
     def _write_image(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Réserve l'emplacement d'une capture, avec sa description."""
@@ -265,9 +251,7 @@ class DocumentBuilder:
         text = str(options.get("text_format", "[IMAGE] {description}")).format(
             description=description, n=number
         )
-        self.doc.add_paragraph(
-            text, style=self.styles.paragraph(block.get("style") or "image")
-        )
+        self.doc.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
 
         if options.get("show_caption"):
             self._write_caption(options, description, number, numbering)
@@ -298,9 +282,7 @@ class DocumentBuilder:
             return
 
         paragraph.add_run(head.format(**values))
-        fields.write_sequence_field(
-            paragraph, str(options.get("sequence") or "Figure"), number
-        )
+        fields.write_sequence_field(paragraph, str(options.get("sequence") or "Figure"), number)
         paragraph.add_run(tail.format(**values))
 
     def _write_markers(
@@ -336,14 +318,10 @@ class DocumentBuilder:
         line = Cm(float(look.get("line_cm", 0.9)))
         per_row = max(int(look.get("per_row", 12) or 1), 1)
 
-        paragraph = self.doc.add_paragraph(
-            style=self.styles.paragraph(look.get("style"))
-        )
+        paragraph = self.doc.add_paragraph(style=self.styles.paragraph(look.get("style")))
         # Les repères flottent : sans hauteur réservée, ils déborderaient sur
         # le tableau qui suit. Le paragraphe porte donc celle de leurs rangées.
-        paragraph.paragraph_format.line_spacing = Emu(
-            int(line) * math.ceil(len(labels) / per_row)
-        )
+        paragraph.paragraph_format.line_spacing = Emu(int(line) * math.ceil(len(labels) / per_row))
         paragraph.paragraph_format.space_before = Pt(0)
         paragraph.paragraph_format.space_after = Pt(0)
 
@@ -378,8 +356,7 @@ class DocumentBuilder:
             self.doc.add_paragraph(
                 label,
                 style=self.styles.paragraph(
-                    block.get("label_style")
-                    or self.config.rendering["property"].get("label_style")
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
                 ),
             )
 
@@ -401,9 +378,7 @@ class DocumentBuilder:
         hint = render(block.get("hint"), context)
         if hint:
             return str(options.get("hint_format", "[{hint}]")).format(hint=hint)
-        return render(
-            block.get("placeholder_text") or options.get("placeholder_text"), context
-        )
+        return render(block.get("placeholder_text") or options.get("placeholder_text"), context)
 
     def _write_property(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Sous-titre + valeur, ou sous-titre + liste de valeurs."""
@@ -413,14 +388,10 @@ class DocumentBuilder:
         if label:
             self.doc.add_paragraph(
                 label,
-                style=self.styles.paragraph(
-                    block.get("label_style") or options.get("label_style")
-                ),
+                style=self.styles.paragraph(block.get("label_style") or options.get("label_style")),
             )
 
-        value_style = self.styles.paragraph(
-            block.get("value_style") or options.get("value_style")
-        )
+        value_style = self.styles.paragraph(block.get("value_style") or options.get("value_style"))
         links = self._links_allowed(block, value_style)
 
         values = (
@@ -439,9 +410,7 @@ class DocumentBuilder:
             self.doc.add_paragraph(
                 fallback,
                 style=self.styles.paragraph(
-                    block.get("fallback_style")
-                    or options.get("fallback_style")
-                    or "todo"
+                    block.get("fallback_style") or options.get("fallback_style") or "todo"
                 ),
             )
 
@@ -460,9 +429,7 @@ class DocumentBuilder:
         else:
             items = render_list(expression, context)
 
-        return [
-            item for item in items if isinstance(item, DocLink) or render(item, context)
-        ]
+        return [item for item in items if isinstance(item, DocLink) or render(item, context)]
 
     def _write_table(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         columns = block.get("columns") or []
@@ -477,8 +444,7 @@ class DocumentBuilder:
             self.doc.add_paragraph(
                 label,
                 style=self.styles.paragraph(
-                    block.get("label_style")
-                    or self.config.rendering["property"].get("label_style")
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
                 ),
             )
 
@@ -518,9 +484,7 @@ class DocumentBuilder:
         context: dict[str, Any],
         vertical_align: str,
     ) -> None:
-        labels = block.get("header_labels") or [
-            column.get("id", "") for column in columns
-        ]
+        labels = block.get("header_labels") or [column.get("id", "") for column in columns]
         row = table.add_row()
         if block.get("repeat_header", True):
             tables.repeat_header_row(row)
@@ -545,9 +509,7 @@ class DocumentBuilder:
         hyperlink = column.get("hyperlink") or {}
         link_text = render(hyperlink.get("text"), context)
         target = (
-            self.links.bookmark_for(render(hyperlink.get("target"), context))
-            if link_text
-            else ""
+            self.links.bookmark_for(render(hyperlink.get("target"), context)) if link_text else ""
         )
 
         if (
@@ -565,13 +527,9 @@ class DocumentBuilder:
                 self._write_rich_text(paragraph, after, context)
             return
 
-        self._write_rich_text(
-            paragraph, text, context, links=self._links_allowed(column, "")
-        )
+        self._write_rich_text(paragraph, text, context, links=self._links_allowed(column, ""))
 
-    def _write_loop(
-        self, block: dict[str, Any], context: dict[str, Any], parent: str = ""
-    ) -> None:
+    def _write_loop(self, block: dict[str, Any], context: dict[str, Any], parent: str = "") -> None:
         """Répète une section et/ou des blocs sur chaque élément d'une collection."""
         item_name = block.get("item") or "item"
         section = block.get("section")
@@ -584,9 +542,7 @@ class DocumentBuilder:
                 self._write_block(inner, item_context, parent)
 
     # ── Écriture du texte ─────────────────────────────────────────
-    def _write_value(
-        self, paragraph, value: Any, context: dict[str, Any], links: bool
-    ) -> None:
+    def _write_value(self, paragraph, value: Any, context: dict[str, Any], links: bool) -> None:
         """Écrit une valeur de liste : lien vers un signet, ou texte enrichi."""
         if isinstance(value, DocLink):
             target = self.links.bookmark_for(value.target)
@@ -614,9 +570,7 @@ class DocumentBuilder:
         skip = self.links.self_bookmark(context) if links else None
 
         for index, line in enumerate(lines):
-            segments = (
-                self.links.split(line, skip) if (links and line) else [(line, None)]
-            )
+            segments = self.links.split(line, skip) if (links and line) else [(line, None)]
             for chunk, bookmark in segments:
                 if bookmark:
                     self.links.add_hyperlink(paragraph, chunk, bookmark)

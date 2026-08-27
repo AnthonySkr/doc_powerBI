@@ -385,7 +385,7 @@ marqueurs est simplement régénéré intégralement, sans erreur.
 Chaque marqueur occupe un paragraphe à lui, dont la **marque de paragraphe est
 masquée elle aussi** : Word le joint au suivant, et il ne prend donc aucune
 place — ni ligne vide, ni écart entre les paragraphes qu'il sépare. Affichés
-(¶), les marqueurs se voient en 1 pt, sans écarter le document pour autant.
+(¶), les marqueurs se lisent en 5 pt, sans écarter le document pour autant.
 Une documentation produite par une version antérieure est resserrée à la
 régénération suivante.
 
