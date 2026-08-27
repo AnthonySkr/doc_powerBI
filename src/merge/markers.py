@@ -31,9 +31,15 @@ de fin disent, contenu par contenu, ce que le script avait écrit : elles
 permettent de reconnaître cette différence, et de rendre à l'utilisateur ce
 qu'on retrouve en plus à l'intérieur de l'encadrement (voir `merge.salvage`).
 
-Les marqueurs occupent un paragraphe dont le texte porte l'attribut Word
-« masqué » (`w:vanish`) : Word ne l'affiche ni ne l'imprime, et le paragraphe
-ne prend aucune place tant que l'affichage du texte masqué est désactivé.
+Les marqueurs occupent un paragraphe à eux, masqué de bout en bout : son texte
+porte l'attribut Word « masqué » (`w:vanish`), et sa marque de paragraphe
+aussi. C'est la seconde qui décide de la mise en page — masquer le seul texte
+laisse la ligne vide et l'écart d'après-paragraphe du style, quelques
+millimètres par marqueur et une bonne respiration de trop entre deux blocs.
+Marque masquée, Word joint le paragraphe au suivant : le marqueur ne prend
+plus aucune place. Et quand l'utilisateur affiche le texte masqué pour voir
+ce que le script a posé, le paragraphe est déjà réduit au minimum — 1 pt,
+sans écart ni interligne (voir `collapse`).
 """
 
 import hashlib
@@ -41,6 +47,7 @@ from dataclasses import dataclass
 
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
+from docx.shared import Pt
 
 PREFIX = "pbi::"
 
@@ -66,6 +73,12 @@ _FINGERPRINT_LENGTH = 10
 
 _TEXT = qn("w:t")
 _PARAGRAPH = qn("w:p")
+_RUN_PROPERTIES = qn("w:rPr")
+_SECTION = qn("w:sectPr")
+
+# Taille du texte d'un marqueur, et hauteur de sa ligne : le minimum que Word
+# accepte. Elle ne se voit que si l'utilisateur affiche le texte masqué.
+_MARKER_SIZE = Pt(1)
 
 # Contenus qui ne laissent aucun texte derrière eux : image, objet incorporé,
 # forme dessinée. Un paragraphe qui n'en porte pas et n'a pas de texte est vide.
@@ -238,14 +251,76 @@ def write(doc, text: str):
     """Ajoute au document un paragraphe masqué portant le marqueur, et le retourne."""
     paragraph = doc.add_paragraph()
     hide(paragraph.add_run(text))
+    collapse(paragraph._p)
     return paragraph
 
 
 def hide(run) -> None:
-    """Applique l'attribut « masqué » à un run."""
-    properties = run._r.get_or_add_rPr()
-    if properties.find(qn("w:vanish")) is None:
-        properties.append(OxmlElement("w:vanish"))
+    """Applique l'attribut « masqué » à un run, et le réduit à 1 pt."""
+    _vanish(run._r.get_or_add_rPr())
+
+
+def collapse(node) -> None:
+    """
+    Retire au paragraphe d'un marqueur la place qu'il prendrait.
+
+    Masquer le texte ne suffit pas : la marque de paragraphe, elle, reste
+    affichée, et avec elle une ligne et l'écart d'après-paragraphe du style —
+    quelques millimètres par marqueur, et jusqu'à quatre marqueurs entre deux
+    contenus rédigés. Masquer aussi la marque de paragraphe fait disparaître la
+    ligne entière : Word joint le paragraphe au suivant tant que l'affichage du
+    texte masqué est désactivé.
+
+    Le reste — écarts nuls, interligne fixé à 1 pt — vaut pour le moment où
+    l'utilisateur affiche le texte masqué : les marqueurs se voient alors, mais
+    sans écarter le document qu'ils encadrent.
+
+    Rien n'est demandé au template : un marqueur ne doit pas dépendre d'un
+    style que le document de l'utilisateur pourrait ne pas avoir.
+    """
+    properties = node.get_or_add_pPr()
+
+    spacing = properties.get_or_add_spacing()
+    spacing.set(qn("w:before"), "0")
+    spacing.set(qn("w:after"), "0")
+    spacing.set(qn("w:line"), str(_MARKER_SIZE.twips))
+    spacing.set(qn("w:lineRule"), "exact")
+
+    _vanish(_mark_properties(properties))
+
+
+def collapse_all(doc) -> None:
+    """
+    Réduit tous les marqueurs du document terminé.
+
+    La fusion recopie les marqueurs du document précédent avec ce qu'ils
+    encadrent : sans ce passage, une documentation produite par une version
+    antérieure garderait ses marqueurs encombrants là où elle n'a pas été
+    réécrite. Un document régénéré est donc entièrement resserré, même sur ce
+    qui vient de l'ancien.
+    """
+    for node in doc.element.body.iter(_PARAGRAPH):
+        if of(node) is not None:
+            collapse(node)
+
+
+def _mark_properties(properties):
+    """Propriétés de la marque de paragraphe (`w:pPr/w:rPr`), créées au besoin."""
+    mark = properties.find(_RUN_PROPERTIES)
+    if mark is None:
+        mark = OxmlElement("w:rPr")
+        # `w:rPr` se place après les propriétés de mise en forme, et avant la
+        # rupture de section quand le paragraphe en porte une.
+        section = properties.find(_SECTION)
+        index = list(properties).index(section) if section is not None else len(properties)
+        properties.insert(index, mark)
+    return mark
+
+
+def _vanish(properties) -> None:
+    """Masque un texte et le réduit à 1 pt, marque de paragraphe comprise."""
+    properties.get_or_add_vanish()
+    properties.get_or_add_sz().val = _MARKER_SIZE
 
 
 # ─────────────────────────────────────────────────────────────

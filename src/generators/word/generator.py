@@ -11,7 +11,7 @@ from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
 from src.generators.word.document import DocumentBuilder, TextProvider
-from src.merge import ChangeLog, apply_merge, orphans, read_previous
+from src.merge import ChangeLog, apply_merge, markers, orphans, read_previous
 
 
 def generate_word_documentation(
@@ -62,6 +62,10 @@ def generate_word_documentation(
     if previous is not None and previous.exists:
         log.removed = previous.removed(log.written_ids | log.renamed_ids)
         archived = _archive(output_path, merge_options)
+
+    # Les marqueurs recopiés depuis le document précédent n'ont pas forcément
+    # été écrits par cette version : on les resserre tous avant d'enregistrer.
+    markers.collapse_all(doc)
 
     try:
         doc.save(output_path)
