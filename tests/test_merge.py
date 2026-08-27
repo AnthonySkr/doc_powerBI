@@ -6,6 +6,7 @@ import unittest
 
 from docx import Document
 from docx.oxml.ns import qn
+from docx.shared import Pt
 
 from src import console
 from src.merge import CHANGED, NEW, UNCHANGED, ChangeLog, markers, read_previous, salvage
@@ -47,6 +48,41 @@ class MarkerFormatTest(unittest.TestCase):
         doc = Document()
         markers.write(doc, markers.element("measure:CA", "d1"))
         self.assertIsNotNone(doc.paragraphs[-1].runs[0]._r.rPr.find(qn("w:vanish")))
+
+    def test_marqueur_sans_place_dans_la_page(self):
+        """La marque de paragraphe masquée, c'est la ligne du marqueur en moins."""
+        doc = Document()
+        markers.write(doc, markers.element("measure:CA", "d1"))
+
+        properties = doc.paragraphs[-1]._p.pPr
+        mark = properties.find(qn("w:rPr"))
+        self.assertIsNotNone(mark.find(qn("w:vanish")))
+
+        spacing = properties.find(qn("w:spacing"))
+        self.assertEqual(spacing.get(qn("w:before")), "0")
+        self.assertEqual(spacing.get(qn("w:after")), "0")
+        self.assertEqual(spacing.get(qn("w:lineRule")), "exact")
+
+    def test_marqueur_reduit_a_un_point(self):
+        """Affiché, un marqueur reste lisible sans écarter ce qu'il encadre."""
+        doc = Document()
+        markers.write(doc, markers.closing(markers.GENERATED))
+
+        run = doc.paragraphs[-1].runs[0]
+        self.assertEqual(run.font.size, Pt(1))
+        self.assertEqual(doc.paragraphs[-1]._p.pPr.find(qn("w:spacing")).get(qn("w:line")), "20")
+
+    def test_marqueurs_d_une_version_anterieure_resserres(self):
+        """Un marqueur recopié d'un ancien document est resserré à son tour."""
+        doc = Document()
+        paragraph = doc.add_paragraph()
+        markers.hide(paragraph.add_run(markers.element("measure:CA", "d1")))
+        libre = doc.add_paragraph("Texte de l'utilisateur")
+
+        markers.collapse_all(doc)
+
+        self.assertIsNotNone(paragraph._p.pPr.find(qn("w:rPr")).find(qn("w:vanish")))
+        self.assertIsNone(libre._p.pPr)
 
     def test_marqueur_relu_depuis_le_xml(self):
         doc = Document()
