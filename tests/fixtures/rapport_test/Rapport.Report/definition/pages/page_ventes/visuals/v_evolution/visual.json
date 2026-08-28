@@ -1,0 +1,21 @@
+{
+  "name": "v_evolution",
+  "position": { "x": 0, "y": 0, "width": 600, "height": 400 },
+  "visual": {
+    "visualType": "clusteredColumnChart",
+    "visualContainerObjects": {
+      "title": [ { "properties": { "text": { "expr": { "Literal": { "Value": "'Évolution du CA'" } } } } } ]
+    },
+    "query": {
+      "queryState": {
+        "Y": { "projections": [
+          { "queryRef": "Ventes.Chiffre d'affaires", "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "Ventes" } }, "Property": "Chiffre d'affaires" } } },
+          { "queryRef": "Ventes.CA N-1", "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "Ventes" } }, "Property": "CA N-1" } } }
+        ] },
+        "Category": { "projections": [
+          { "queryRef": "Calendrier.Date", "field": { "Column": { "Expression": { "SourceRef": { "Entity": "Calendrier" } }, "Property": "Date" } } }
+        ] }
+      }
+    }
+  }
+}

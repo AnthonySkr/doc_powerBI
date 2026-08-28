@@ -1,0 +1,31 @@
+table Ventes
+
+	column Montant
+		dataType: double
+		summarizeBy: sum
+		sourceColumn: Montant
+
+	column 'Marge brute' = [Montant] - [Coût]
+		dataType: double
+
+	measure 'Chiffre d''affaires' = SUM(Ventes[Montant])
+		formatString: #,##0.00
+		displayFolder: Indicateurs
+
+	measure 'CA N-1' =
+			CALCULATE(
+				[Chiffre d'affaires],
+				SAMEPERIODLASTYEAR('Calendrier'[Date])
+			)
+		formatString: #,##0.00
+
+	partition Ventes = m
+		mode: import
+		source =
+				let
+				    Source = Sql.Database("serveur-bi", "Entrepot"),
+				    Navigation = Source{[Schema="dbo",Item="FactVentes"]}[Data],
+				    #"Type modifié" = Table.TransformColumnTypes(Navigation,{{"Montant", type number}}),
+				    #"Lignes filtrées" = Table.SelectRows(#"Type modifié", each [Montant] > 0)
+				in
+				    #"Lignes filtrées"
