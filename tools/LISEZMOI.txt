@@ -1,4 +1,4 @@
-Documentation automatique Power BI — version {version}
+Documentation automatique Power BI — v1.0.0
 =======================================================
 
 Ce dossier contient tout le nécessaire. Rien à installer.

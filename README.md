@@ -51,44 +51,6 @@ Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
 capture correspondante une fois le document généré.
 
-### Captures : numéros de figure et repères
-
-**Le numéro d'une légende est un champ Word**, pas un texte. Supprimer une
-capture dont vous n'avez pas l'usage renumérote donc les suivantes toutes
-seules : à la prochaine ouverture du document, ou tout de suite avec Ctrl+A
-puis F9. Rien à reprendre à la main. `rendering.image_placeholder.numbering`
-donne le choix : `auto` (le champ), `fixed` (numéro figé à la génération) ou
-`false` (pas de numéro).
-
-**Les numéros des tableaux sont dessinés sous la capture**, une pastille par
-ligne, prêtes à être posées sur l'image : attrapez-en une à la souris et
-déposez-la sur l'indicateur correspondant — les flèches du clavier l'ajustent
-au pixel près. Ce sont des formes flottantes : elles passent par-dessus la
-capture sans déplacer une ligne du document. Une fois déplacée, une pastille
-reste où vous l'avez mise, régénération comprise.
-
-Un bloc `image` du plan les demande en désignant la liste à numéroter — la
-même que le tableau qui suit la capture :
-
-```yaml
-- type: image
-  id: visuel_capture
-  description: "Capture du visuel « {{ visual.title }} »"
-  markers:
-    over: visual.references
-    item: ref
-    label: "{{ ref.number }}"
-```
-
-Leur aspect (taille, couleur, forme, nombre par rangée) se règle une fois pour
-toutes sous `rendering.image_placeholder.markers`. Un bloc `image` sans
-`markers:` n'en reçoit aucune — c'est le cas des captures d'illustration.
-
-> À savoir : si les champs d'un visuel changent **après** que vous avez placé
-> ses pastilles, la rangée n'est pas refaite (ce serait défaire votre travail).
-> Le tableau, lui, est à jour : dupliquez une pastille pour le numéro qui
-> manque. Le titre du visuel est de toute façon surligné en jaune dans ce cas.
-
 ### Groupes de visuels
 
 Les visuels regroupés dans Power BI (`parentGroupName` d'un `visual.json`) sont
@@ -103,15 +65,6 @@ documentés ensemble, dans une partie au nom du groupe :
    du groupe (capture, tableau des références, lecture du visuel).
 
 Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite.
-
-Un groupe imbriqué ne crée pas de partie supplémentaire : son contenu rejoint
-son groupe racine, et la légende garde trace du chemin
-(`Sous-groupe › Nom du visuel`). Un groupe dont aucun visuel n'est documenté est
-ignoré, sauf `keep_empty: true`.
-
-Réglages dans `data.visuals.groups` : `enabled`, `keep_empty`, `sort_by`,
-`member_sort_by` ; numérotation de la légende sous `options.groups.numbering` de
-la section `visuels` du plan.
 
 ## Configuration — `config_doc_pbi.yaml`
 
@@ -200,11 +153,7 @@ proposés sont dédoublonnés, et en écarter un l'écarte partout à la fois.
 
 **Vos réponses sont conservées.** Elles sont écrites à côté du `.pbip`
 (`reponses_<rapport>.yaml`) et reproposées à la génération suivante — marquées
-d'une flèche pour les listes : un Entrée les reconduit. Sans cela, oublier de
-re-cocher un visuel écarté ferait disparaître la partie qui lui correspond, et
-la rédaction qui allait avec. `--no-input` s'en sert aussi, plutôt que des
-valeurs figées du plan. Le fichier se modifie et se supprime à la main ;
-`document.remember_answers: false` désactive la mémoire.
+d'une flèche pour les listes : un Entrée les reconduit.
 
 ### Table de données : ce qui est écrit, et ce qui ne l'est pas
 
@@ -292,28 +241,6 @@ Si le fichier de sortie existe déjà, il n'est pas écrasé : il est lu, compar
 au rapport actuel, et un document neuf est écrit en reprenant tout ce que vous
 y avez mis.
 
-### Le contrat
-
-À chaque génération le script réécrit ce qu'il produit — formule DAX, tableau
-des champs d'un visuel, sources, mesures appelantes — pour qu'il soit toujours
-juste. Tout le reste est recopié tel quel :
-
-| Ce que vous faites dans Word | À la regénération |
-| --- | --- |
-| Reformuler un titre (« Ventes » → « Analyse des ventes — Europe ») | Conservé |
-| Ajouter, renommer ou supprimer un sous-titre d'une partie `seed:` | Conservé tel quel |
-| Ajouter une note, un paragraphe, une liste n'importe où dans un élément | Conservés, à leur place |
-| Écrire une description sous un tableau du script, ou entre ses valeurs | Conservée, remise au même endroit |
-| Annoter une ligne **dans** une cellule du tableau du script | Conservée, dans sa cellule |
-| Coller une capture d'écran à la place d'un emplacement `[IMAGE]` | Conservée, image comprise |
-| Déplacer un repère numéroté sur la capture | Conservé, à l'endroit exact |
-| Supprimer une capture dont vous n'avez pas l'usage | Les numéros de figure suivants se renumérotent seuls |
-| Rédiger une zone `[À compléter]`, sur autant de paragraphes que voulu | Conservée |
-| Changer une mise en forme, un style, ajouter un tableau | Conservés |
-| Faire une liste à puces ou numérotée | Conservée, numérotation comprise |
-| Appliquer un style que vous avez créé dans le document | Conservé, définition comprise |
-| Poser un commentaire de révision | Conservé, avec son auteur |
-
 ### Ce qui est signalé
 
 | Situation | Effet |
@@ -341,17 +268,6 @@ Contenu non replacé
 Vous reprenez ce qui vous intéresse, puis vous supprimez la partie : elle ne
 revient pas. Tant qu'elle n'est pas vidée, elle se reconduit d'une génération à
 l'autre. Le bilan console dit combien de contenus y ont été déposés.
-
-C'est ce filet qui rend les cas suivants récupérables plutôt que définitifs :
-
-| Ce que vous faites | Où le retrouver |
-| --- | --- |
-| Annoter une ligne du tableau dont les données ont changé | En annexe : l'annotation ne commenterait plus la même chose |
-| Écrire **à la suite** de la donnée du script, dans sa ligne à lui | En annexe — c'est sa ligne, il la réécrit |
-| Corriger à la main une valeur produite par le script | En annexe |
-| Écrire avant la première partie documentée (page de garde, sommaire) | En annexe |
-| Renommer deux mesures de formule identique | En annexe : le rapprochement serait un pari |
-| Écarter un visuel via la question posée au lancement | En annexe |
 
 Le surlignage est retiré à la génération suivante : il signale ce qui a changé
 *depuis le document que vous aviez en main*, pas un état à cocher.
@@ -385,9 +301,7 @@ marqueurs est simplement régénéré intégralement, sans erreur.
 Chaque marqueur occupe un paragraphe à lui, dont la **marque de paragraphe est
 masquée elle aussi** : Word le joint au suivant, et il ne prend donc aucune
 place — ni ligne vide, ni écart entre les paragraphes qu'il sépare. Affichés
-(¶), les marqueurs se lisent en 5 pt, sans écarter le document pour autant.
-Une documentation produite par une version antérieure est resserrée à la
-régénération suivante.
+(¶). 
 
 ### Quels blocs le script s'attribue
 
@@ -401,19 +315,6 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
   id: rappel_legal
   generated: true      # toujours réécrit depuis le YAML
 ```
-
-Une amorce à laquelle personne n'a touché suit le plan : améliorer une
-formulation dans le YAML atteint donc aussi les documents déjà générés. Dès que
-vous y écrivez, c'est votre version qui l'emporte.
-
-> **Un `fallback:` n'est pas une zone à rédiger.** Il appartient au bloc qui le
-> porte : sur un `property`, c'est donc une donnée du script, réécrite à chaque
-> génération, et ce qu'on écrirait à sa place partirait en annexe. Le repli d'un
-> `property` énonce un fait (« Aucune autre mesure ne l'utilise. ») ; ce qui
-> attend une rédaction est un bloc `user_fill`, au besoin sous un `when:`. C'est
-> ainsi qu'est écrite la description d'une mesure : le `property` s'affiche quand
-> Power BI porte la description, le `user_fill` prend le relais sinon.
-
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
