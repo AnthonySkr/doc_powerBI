@@ -17,9 +17,8 @@ Rien à installer — ni Python, ni rien d'autre. Tout est dans ce dossier.
 | `powerbi-doc.exe` | L'application |
 | `config_doc_pbi.yaml` | Le plan du document : titres, ordre des parties, questions posées |
 | `template-doc-pbib.docx` | La charte Word : styles, page de garde, en-tête et pied de page |
-| `LISEZMOI.md` | Ce fichier |
 
-Les trois premiers doivent rester **ensemble dans le même dossier**.
+Les trois doivent rester **ensemble dans le même dossier**.
 
 ---
 
@@ -62,8 +61,8 @@ principe : la partie qui décrit ce volet n'apparaît que si vous répondez *oui
 
 **Visuels ou groupes déjà présentés ailleurs** — la liste de tous les visuels du
 rapport s'affiche, numérotée. Saisissez les numéros de ceux que vous ne voulez
-**pas** détailler page par page, séparés par des virgules (par exemple
-`3, 7, 12`). Utile pour un bandeau de titre ou un logo qui se répète : l'écarter
+**pas** détailler dans la doc, séparés par des virgules (par exemple
+`3,7,12`). Utile pour un bandeau de titre ou un logo qui se répète : l'écarter
 une fois l'écarte de toutes les pages. Laissez vide pour tout documenter.
 
 **Souhaitez-vous relire et modifier les textes types ?** — répondez *oui* pour
@@ -89,9 +88,7 @@ l'encadré par votre capture d'écran.
 
 **Les pastilles numérotées.** Sous un emplacement de capture, une rangée de
 pastilles rondes porte les numéros du tableau qui suit. Attrapez-en une à la
-souris et déposez-la sur l'élément correspondant de votre capture ; les flèches
-du clavier l'ajustent au pixel près. Elles flottent au-dessus de l'image et ne
-déplacent aucune ligne du document.
+souris et déposez-la sur l'élément correspondant de votre capture.
 
 **Les zones à rédiger.** Les passages en italique entre crochets — par exemple
 `[ce que la mesure calcule, et quand l'employer]` — indiquent ce qu'on attend à
@@ -113,7 +110,7 @@ vos pastilles là où vous les avez posées, votre mise en forme, vos listes, vo
 commentaires de révision.
 
 Ce que l'outil réécrit : ce qu'il avait produit lui-même — code DAX, tableaux de
-champs, sources, mesures appelantes. C'est sa part, et elle doit rester juste.
+champs, sources, mesures appelantes.
 
 **Deux signalements** vous attendent dans le document :
 
@@ -153,22 +150,17 @@ document ordinaire. Les styles nommés qu'il contient (`Code DAX`, `A completer`
 `Legende`…) sont ceux que le plan désigne : renommez-les et l'outil vous
 signalera qu'il ne les trouve plus.
 
-Gardez une copie de ces deux fichiers avant de les modifier. En cas de fausse
-manœuvre, supprimez le fichier modifié : l'exécutable en embarque une copie
-d'origine et l'utilisera.
-
 ---
 
 ## En cas de problème
 
 | Message | Que faire |
 | --- | --- |
-| `Fichier introuvable` | Vérifiez le chemin du `.pbip`. Le glisser-déposer évite les fautes de frappe. |
+| `Fichier introuvable` | Vérifiez le chemin du `.pbip`. Le glisser-déposer ou Ctrl+Maj+C évite les fautes de frappe. |
 | `Dossier SemanticModel introuvable` | Le rapport n'est pas au format projet. Réenregistrez-le en `.pbip` depuis Power BI Desktop. |
 | `Template introuvable` | `template-doc-pbib.docx` doit rester à côté de l'exécutable. Le message liste les emplacements consultés. |
 | `Style ... absent du template` | Un style nommé a été renommé ou supprimé dans le template. Le document est produit malgré tout, avec un style de remplacement. |
 | `Configuration : YAML illisible` | Une erreur de frappe dans `config_doc_pbi.yaml`. Le message donne la ligne. |
 | `Impossible d'enregistrer le document` | Le document est probablement ouvert dans Word. Fermez-le et relancez. |
 
-Si la fenêtre affiche une erreur inattendue, le détail complet y est écrit :
-copiez-le pour le transmettre.
+Si la fenêtre affiche une erreur inattendue, le détail complet y est écrit.
