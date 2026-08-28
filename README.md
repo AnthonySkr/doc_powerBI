@@ -493,12 +493,12 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-0.4.0-windows.zip
-└── powerbi-doc-0.4.0-windows/
+powerbi-doc-1.0.0-windows.zip
+└── powerbi-doc-1.0.0-windows/
     ├── powerbi-doc.exe          l'application, autonome
     ├── config_doc_pbi.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
-    └── LISEZMOI.txt             mode d'emploi
+    └── LISEZMOI.md              mode d'emploi
 ```
 
 Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
