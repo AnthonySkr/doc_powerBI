@@ -21,6 +21,9 @@ DIST = os.path.join(ROOT, "dist")
 # Fichiers livrés à côté de l'exécutable, et modifiables par l'utilisateur.
 PAYLOAD = ("config_doc_pbi.yaml", "template-doc-pbib.docx")
 
+# Mode d'emploi joint au dossier livré.
+README = "LISEZMOI.md"
+
 
 def main() -> int:
     version = _version()
@@ -64,10 +67,15 @@ def _executable() -> str | None:
 
 
 def _write_readme(folder: str, version: str) -> None:
-    with open(os.path.join(ROOT, "tools", "LISEZMOI.txt"), "r", encoding="utf-8") as f:
-        text = f.read().format(version=version)
+    """Recopie le mode d'emploi en y inscrivant la version."""
+    with open(os.path.join(ROOT, "tools", README), "r", encoding="utf-8") as f:
+        # `replace` et non `format` : le mode d'emploi parle de la
+        # configuration, où les accolades sont de mise (`{{ report.name }}`).
+        # Un gabarit les prendrait pour des champs et échouerait le jour où
+        # l'une d'elles y sera citée.
+        text = f.read().replace("{version}", version)
     # Fins de ligne Windows : le Bloc-notes reste la visionneuse par défaut.
-    with open(os.path.join(folder, "LISEZMOI.txt"), "w", encoding="utf-8", newline="\r\n") as f:
+    with open(os.path.join(folder, README), "w", encoding="utf-8", newline="\r\n") as f:
         f.write(text)
 
 
