@@ -15,6 +15,7 @@ from docx.shared import Cm, Emu, Pt
 from src import console
 from src.config import DocConfig, evaluate, render, render_list, resolve_items
 from src.generators.word import fields, shapes, tables
+from src.generators.word.body import Body
 from src.generators.word.links import LinkIndex
 from src.generators.word.merging import MergeWriter
 from src.generators.word.styles import StyleResolver
@@ -35,13 +36,15 @@ class DocumentBuilder:
         previous: PreviousDocument | None = None,
     ):
         self.doc = doc
+        # Toute écriture de contenu passe par là (voir `body.Body`).
+        self.body = Body(doc)
         self.config = config
         self.context = context
         self.text_provider = text_provider
 
         self.styles = StyleResolver(doc, config, context)
         self.links = LinkIndex(config, context, self.styles.ids)
-        self.merge = MergeWriter(doc, config, previous)
+        self.merge = MergeWriter(self.body, config, previous)
         self._figure_number = 0
         # Word refuse deux formes de même identifiant : la numérotation des
         # repères reprend au-dessus de ce que le template contient déjà.
@@ -159,7 +162,7 @@ class DocumentBuilder:
             return
 
         if self._needs_page_break(section):
-            self.doc.add_page_break()
+            self.body.add_page_break()
 
         # L'ancre précède le titre : à la relecture, tout ce qui suit lui
         # appartient jusqu'à l'ancre suivante.
@@ -182,7 +185,7 @@ class DocumentBuilder:
             return
 
         level = int(section.get("level", 1))
-        paragraph = self.doc.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
+        paragraph = self.body.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
         self._add_title_suffix(paragraph, section, context)
         if section.get("bookmark"):
             self.links.add_bookmark(paragraph, render(section["bookmark"], context))
@@ -235,7 +238,7 @@ class DocumentBuilder:
             return
 
         style = self.styles.paragraph(block.get("style") or "normal")
-        paragraph = self.doc.add_paragraph(style=style)
+        paragraph = self.body.add_paragraph(style=style)
         self._write_rich_text(paragraph, text, context, links=self._links_allowed(block, style))
 
     def _write_image(self, block: dict[str, Any], context: dict[str, Any]) -> None:
@@ -251,7 +254,7 @@ class DocumentBuilder:
         text = str(options.get("text_format", "[IMAGE] {description}")).format(
             description=description, n=number
         )
-        self.doc.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
+        self.body.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
 
         if options.get("show_caption"):
             self._write_caption(options, description, number, numbering)
@@ -259,7 +262,7 @@ class DocumentBuilder:
         self._write_markers(block, context, options)
 
         if options.get("empty_paragraph_after"):
-            self.doc.add_paragraph()
+            self.body.add_paragraph()
 
     def _write_caption(
         self, options: dict[str, Any], description: str, number: str, numbering: str
@@ -274,7 +277,7 @@ class DocumentBuilder:
         """
         template = str(options.get("caption_format", "{description}"))
         values = {"description": description, "n": number}
-        paragraph = self.doc.add_paragraph(style=self.styles.paragraph("caption"))
+        paragraph = self.body.add_paragraph(style=self.styles.paragraph("caption"))
 
         head, field, tail = template.partition("{n}")
         if numbering != "auto" or not field:
@@ -318,7 +321,7 @@ class DocumentBuilder:
         line = Cm(float(look.get("line_cm", 0.9)))
         per_row = max(int(look.get("per_row", 12) or 1), 1)
 
-        paragraph = self.doc.add_paragraph(style=self.styles.paragraph(look.get("style")))
+        paragraph = self.body.add_paragraph(style=self.styles.paragraph(look.get("style")))
         # Les repères flottent : sans hauteur réservée, ils déborderaient sur
         # le tableau qui suit. Le paragraphe porte donc celle de leurs rangées.
         paragraph.paragraph_format.line_spacing = Emu(int(line) * math.ceil(len(labels) / per_row))
@@ -353,7 +356,7 @@ class DocumentBuilder:
 
         label = render(block.get("label"), context)
         if label:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 label,
                 style=self.styles.paragraph(
                     block.get("label_style") or self.config.rendering["property"].get("label_style")
@@ -363,7 +366,7 @@ class DocumentBuilder:
         shown = block.get("show_placeholder", options.get("show_placeholder"))
         text = self._user_fill_text(block, context, options) if shown else ""
         style = block.get("style") or options.get("style") or "todo"
-        self.doc.add_paragraph(text, style=self.styles.paragraph(style))
+        self.body.add_paragraph(text, style=self.styles.paragraph(style))
 
     def _user_fill_text(
         self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
@@ -386,7 +389,7 @@ class DocumentBuilder:
 
         label = render(block.get("label"), context)
         if label:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 label,
                 style=self.styles.paragraph(block.get("label_style") or options.get("label_style")),
             )
@@ -402,12 +405,12 @@ class DocumentBuilder:
         values = [value for value in values if value]
 
         for value in values:
-            paragraph = self.doc.add_paragraph(style=value_style)
+            paragraph = self.body.add_paragraph(style=value_style)
             self._write_value(paragraph, value, context, links=links)
 
         fallback = render(block.get("fallback"), context)
         if not values and fallback:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 fallback,
                 style=self.styles.paragraph(
                     block.get("fallback_style") or options.get("fallback_style") or "todo"
@@ -415,7 +418,7 @@ class DocumentBuilder:
             )
 
         if options.get("empty_paragraph_after"):
-            self.doc.add_paragraph()
+            self.body.add_paragraph()
 
     def _value_list(self, expression: Any, context: dict[str, Any]) -> list[Any]:
         """
@@ -441,14 +444,14 @@ class DocumentBuilder:
         # que si le tableau l'est, et disparaît donc avec lui.
         label = render(block.get("label"), context)
         if label:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 label,
                 style=self.styles.paragraph(
                     block.get("label_style") or self.config.rendering["property"].get("label_style")
                 ),
             )
 
-        table = self.doc.add_table(rows=0, cols=len(columns))
+        table = self.body.add_table(rows=0, cols=len(columns))
         style = self.styles.table(render(block.get("style"), context))
         if style:
             table.style = style
@@ -474,7 +477,7 @@ class DocumentBuilder:
                 self._fill_cell(cell, column, {**context, item_name: row_item})
 
         _apply_column_widths(table, columns)
-        self.doc.add_paragraph()
+        self.body.add_paragraph()
 
     def _write_table_header(
         self,

@@ -33,8 +33,8 @@ _TABLE = qn("w:tbl")
 
 
 class MergeWriter:
-    def __init__(self, doc, config: DocConfig, previous: PreviousDocument | None):
-        self.doc = doc
+    def __init__(self, body, config: DocConfig, previous: PreviousDocument | None):
+        self.body = body
         self.previous = previous or PreviousDocument()
         self.options = config.merge
         self.enabled = bool(self.options.get("enabled", True))
@@ -74,7 +74,7 @@ class MergeWriter:
 
         digest = markers.fingerprint(render(section.get("fingerprint"), context))
         self.log.record(element_id, self.previous.status(element_id, digest))
-        markers.write(self.doc, markers.element(element_id, digest))
+        markers.write(self.body, markers.element(element_id, digest))
         return element_id
 
     @contextmanager
@@ -134,13 +134,13 @@ class MergeWriter:
             yield
             return
 
-        opening = markers.write(self.doc, markers.opening(kind, str(block_id)))
+        opening = markers.write(self.body, markers.opening(kind, str(block_id)))
         self._enclosed = True
         try:
             yield
         finally:
             self._enclosed = False
-            markers.write(self.doc, markers.closing(kind, _digests(opening)))
+            markers.write(self.body, markers.closing(kind, _digests(opening)))
 
     def _identifier(
         self, section: dict[str, Any], context: dict[str, Any], parent: str, title: str
