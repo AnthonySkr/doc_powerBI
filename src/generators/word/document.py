@@ -13,7 +13,7 @@ from typing import Any
 from docx.shared import Cm, Emu, Pt
 
 from src import console
-from src.config import DocConfig, evaluate, render, render_list, resolve_items
+from src.config import DocConfig, evaluate, printable, render, render_list, resolve_items
 from src.generators.word import fields, shapes, tables
 from src.generators.word.body import Body
 from src.generators.word.links import LinkIndex
@@ -582,7 +582,9 @@ class DocumentBuilder:
         links: bool = True,
     ) -> None:
         """Écrit un texte en gérant les retours à la ligne et les liens internes."""
-        lines = str(text).split("\n")
+        # Tout le texte du document passe par ici : c'est le seul endroit où
+        # écarter ce qu'un fichier .docx ne peut pas porter (voir `printable`).
+        lines = printable(str(text)).split("\n")
         skip = self.links.self_bookmark(context) if links else None
 
         for index, line in enumerate(lines):
