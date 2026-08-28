@@ -918,11 +918,21 @@ sections:
                     value: "{{ measure.expression }}"
                     value_style: "{{ styles.code }}"
 
+                  # La description vient de Power BI quand elle y est saisie ;
+                  # sinon c'est une zone à rédiger, et elle doit le rester : un
+                  # `property` appartient au script, qui le réécrit à chaque
+                  # génération — ce qu'on y aurait écrit partirait en annexe.
                   - type: property
                     id: mesure_description
                     label: "Description"
                     value: "{{ measure.description }}"
-                    fallback: "[À compléter]"
+                    when: measure.description
+
+                  - type: user_fill
+                    id: mesure_description_libre
+                    label: "Description"
+                    hint: "ce que la mesure calcule, et quand l'employer"
+                    when: "!measure.description"
 
                   - type: property
                     id: mesure_sources
@@ -930,7 +940,7 @@ sections:
                     # Colonnes et mesures référencées par l'expression DAX
                     value_list: "{{ measure.used_columns + measure.dependent_measures }}"
                     value_style: "{{ styles.bullet }}"
-                    fallback: "[À compléter]"
+                    fallback: "Aucune colonne ni mesure référencée."
 
                   # Chemin inverse des liens : d'ici on remonte aux visuels
                   # qui affichent la mesure, puis aux mesures qui l'appellent.

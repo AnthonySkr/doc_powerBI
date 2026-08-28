@@ -8,6 +8,7 @@ from src.config.defaults import DEFAULT_CONFIG_PATH, DEFAULT_OUTPUT_DIR
 from src.config.doc_config import DocConfig, load_config
 from src.config.expressions import (
     evaluate,
+    printable,
     render,
     render_list,
     resolve,
@@ -22,6 +23,7 @@ __all__ = [
     "DocConfig",
     "evaluate",
     "load_config",
+    "printable",
     "render",
     "render_list",
     "resolve",

@@ -10,7 +10,7 @@ from docx import Document
 from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
-from src.generators.word.document import DocumentBuilder, TextProvider
+from src.generators.word.document import DocumentBuilder, DocumentError, TextProvider
 from src.merge import ChangeLog, apply_merge, markers, orphans, read_previous
 
 
@@ -69,7 +69,9 @@ def generate_word_documentation(
 
     try:
         doc.save(output_path)
-    except OSError as e:
+    except Exception as e:
+        # Toute cause vaut restauration : la version précédente vient d'être
+        # déplacée, elle doit revenir quoi qu'il soit arrivé à l'écriture.
         _restore(archived, output_path)
         raise DocumentError(f"Impossible d'enregistrer le document — {e}") from e
 
@@ -79,10 +81,6 @@ def generate_word_documentation(
         console.info(word_app.refresh_fields(output_path))
 
     return log
-
-
-class DocumentError(Exception):
-    """Le document n'a pas pu être produit."""
 
 
 def _template_path(config: DocConfig, context: dict[str, Any]) -> str:
@@ -141,6 +139,19 @@ def _archive(output_path: str, options: dict[str, Any]) -> str:
 
 
 def _restore(archived: str, output_path: str) -> None:
-    """Remet la version précédente en place si l'écriture du document a échoué."""
-    if archived and os.path.isfile(archived) and not os.path.exists(output_path):
-        shutil.move(archived, output_path)
+    """
+    Remet la version précédente en place lorsque l'écriture a échoué.
+
+    Un enregistrement interrompu laisse un fichier incomplet : il est écrasé,
+    sans quoi la version précédente resterait dans `.versions` et l'utilisateur
+    se retrouverait devant un document illisible.
+    """
+    if not archived or not os.path.isfile(archived):
+        return
+    try:
+        os.replace(archived, output_path)
+    except OSError as e:
+        console.warn(
+            f"Version précédente non restaurée ({e}) — elle reste dans "
+            f"{os.path.basename(os.path.dirname(archived))}/"
+        )

@@ -74,8 +74,15 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> DocConfig:
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Fichier de configuration introuvable : '{path}'")
 
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        # Le fichier est livré en clair et se modifie à la main : une faute de
+        # frappe doit se lire, pas remonter en trace d'exception.
+        raise ValueError(f"YAML illisible dans '{path}' : {e}") from e
+    except OSError as e:
+        raise ValueError(f"Configuration illisible : {e}") from e
 
     if raw is not None and not isinstance(raw, dict):
         raise ValueError(f"Configuration invalide dans '{path}' : un dictionnaire est attendu.")

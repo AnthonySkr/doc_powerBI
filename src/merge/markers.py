@@ -164,7 +164,11 @@ def fingerprint(text: str) -> str:
     court et ne recopie pas le contenu du document dans du texte masqué.
     """
     normalized = " ".join((text or "").split())
-    return hashlib.md5(normalized.encode("utf-8")).hexdigest()[:_FINGERPRINT_LENGTH]
+    # `usedforsecurity=False` : ce condensé identifie un contenu, il ne
+    # protège rien. Sans lui, un poste Windows en mode FIPS refuse md5 et
+    # toute la fusion tombe.
+    digest = hashlib.md5(normalized.encode("utf-8"), usedforsecurity=False)
+    return digest.hexdigest()[:_FINGERPRINT_LENGTH]
 
 
 # Empreinte d'un contenu sans texte ni image : la place laissée libre par le
@@ -341,9 +345,14 @@ def has_picture(node) -> bool:
     return any(next(node.iter(tag), None) is not None for tag in _PICTURES)
 
 
-def write(doc, text: str):
-    """Ajoute au document un paragraphe masqué portant le marqueur, et le retourne."""
-    paragraph = doc.add_paragraph()
+def write(body, text: str):
+    """
+    Ajoute un paragraphe masqué portant le marqueur, et le retourne.
+
+    `body` est ce qui sait ajouter un paragraphe : le corps du document en
+    cours d'écriture (`generators.word.body.Body`), ou le document lui-même.
+    """
+    paragraph = body.add_paragraph()
     hide(paragraph.add_run(text))
     collapse(paragraph._p)
     return paragraph

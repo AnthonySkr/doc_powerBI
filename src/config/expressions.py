@@ -14,6 +14,12 @@ from typing import Any
 
 _VAR_PATTERN = re.compile(r"\{\{\s*(.+?)\s*\}\}")
 
+# Caractères qu'un document Word ne peut pas porter : XML 1.0 n'admet, en
+# dessous de l'espace, que la tabulation et les fins de ligne. Power BI en
+# laisse passer — un nom de page collé depuis une page web, un tableur — et
+# lxml refuse alors d'écrire le texte, sans dire quel champ est en cause.
+_FORBIDDEN = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]")
+
 
 # ─────────────────────────────────────────────────────────────
 #  Substitution des variables {{ ... }}
@@ -27,7 +33,9 @@ def render(value: Any, context: dict[str, Any]) -> str:
     if not isinstance(value, str):
         return str(value)
 
-    return _VAR_PATTERN.sub(lambda m: to_text(resolve(m.group(1), context)), value).strip()
+    return printable(
+        _VAR_PATTERN.sub(lambda m: to_text(resolve(m.group(1), context)), value).strip()
+    )
 
 
 def render_list(value: Any, context: dict[str, Any]) -> list[str]:
@@ -138,6 +146,11 @@ def _lookup(path: str, context: dict[str, Any]) -> Any:
                 return None
             current = getattr(current, part)
     return current
+
+
+def printable(text: str) -> str:
+    """Le texte débarrassé des caractères qu'un document Word ne peut pas porter."""
+    return _FORBIDDEN.sub("", text) if text else text
 
 
 def to_text(value: Any) -> str:
