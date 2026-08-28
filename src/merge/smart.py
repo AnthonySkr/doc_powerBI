@@ -36,7 +36,6 @@ from typing import Any
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from src import console
 from src.merge import blocks as block_parser
 from src.merge import cells, markers, orphans, salvage
 from src.merge.blocks import FREE, SEED, Block, Segment
@@ -60,9 +59,6 @@ _STYLE = qn("w:pStyle")
 
 # Repère du contenu qui ouvre un bloc — le titre — dans `Block.free_after()`.
 _HEAD = ""
-
-# Empreinte d'un contenu vide : une ligne blanche n'est jamais à recueillir.
-_EMPTY = markers.fingerprint("")
 
 
 def merge(
@@ -445,15 +441,9 @@ def _by_fingerprint(blocks) -> dict[str, list[Block]]:
     """Blocs regroupés par empreinte technique, celle-ci renseignée."""
     grouped: dict[str, list[Block]] = {}
     for block in blocks:
-        if block.fingerprint and block.fingerprint != _EMPTY:
+        if block.fingerprint and block.fingerprint != markers.EMPTY:
             grouped.setdefault(block.fingerprint, []).append(block)
     return grouped
-
-
-def _previous_of(block: Block, old: dict[str, Block], log: ChangeLog) -> Block | None:
-    """Le bloc du document précédent qui correspond, sous son nom d'alors."""
-    before = {after: before for before, after in log.renamed}.get(block.element_id)
-    return old.get(before or block.element_id)
 
 
 def _predates_seeds(blocks: list[Block]) -> bool:
@@ -554,9 +544,3 @@ def _set_highlight(paragraph, color: str) -> None:
             highlight = OxmlElement("w:highlight")
             highlight.set(qn("w:val"), color)
             properties.append(highlight)
-
-
-def report(log: ChangeLog) -> None:
-    console.info(log.summary())
-    for line in log.details():
-        console.detail(line)

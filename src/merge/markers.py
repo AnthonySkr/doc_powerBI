@@ -164,7 +164,11 @@ def fingerprint(text: str) -> str:
     court et ne recopie pas le contenu du document dans du texte masqué.
     """
     normalized = " ".join((text or "").split())
-    return hashlib.md5(normalized.encode("utf-8")).hexdigest()[:_FINGERPRINT_LENGTH]
+    # `usedforsecurity=False` : ce condensé identifie un contenu, il ne
+    # protège rien. Sans lui, un poste Windows en mode FIPS refuse md5 et
+    # toute la fusion tombe.
+    digest = hashlib.md5(normalized.encode("utf-8"), usedforsecurity=False)
+    return digest.hexdigest()[:_FINGERPRINT_LENGTH]
 
 
 # Empreinte d'un contenu sans texte ni image : la place laissée libre par le
