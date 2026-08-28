@@ -406,6 +406,14 @@ Une amorce à laquelle personne n'a touché suit le plan : améliorer une
 formulation dans le YAML atteint donc aussi les documents déjà générés. Dès que
 vous y écrivez, c'est votre version qui l'emporte.
 
+> **Un `fallback:` n'est pas une zone à rédiger.** Il appartient au bloc qui le
+> porte : sur un `property`, c'est donc une donnée du script, réécrite à chaque
+> génération, et ce qu'on écrirait à sa place partirait en annexe. Le repli d'un
+> `property` énonce un fait (« Aucune autre mesure ne l'utilise. ») ; ce qui
+> attend une rédaction est un bloc `user_fill`, au besoin sous un `when:`. C'est
+> ainsi qu'est écrite la description d'une mesure : le `property` s'affiche quand
+> Power BI porte la description, le `user_fill` prend le relais sinon.
+
 ### Réglages — bloc `merge`
 
 | Clé | Effet |
@@ -485,8 +493,8 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-1.0.0-windows.zip
-└── powerbi-doc-1.0.0-windows/
+powerbi-doc-0.4.0-windows.zip
+└── powerbi-doc-0.4.0-windows/
     ├── powerbi-doc.exe          l'application, autonome
     ├── config_doc_pbi.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
