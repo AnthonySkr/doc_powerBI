@@ -1,9 +1,15 @@
 """
-Champs Word et textes du template : table des matières, en-têtes, pieds de page.
+Champs Word et textes du template : table des matières, numéros de figure,
+en-têtes, pieds de page.
 
-Les numéros de page d'une table des matières dépendent de la mise en page :
-seul Word peut les calculer. Le champ TOC est donc marqué « à recalculer »
-(`w:dirty`), ce que Word applique à l'ouverture du document.
+Un champ est un contenu que Word calcule lui-même. On s'en sert pour ce que le
+script ne peut pas savoir — les numéros de page d'une table des matières
+dépendent de la mise en page — et pour ce qu'il ne doit pas figer : le numéro
+d'une figure change dès qu'on supprime une capture, et c'est à Word de le
+suivre, pas à l'utilisateur de le corriger à la main.
+
+Les champs sont marqués « à recalculer » (`w:dirty`), ce que Word applique à
+l'ouverture du document ; un Ctrl+A puis F9 le refait à tout moment.
 """
 
 import re
@@ -84,6 +90,57 @@ def set_toc_levels(instruction: str, levels: str) -> str:
     que `re.sub` interpréterait comme une séquence d'échappement.
     """
     return re.sub(r'\\o\s*"[^"]*"', lambda _: f'\\o "{levels}"', instruction)
+
+
+# ─────────────────────────────────────────────────────────────
+#  Numérotation des figures
+# ─────────────────────────────────────────────────────────────
+
+
+def write_sequence_field(paragraph, name: str, cached: str = "") -> None:
+    r"""
+    Écrit `{ SEQ <name> \* ARABIC }` à la suite du paragraphe.
+
+    C'est le champ dont Word se sert pour ses propres légendes : il compte les
+    figures dans l'ordre du document. En supprimer une renumérote les
+    suivantes, sans que personne n'ait à y toucher.
+
+    `cached` est le résultat mémorisé — le numéro tel que le script l'a compté.
+    Il est juste tant qu'on n'a rien supprimé, et c'est lui que montre un
+    lecteur qui ne recalcule pas les champs.
+    """
+    _append(paragraph, _field_char("begin", dirty=True))
+    _append(paragraph, _instruction(rf" SEQ {name} \* ARABIC "))
+    _append(paragraph, _field_char("separate"))
+    _append(paragraph, _text(cached))
+    _append(paragraph, _field_char("end"))
+
+
+def _append(paragraph, child) -> None:
+    run = OxmlElement("w:r")
+    run.append(child)
+    paragraph._p.append(run)
+
+
+def _field_char(kind: str, dirty: bool = False):
+    element = OxmlElement("w:fldChar")
+    element.set(qn("w:fldCharType"), kind)
+    if dirty:
+        element.set(qn("w:dirty"), "true")
+    return element
+
+
+def _instruction(text: str):
+    element = OxmlElement("w:instrText")
+    element.set(qn("xml:space"), "preserve")
+    element.text = text
+    return element
+
+
+def _text(value: str):
+    element = OxmlElement("w:t")
+    element.text = value
+    return element
 
 
 def set_update_fields(settings) -> None:

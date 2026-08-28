@@ -2,6 +2,7 @@
 
 import unittest
 
+from src.parsers.tmdl.columns import extract_calculated_columns
 from src.parsers.tmdl.measures import extract_measures
 from src.parsers.tmdl.powerquery import parse_steps, source_expression
 from src.parsers.tmdl.reader import table_name
@@ -103,7 +104,7 @@ class TableTest(unittest.TestCase):
     def test_source_et_etapes(self):
         table = parse_table(VENTES)
         self.assertEqual(
-            [step["name"] for step in table.transformation_steps],
+            [step.name for step in table.transformation_steps],
             ["Source", "Lignes filtrees"],
         )
         self.assertEqual(table.source, 'Sql.Database("srv", "db")')
@@ -112,17 +113,15 @@ class TableTest(unittest.TestCase):
 class PowerQueryTest(unittest.TestCase):
     def test_virgule_dans_une_chaine_non_separatrice(self):
         steps = parse_steps('let A = Text.From("x, y"), B = 1 in B')
-        self.assertEqual([step["name"] for step in steps], ["A", "B"])
+        self.assertEqual([step.name for step in steps], ["A", "B"])
 
     def test_virgule_entre_parentheses_non_separatrice(self):
         steps = parse_steps("let A = F(1, 2, 3) in A")
         self.assertEqual(len(steps), 1)
-        self.assertEqual(steps[0]["expression"], "F(1, 2, 3)")
+        self.assertEqual(steps[0].expression, "F(1, 2, 3)")
 
     def test_identifiant_echappe(self):
-        self.assertEqual(
-            parse_steps('let #"Lignes filtrées" = 1 in x')[0]["name"], "Lignes filtrées"
-        )
+        self.assertEqual(parse_steps('let #"Lignes filtrées" = 1 in x')[0].name, "Lignes filtrées")
 
     def test_source_par_defaut_premiere_etape(self):
         steps = parse_steps("let Depart = 1, Suite = 2 in Suite")
@@ -131,6 +130,67 @@ class PowerQueryTest(unittest.TestCase):
     def test_code_sans_let(self):
         self.assertEqual(parse_steps("Calendar.Create()"), [])
         self.assertEqual(source_expression([], "Calendar.Create()"), "Calendar.Create()")
+
+
+COLONNES = """table Ventes
+
+\tcolumn Montant
+\t\tdataType: double
+\t\tsourceColumn: Montant
+\t\tsummarizeBy: sum
+
+\tcolumn Marge = [Montant] - [Cout]
+\t\tdataType: double
+\t\tlineageTag: abc-123
+
+\tcolumn 'Année civile' =
+\t\t\tYEAR(
+\t\t\t    Ventes[Date]
+\t\t\t)
+\t\tdataType: int64
+\t\tisDataTypeInferred
+
+\tcolumn Statut = ```
+\t\t\tSWITCH(TRUE(), [Marge] > 0, "Positive", "Negative")
+\t\t\t```
+\t\tdataType: string
+
+\t\tannotation SummarizationSetBy = Automatic
+"""
+
+
+class CalculatedColumnTest(unittest.TestCase):
+    """Colonnes calculées : les blocs `column <nom> = <expression DAX>`."""
+
+    def setUp(self):
+        self.columns = {c.name: c.expression for c in extract_calculated_columns(COLONNES)}
+
+    def test_colonne_ordinaire_ignoree(self):
+        # `Montant` vient de la source : elle n'a pas d'expression à documenter
+        self.assertNotIn("Montant", self.columns)
+
+    def test_toutes_les_colonnes_calculees_sont_trouvees(self):
+        self.assertEqual(sorted(self.columns), ["Année civile", "Marge", "Statut"])
+
+    def test_expression_inline(self):
+        self.assertEqual(self.columns["Marge"], "[Montant] - [Cout]")
+
+    def test_expression_multi_lignes_sans_backticks(self):
+        self.assertEqual(self.columns["Année civile"], "YEAR(\n    Ventes[Date]\n)")
+
+    def test_expression_entre_backticks(self):
+        self.assertEqual(
+            self.columns["Statut"], 'SWITCH(TRUE(), [Marge] > 0, "Positive", "Negative")'
+        )
+
+    def test_colonnes_rattachees_a_la_table(self):
+        table = parse_table(COLONNES)
+        self.assertEqual(
+            [c.name for c in table.calculated_columns], ["Marge", "Année civile", "Statut"]
+        )
+
+    def test_table_sans_colonne_calculee(self):
+        self.assertEqual(extract_calculated_columns(VENTES), [])
 
 
 if __name__ == "__main__":

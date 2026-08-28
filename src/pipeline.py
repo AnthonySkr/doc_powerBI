@@ -11,11 +11,12 @@ import os
 from typing import Any
 
 from src import console
-from src.cli import prompts
+from src.cli import answers, prompts
 from src.cli.arguments import Options
-from src.config import DocConfig, load_config, render
+from src.config import DEFAULT_OUTPUT_DIR, DocConfig, load_config, render
+from src.generators import filters
 from src.generators.context import build_context
-from src.generators.word import generate_word_documentation
+from src.generators.word import DocumentError, generate_word_documentation
 from src.models.data_models import PowerBIReport
 from src.parsers import dependencies
 from src.parsers.pbip import PbipProject
@@ -50,9 +51,18 @@ def run(options: Options) -> str:
     console.blank()
 
     report = _collect(project)
-    inputs = _ask_inputs(config, report, options.interactive)
-    output_dir = project.output_dir(config.document.get("output_dir", "output"))
 
+    # Les réponses de la dernière génération sont reproposées : re-cocher à
+    # l'identique une liste de visuels écartés n'est pas une chose à confier à
+    # la mémoire de l'utilisateur. Elles vivent à côté du .pbip, et non dans le
+    # dossier de sortie — que l'une d'elles désigne.
+    answers_path = answers.path(config, {"report": report}, project.directory)
+    remembered = answers.read(answers_path)
+
+    inputs = _ask_inputs(config, report, options.interactive, remembered)
+    answers.write(answers_path, inputs)
+
+    output_dir = project.output_dir(_output_dir(config, report, inputs))
     _generate(config, report, inputs, output_dir, project.name, options.interactive)
     return output_dir
 
@@ -60,6 +70,12 @@ def run(options: Options) -> str:
 # ─────────────────────────────────────────────────────────────
 #  Étapes
 # ─────────────────────────────────────────────────────────────
+
+
+def _output_dir(config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]) -> str:
+    """Dossier de sortie déclaré par le plan, une fois les réponses connues."""
+    declared = render(config.document.get("output_dir"), {"report": report, "inputs": inputs})
+    return declared or DEFAULT_OUTPUT_DIR
 
 
 def _collect(project: PbipProject) -> PowerBIReport:
@@ -87,11 +103,23 @@ def _collect(project: PbipProject) -> PowerBIReport:
     return report
 
 
-def _ask_inputs(config: DocConfig, report: PowerBIReport, interactive: bool) -> dict[str, Any]:
-    base_context = {"report": report, "inputs": {}, "styles": config.styles}
+def _ask_inputs(
+    config: DocConfig,
+    report: PowerBIReport,
+    interactive: bool,
+    remembered: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    # `choices` : ce que le rapport contient réellement, pour les questions qui
+    # font choisir dans son contenu plutôt que dans une liste figée du YAML.
+    base_context = {
+        "report": report,
+        "inputs": {},
+        "styles": config.styles,
+        "choices": {"visuals": filters.documentable_titles(report, config)},
+    }
     if interactive:
-        return prompts.ask_inputs(config, base_context)
-    return prompts.default_inputs(config, base_context)
+        return prompts.ask_inputs(config, base_context, remembered)
+    return prompts.default_inputs(config, base_context, remembered)
 
 
 def _generate(
@@ -113,8 +141,14 @@ def _generate(
         interactive and bool(inputs.get("editer_textes", False))
     )
 
-    console.info(
-        generate_word_documentation(
+    try:
+        log = generate_word_documentation(
             config, context, os.path.join(output_dir, output_name), text_provider
         )
-    )
+    except DocumentError as e:
+        raise PipelineError(str(e)) from e
+
+    console.blank()
+    console.info(log.summary())
+    for line in log.details():
+        console.detail(line)

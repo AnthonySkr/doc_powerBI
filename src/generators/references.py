@@ -1,8 +1,10 @@
 """
-Tableau des références d'un visuel, et chemin inverse (« utilisée dans »).
+Tableaux numérotés des visuels, et chemin inverse (« utilisée dans »).
 
 Chaque visuel documenté est accompagné d'un tableau numérotant les champs qu'il
-affiche. Symétriquement, chaque mesure liste les visuels qui l'emploient.
+affiche, et chaque groupe d'une légende numérotant les visuels qu'il contient —
+dans les deux cas, le numéro est reporté à la main sur la capture.
+Symétriquement, chaque mesure liste les visuels qui l'emploient.
 
 Les libellés, rôles traduits et gabarits de numérotation sont déclarés dans le
 plan, sous `options:` de la section des visuels.
@@ -49,6 +51,30 @@ def index_references(report: PowerBIReport, options: dict[str, Any]) -> None:
             visual.references = build_references(visual, references, counter)
 
 
+def index_group_members(report: PowerBIReport, options: dict[str, Any]) -> None:
+    """
+    Numérote la légende de chaque groupe de visuels.
+
+    La légende est la table de correspondance entre la capture du groupe et
+    son contenu : elle porte les mêmes numéros que ceux reportés sur l'image.
+    """
+    numbering = (options.get("groups") or {}).get("numbering") or {}
+    scope = numbering.get("scope", "group")
+    start = int(numbering.get("start", 1))
+    number_format = numbering.get("format", "{n}")
+
+    document_counter = _Counter(start)
+
+    for page in report.pages:
+        page_counter = _Counter(start)
+        for group in page.groups:
+            counter = {"document": document_counter, "page": page_counter}.get(
+                scope, _Counter(start)
+            )
+            for member in group.members:
+                member.number = number_format.format(n=counter.next())
+
+
 def index_usages(
     report: PowerBIReport, all_measures: dict[str, DaxMeasure], options: dict[str, Any]
 ) -> None:
@@ -80,7 +106,7 @@ def index_usages(
 
 
 def build_references(
-    visual: Visual, options: dict[str, Any], counter: "_Counter"
+    visual: Visual, options: dict[str, Any], counter: _Counter
 ) -> list[VisualReference]:
     """Construit les lignes du tableau des références d'un visuel."""
     labels = options.get("labels") or {}

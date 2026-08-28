@@ -9,7 +9,9 @@
 #  block   : un élément de contenu. Types disponibles :
 #     paragraph        texte fixe (éventuellement proposé à l'édition)
 #     image            emplacement réservé pour une capture (texte descriptif)
+#                      (`markers:` = repères numérotés à glisser sur l'image)
 #     user_fill        zone laissée vide, à compléter par l'utilisateur ensuite
+#                      (`hint:` = ce qu'on attend, écrit en guise d'amorce)
 #     table            tableau construit à partir des données extraites
 #     property         libellé (sous-titre) + valeur, ou liste de valeurs
 #     loop             répétition d'un sous-plan sur une collection de données
@@ -37,13 +39,21 @@ version: 1
 # =============================================================================
 document:
   template: "template-doc-pbib.docx"
-  output_dir: "doc"
+  # Dossier de sortie, à côté du fichier .pbip. La question `dossier_sortie`
+  # le demande au lancement ; un chemin absolu est accepté tel quel.
+  output_dir: "{{ inputs.dossier_sortie }}"
   output_name: "documentation_{{ report.name }}.docx"
+
+  # Les réponses aux questions ci-dessous (`inputs:`) sont conservées à côté du
+  # fichier .pbip et reproposées à la génération suivante : un Entrée les
+  # reconduit.
+  remember_answers: true
+  answers_file: "reponses_{{ report.name }}.yaml"
 
   # Page de garde : le paragraphe contenant ce texte est remplacé.
   cover:
     placeholder: "Titre du document"
-    text: "Documentation du Rapport\n{{ inputs.nom_rapport }}"
+    text: "Documentation \n{{ inputs.nom_rapport }}"
     bold: true
 
   # En-têtes et pieds de page du template : le texte placé à droite est
@@ -79,17 +89,15 @@ styles:
   normal: "Normal"
   bullet: "List Bullet"
   code: "Code DAX"
-
-  # Styles apportés par le template v2
   image: "Image Placeholder"   # encadré pointillé réservant la capture
   caption: "Legende"           # légende sous l'emplacement d'image
-  todo: "A completer"          # zones à rédiger après génération
+  todo: "A completer"
   table: "Tableau Reference"   # tableau des références d'un visuel
-  table_data: "Tableau Donnees"  # tableau neutre (autres tableaux du plan)
+  table_data: "Tableau Donnees"
   ref_header: "Ref Entete"     # ligne d'en-tête du tableau des références
-  ref_number: "Ref Numero"     # colonne N°
-  ref_role: "Ref Role"         # colonne Rôle
-  ref_value: "Ref Valeur"      # colonne Élément référencé
+  ref_number: "Ref Numero"
+  ref_role: "Ref Role"
+  ref_value: "Ref Valeur"
   technical_id: "Id technique" # type et identifiant à côté d'un titre
 
   fallback: "Normal"           # utilisé si un style ci-dessus est introuvable
@@ -107,23 +115,45 @@ rendering:
     text_format: "🖼  {description}"
     caption_format: "Figure {n} — {description}"
     show_caption: true         # légende numérotée sous l'emplacement (style Legende)
-    numbering: true            # numérotation continue des figures du document
+    # Le `{n}` de la légende est un champ Word, pas un texte : supprimer une
+    # capture renumérote les suivantes à l'ouverture du document (ou tout de
+    # suite avec Ctrl+A puis F9). Aucun numéro n'est donc à reprendre à la main.
+    #   auto  = champ Word (recommandé)
+    #   fixed = numéro figé à la génération
+    #   false = pas de numérotation ({n} disparaît de la légende)
+    numbering: auto
+    sequence: "Figure"         # nom de la séquence Word — celui de ses légendes
     empty_paragraph_after: false
 
-  # Table des matières du template (page 2). Les numéros de page dépendent de
-  # la mise en page : seul Word sait les calculer. Le champ est donc marqué
-  # « à recalculer », ce que Word applique à l'ouverture du document.
+    # Repères à faire glisser sur la capture. Un bloc `image` qui porte
+    # `markers:` (voir la partie 7) fait dessiner une pastille par ligne du
+    # tableau qui suit : elles sont posées en rangée sous l'emplacement, et se
+    # déplacent à la souris sur l'image — au clavier pour l'ajustement fin.
+    # Réglages d'aspect communs à toutes :
+    markers:
+      shape: ellipse           # ellipse | roundRect
+      size_cm: 0.62            # diamètre de la pastille
+      spacing_cm: 0.9          # pas entre deux repères de la rangée
+      line_cm: 0.9             # hauteur d'une rangée
+      per_row: 12              # au-delà, les repères passent à la rangée suivante
+      fill: "0070C0"           # bleu de la colonne « N° » du tableau
+      text_color: "FFFFFF"
+      font_size_pt: 9
+      style: "{{ styles.normal }}"   # style du paragraphe qui les porte
+
   table_of_contents:
     update: true
     update_all_fields: false  # true = Word recalcule aussi les autres champs
-    # true = pilote Word en fin de script pour livrer un document déjà à jour
-    # (Windows, Word installé et paquet pywin32 ; sinon l'option est ignorée).
     update_with_word: false
     levels: ""                # ex. "1-3" pour inclure les visuels et les mesures
 
   # Zones laissées vides pour rédaction manuelle après génération.
   user_fill:
     placeholder_text: "[À compléter]"
+    # Un bloc `user_fill` qui porte un `hint:` écrit cette indication à la
+    # place de l'amorce générique — même mise en forme, mais elle dit ce
+    # qu'on attend à cet endroit.
+    hint_format: "[{hint}]"
     show_placeholder: true     # false = laisse un paragraphe vide sans texte
 
   # Liens hypertextes internes (toute mention d'une mesure → sa définition).
@@ -171,16 +201,54 @@ data:
       - shape
       - basicShape
       - textbox
-    exclude_titles: []
-    only_with_measures: false  # true = ne documenter que les visuels avec mesures
-    sort_by: title             # title | position
+      - unknown
+    # Titres à ne pas détailler. La question `visuels_non_detailles` posée au
+    # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
+    # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
+    # une seconde fois page par page.
+    exclude_titles: "{{ inputs.visuels_non_detailles }}"
+    only_with_measures: false     # true = ne documenter que les visuels avec mesures
+    sort_by: position             # title | position
+
+    # Groupes Power BI (`visualGroup` d'un visual.json). Les visuels qui
+    # portent un `parentGroupName` sont documentés à l'intérieur de leur
+    # groupe : capture d'ensemble, légende du contenu, puis le détail visuel
+    # par visuel.
+    groups:
+      enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
+      keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
+      # Groupes à ne pas détailler — même question qu'au-dessus. Un groupe
+      # écarté l'est avec tout son contenu.
+      exclude_titles: "{{ inputs.visuels_non_detailles }}"
+      sort_by: position        # position | title — ordre des groupes dans la page
+      member_sort_by: position # ordre de la légende : position à l'écran ou title
 
   tables:
     exclude_hidden: true
-    exclude_names: []          # tables techniques à ne pas documenter
+    exclude_names: []          # tables à ne pas documenter
     sort_by: name
-    # Mise en forme d'une étape Power Query : {name} et {expression}
-    step_format: "{name}"
+
+    # Sources qui n'apprennent rien : la table de mesures créée à la main a
+    # pour toute source `{1}`. Une table dont la source est listée ici est
+    # traitée comme sans source — le bloc « Paramètres » n'est pas écrit.
+    # Comparaison insensible aux espaces et à la casse.
+    ignore_sources:
+      - "{1}"
+
+    # Étapes Power Query retenues dans « Synthétisation du traitement ».
+    # Le but est de ne garder que les étapes qui portent une règle de gestion :
+    # tout le reste est du geste de mise en forme, que le lecteur n'a pas à lire.
+    steps:
+      # Les étapes auxquelles personne n'a donné de nom : Power BI les nomme
+      # d'un GUID (b4d2029b-697d-437b-8c10-138964cd23db).
+      exclude_unnamed: true
+      exclude_names:           # noms exacts à ne pas afficher
+        - Source
+      exclude_prefixes:        # tout nom commençant par... (suffixes compris)
+        - Navigation
+        - Type modifié
+        - Colonnes renommées
+        - Colonnes permutées
 
   measures:
     scope: all      # all | used_in_report (mesures + dépendances)
@@ -193,11 +261,51 @@ data:
     sort_by: name
 
 # =============================================================================
-#  5. INPUTS — questions posées à l'utilisateur au lancement du script
+#  5. MERGE — regénération au-dessus d'une documentation existante
 # =============================================================================
-#  type : confirm (oui/non) | text (une ligne) | choice | textarea
+#  Si le fichier de sortie existe déjà, il est lu avant d'être régénéré : les
+#  zones rédigées à la main sont reprises, et ce qui a changé dans le rapport
+#  est signalé.
+# =============================================================================
+merge:
+  enabled: true
+  # Reprendre les textes saisis dans les zones `user_fill` et les paragraphes
+  # `editable`. false = repartir des textes du plan à chaque génération.
+  keep_user_text: true
+  # La version précédente est déplacée ici avant d'écrire la nouvelle ;
+  # elle n'est donc jamais écrasée.
+  backup: true
+  backup_dir: ".versions"
+  # Surlignage : yellow | green | turquoise | gray | none
+  # changed : texte repris alors que l'élément a changé techniquement
+  #           (nouvelle formule DAX, champs du visuel modifiés) — à relire.
+  # new     : zone à rédiger d'un élément apparu depuis la version précédente.
+  highlight_changed: yellow
+  highlight_new: green
+
+  # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
+  # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
+  # sont rassemblés en fin de document, avec leur provenance.
+  orphans:
+    enabled: true
+    title: "Contenu non replacé"
+    # intro : laisser vide pour le texte d'explication par défaut.
+    intro: ""
+
+# =============================================================================
+#  6. INPUTS — questions posées à l'utilisateur au lancement du script
+# =============================================================================
+#  type : confirm (oui/non) | text (une ligne) | textarea | choice
+#         | multi_choice (plusieurs numéros, séparés par une virgule)
+#  Les `options:` d'un choice / multi_choice acceptent une expression :
+#  `choices.visuals` liste ce que le rapport contient réellement.
 # =============================================================================
 inputs:
+  - id: dossier_sortie
+    type: text
+    label: "Dossier où écrire la documentation (à côté du .pbip)"
+    default: "doc"
+
   - id: nom_rapport
     type: text
     label: "Nom du rapport à afficher sur la page de garde"
@@ -218,24 +326,66 @@ inputs:
     label: "Le rapport utilise-t-il un volet de filtre ouvert par un bouton ?"
     default: true
 
+  # Sélection multiple dans le contenu réel du rapport : `choices.visuals`
+  # liste les titres des groupes et des visuels que le document peut détailler.
+  # Un même bandeau porte le même titre sur toutes les pages : l'écarter une
+  # fois l'écarte partout.
+  - id: visuels_non_detailles
+    type: multi_choice
+    label: "Visuels ou groupes déjà présentés ailleurs, à ne pas détailler page par page"
+    options: "{{ choices.visuals }}"
+    default: []
+
   - id: editer_textes
     type: confirm
     label: "Souhaitez-vous relire et modifier les textes types avant écriture ?"
     default: true
 
 # =============================================================================
-#  6. PLAN DU DOCUMENT
+#  7. PLAN DU DOCUMENT
 # =============================================================================
 sections:
 
   # ---------------------------------------------------------------------------
   #  INITIALISATION
   # ---------------------------------------------------------------------------
+  # Partie entièrement rédigée à la main. `seed: true` : le script écrit les
+  # titres à la première génération, puis n'y touche plus.
   - id: initialisation
     title: "Initialisation"
     level: 1
-    source: template          # le contenu vient du template
-    generate: false           # aucune écriture : le contenu du template est conservé
+    seed: true
+    sections:
+      - title: "Contexte"
+        level: 2
+        blocks: [{ type: user_fill, id: init_contexte, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Objet"
+        level: 2
+        blocks: [{ type: user_fill, id: init_objet, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Objectif"
+        level: 2
+        blocks: [{ type: user_fill, id: init_objectif, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Acteurs"
+        level: 2
+        sections:
+          - title: "Parties Prenantes"
+            level: 3
+            blocks: [{ type: user_fill, id: init_prenantes, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+          - title: "Parties intéressées"
+            level: 3
+            blocks: [{ type: user_fill, id: init_interessees, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Périmètre"
+        level: 2
+        blocks: [{ type: user_fill, id: init_perimetre, show_placeholder: false, style: "{{ styles.normal }}" }]
+
+      - title: "Source"
+        level: 2
+        blocks: [{ type: user_fill, id: init_source, show_placeholder: false, style: "{{ styles.normal }}" }]
 
   # ---------------------------------------------------------------------------
   #  ORGANISATION GRAPHIQUE
@@ -243,7 +393,7 @@ sections:
   - id: organisation_graphique
     title: "Organisation Graphique"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: paragraph
         id: og_intro
@@ -376,26 +526,44 @@ sections:
               - type: image
                 id: filtre_fermeture_capture
                 description: "Visuel explicatif fermeture volet filtre"
+          - id: rappel_contexte
+            title: "Rappel de contexte"
+            level: 3
+            when: inputs.volet_filtre
+            blocks:
+              - type: paragraph
+                id: text_rappel_contexte
+                editable: true
+                prompt: "Texte récapitulatif du contexte"
+                text: >-
+                  Le rappel de contexte nous permet de visualiser le contexte dans lequel 
+                  nous consultons les données. Il se met à jour en fonction des filtres appliqués.
+              - type: image
+                id: rappel_contexte_capture
+                description: "Visuel explicatif rappel contexte de filtre"
 
   # ---------------------------------------------------------------------------
   #  ACQUISITION DES DONNÉES — rédigée manuellement après génération
   # ---------------------------------------------------------------------------
+  # Comme « Initialisation » : tout ce que vous écrivez ici vous revient en
+  # bloc, sous-titres compris (`seed: true`).
   - id: acquisition_donnees
     title: "Acquisition des données"
     level: 1
-    page_break_before: true
+    page_break_before: false
+    seed: true
     blocks:
       - type: user_fill
         id: acquisition_contenu
         hint: "Décrire l'origine et le mode d'acquisition des données"
 
   # ---------------------------------------------------------------------------
-  #  VISUELS — une h2 par page, une h3 par visuel
+  #  VISUELS — un h2 par page, un h3 par visuel
   # ---------------------------------------------------------------------------
   - id: visuels
     title: "Visuels"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: paragraph
         id: visuels_intro
@@ -415,61 +583,150 @@ sections:
         section:
           title: "{{ page.display_name }}"
           level: 2
+          bookmark: "page:{{ page.name }}"
           blocks:
             - type: image
               id: page_capture
               description: "Capture complète de la page « {{ page.display_name }} »"
 
+            # --- Groupes Power BI de la page -----------------------------
+            # Un groupe rassemble ses visuels dans une même partie : capture
+            # d'ensemble, légende de son contenu, puis le détail de chacun de
+            # ses visuels documentés. Voir data.visuals.groups.
             - type: loop
-              id: boucle_visuels
-              over: page.visuals    # filtrée par data.visuals
-              item: visual
+              id: boucle_groupes
+              over: page.groups     # groupes racines, garnis par data.visuals
+              item: group
               section:
-                title: "{{ visual.title }}"
-                # Type du visuel, en gris discret à la suite du titre
-                title_suffix: "{{ visual.visual_type }}"
+                title: "{{ group.title }}"
+                title_suffix: "groupe"
                 title_suffix_style: "{{ styles.technical_id }}"
                 level: 3
-                # Cible des liens « Utilisée dans » de la définition des mesures
-                bookmark: "visual:{{ page.name }}:{{ visual.id }}"
+                bookmark: "group:{{ page.name }}:{{ group.id }}"
+                # Contenu du groupe : si un visuel y entre ou en sort, la
+                # rédaction reprise est signalée à la relecture.
+                fingerprint: "{{ group.signature }}"
                 blocks:
                   - type: image
-                    id: visuel_capture
-                    description: >-
-                      Capture du visuel « {{ visual.title }} » avec les numéros de
-                      référence reportés sur l'image
+                    id: groupe_capture
+                    description: "Capture du groupe « {{ group.title }} »"
+                    # Un repère par ligne de la légende ci-dessous, à faire
+                    # glisser sur la capture (voir rendering.image_placeholder).
+                    markers:
+                      over: group.members
+                      item: member
+                      label: "{{ member.number }}"
 
-                  # Tableau des références du visuel : le numéro de la première
-                  # colonne est reporté à la main sur la capture ci-dessus.
+                  # Légende du groupe : elle relie les numéros reportés sur la
+                  # capture ci-dessus aux visuels qui composent le groupe. Les
+                  # visuels écartés par data.visuals y figurent aussi — ils
+                  # n'ont simplement pas de partie détaillée plus bas.
                   - type: table
-                    id: visuel_references
-                    over: visual.references
-                    item: ref
+                    id: groupe_legende
+                    over: group.members
+                    item: member
                     style: "{{ styles.table }}"
                     header: true
-                    header_labels: ["N°", "Rôle", "Élément référencé"]
+                    header_labels: ["N°", "Élément du groupe", "Type"]
                     header_style: "{{ styles.ref_header }}"
-                    layout: fixed        # largeurs respectées par Word
-                    repeat_header: true  # en-tête répété à chaque page
-                    cant_split: true     # une ligne n'est jamais coupée
+                    layout: fixed
+                    repeat_header: true
+                    cant_split: true
                     vertical_align: center
                     autofit: false
                     columns:
                       - id: numero
                         width_cm: 1.25
                         style: "{{ styles.ref_number }}"
-                        value: "{{ ref.number }}"
-                      - id: role
-                        width_cm: 3.5
-                        style: "{{ styles.ref_role }}"
-                        value: "{{ ref.role }}"
-                      - id: valeur
-                        width_cm: 11.25
+                        value: "{{ member.number }}"
+                      - id: element
+                        width_cm: 10.25
                         style: "{{ styles.ref_value }}"
-                        # Nom de la mesure / colonne, ou expression du filtre.
-                        # Les mesures sont liées automatiquement à leur
-                        # définition (voir rendering.links.auto).
-                        value: "{{ ref.value }}"
+                        # Titre du visuel, précédé du sous-groupe s'il y en a un
+                        value: "{{ member.label }}"
+                      - id: type
+                        width_cm: 4.5
+                        style: "{{ styles.ref_role }}"
+                        value: "{{ member.visual_type }}"
+
+                  # Le détail des visuels du groupe, à l'intérieur de sa partie.
+                  # Le plan d'un visuel est défini ici une seule fois (ancre
+                  # YAML `&visuel`) et repris tel quel plus bas, hors groupe.
+                  - type: loop
+                    id: boucle_visuels_groupe
+                    over: group.visuals
+                    item: visual
+                    section: &visuel
+                      title: "{{ visual.title }}"
+                      # Type du visuel, en gris discret à la suite du titre
+                      title_suffix: "{{ visual.visual_type }}"
+                      title_suffix_style: "{{ styles.technical_id }}"
+                      level: 4
+                      # Cible des liens « Utilisée dans » de la définition des mesures
+                      bookmark: "visual:{{ page.name }}:{{ visual.id }}"
+                      # État technique du visuel : si l'empreinte change d'une
+                      # génération à l'autre, la rédaction reprise est surlignée.
+                      fingerprint: "{{ visual.visual_type }} {{ visual.signature }}"
+                      blocks:
+                        - type: image
+                          id: visuel_capture
+                          description: "Capture du visuel « {{ visual.title }} »"
+                          # Un repère par ligne du tableau ci-dessous, à faire
+                          # glisser sur la capture pour situer chaque champ.
+                          markers:
+                            over: visual.references
+                            item: ref
+                            label: "{{ ref.number }}"
+
+                        # Tableau des références du visuel : le numéro de la
+                        # première colonne est reporté à la main sur la capture.
+                        - type: table
+                          id: visuel_references
+                          over: visual.references
+                          item: ref
+                          style: "{{ styles.table }}"
+                          header: true
+                          header_labels: ["N°", "Rôle", "Élément référencé"]
+                          header_style: "{{ styles.ref_header }}"
+                          layout: fixed        # largeurs respectées par Word
+                          repeat_header: true  # en-tête répété à chaque page
+                          cant_split: true     # une ligne n'est jamais coupée
+                          vertical_align: center
+                          autofit: false
+                          columns:
+                            - id: numero
+                              width_cm: 1.25
+                              style: "{{ styles.ref_number }}"
+                              value: "{{ ref.number }}"
+                            - id: role
+                              width_cm: 3.5
+                              style: "{{ styles.ref_role }}"
+                              value: "{{ ref.role }}"
+                            - id: valeur
+                              width_cm: 11.25
+                              style: "{{ styles.ref_value }}"
+                              # Nom de la mesure / colonne, ou expression du
+                              # filtre. Les mesures sont liées automatiquement à
+                              # leur définition (voir rendering.links.auto).
+                              value: "{{ ref.value }}"
+
+                        # Rédaction libre, conservée d'une génération à l'autre.
+                        # Surlignée si les champs du visuel ont changé depuis.
+                        - type: user_fill
+                          id: visuel_commentaire
+                          label: "Lecture du visuel"
+                          hint: "Ce que montre le visuel et comment le lire"
+
+            # --- Visuels de la page hors de tout groupe ------------------
+            # Même plan que ci-dessus, d'un cran moins profond : sans groupe
+            # au-dessus d'eux, ces visuels sont des parties de la page.
+            - type: loop
+              id: boucle_visuels
+              over: page.ungrouped_visuals   # filtrés par data.visuals
+              item: visual
+              section:
+                <<: *visuel
+                level: 3
 
     # --- Construction des références de visuel -------------------------------
     options:
@@ -478,6 +735,14 @@ sections:
       usages:
         target: "visual:{{ page.name }}:{{ visual.id }}"
         label: "{{ page.display_name }} — {{ visual.title }}"
+
+      # Numérotation de la légende d'un groupe : ces numéros sont ceux à
+      # reporter sur la capture d'ensemble du groupe.
+      groups:
+        numbering:
+          start: 1
+          scope: group             # group | page | document
+          format: "{n}"
 
       references:
         numbering:
@@ -522,7 +787,7 @@ sections:
   - id: table_de_donnees
     title: "Table de données"
     level: 1
-    page_break_before: true
+    page_break_before: false
     sections:
 
       - id: source_donnees
@@ -544,20 +809,82 @@ sections:
             section:
               title: "{{ table.name }}"
               level: 3
+              bookmark: "table:{{ table.name }}"
+              fingerprint: >-
+                {{ table.source }} {{ table.transformation_steps }}
+                {{ table.calculated_columns }}
               blocks:
+                # Chaque partie ne s'écrit que si elle a quelque chose à dire :
+                # une table sans paramètres de connexion ni étape de traitement
+                # n'ouvre pas de sous-partie vide.
                 - type: property
                   id: table_parametres
+                  when: table.source
                   label: "Paramètres"
+                  # Expression de la source, telle qu'écrite dans Power Query :
+                  # son indentation est conservée.
                   value: "{{ table.source }}"
-                  fallback: "[À compléter]"
+                  value_style: "{{ styles.code }}"
 
-                - type: property
+                - type: table
                   id: table_traitement
+                  when: table.transformation_steps
                   label: "Synthétisation du traitement"
-                  # Étapes de transformation (Power Query) listées à la suite
-                  value_list: "{{ table.transformation_steps }}"
-                  value_style: "{{ styles.bullet }}"
-                  fallback: "[À compléter]"
+                  # Étapes Power Query retenues par data.tables.steps : les
+                  # étapes de mise en forme sont écartées, il ne reste que
+                  # celles qui portent une règle de gestion.
+                  over: table.transformation_steps
+                  item: step
+                  style: "{{ styles.table }}"
+                  header: true
+                  header_labels: ["Étape", "Opération"]
+                  header_style: "{{ styles.ref_header }}"
+                  layout: fixed
+                  repeat_header: true
+                  cant_split: true
+                  vertical_align: center
+                  autofit: false
+                  columns:
+                    - id: nom
+                      width_cm: 4.5
+                      style: "{{ styles.ref_role }}"
+                      value: "{{ step.name }}"
+                    - id: operation
+                      width_cm: 11.5
+                      style: "{{ styles.ref_value }}"
+                      # Opération de l'étape, ramenée sur une ligne
+                      value: "{{ step.expression }}"
+
+                # Colonnes calculées de la table : elles sont écrites en DAX
+                # dans le modèle, pas ramenées de la source. Sans colonne
+                # calculée, la table n'a pas de particularité à signaler.
+                - type: table
+                  id: table_particularite
+                  when: table.calculated_columns
+                  label: "Colonnes calculées"
+                  over: table.calculated_columns
+                  item: column
+                  style: "{{ styles.table_data }}"
+                  header: true
+                  header_labels: ["Colonne calculée", "Code"]
+                  header_style: "{{ styles.ref_header }}"
+                  layout: fixed
+                  repeat_header: true
+                  cant_split: true
+                  vertical_align: center
+                  autofit: false
+                  columns:
+                    - id: nom
+                      width_cm: 4.5
+                      style: "{{ styles.ref_role }}"
+                      value: "{{ column.name }}"
+                    - id: code
+                      width_cm: 11.5
+                      style: "{{ styles.ref_value }}"
+                      # Expression DAX, telle qu'écrite dans le modèle. Les
+                      # mesures qu'elle mentionne sont liées automatiquement
+                      # à leur définition (voir rendering.links.auto).
+                      value: "{{ column.expression }}"
 
   # ---------------------------------------------------------------------------
   #  DÉFINITION DES MESURES — cible des liens hypertextes des visuels
@@ -565,7 +892,7 @@ sections:
   - id: definition_mesures
     title: "Définition des mesures"
     level: 1
-    page_break_before: true
+    page_break_before: false
     blocks:
       - type: loop
         id: boucle_tables_mesures
@@ -583,6 +910,7 @@ sections:
                 title: "{{ measure.name }}"
                 level: 3
                 bookmark: "measure:{{ measure.name }}"   # cible des liens
+                fingerprint: "{{ measure.expression }}"
                 blocks:
                   - type: property
                     id: mesure_code
@@ -590,11 +918,21 @@ sections:
                     value: "{{ measure.expression }}"
                     value_style: "{{ styles.code }}"
 
+                  # La description vient de Power BI quand elle y est saisie ;
+                  # sinon c'est une zone à rédiger, et elle doit le rester : un
+                  # `property` appartient au script, qui le réécrit à chaque
+                  # génération — ce qu'on y aurait écrit partirait en annexe.
                   - type: property
                     id: mesure_description
                     label: "Description"
                     value: "{{ measure.description }}"
-                    fallback: "[À compléter]"
+                    when: measure.description
+
+                  - type: user_fill
+                    id: mesure_description_libre
+                    label: "Description"
+                    hint: "ce que la mesure calcule, et quand l'employer"
+                    when: "!measure.description"
 
                   - type: property
                     id: mesure_sources
@@ -602,7 +940,7 @@ sections:
                     # Colonnes et mesures référencées par l'expression DAX
                     value_list: "{{ measure.used_columns + measure.dependent_measures }}"
                     value_style: "{{ styles.bullet }}"
-                    fallback: "[À compléter]"
+                    fallback: "Aucune colonne ni mesure référencée."
 
                   # Chemin inverse des liens : d'ici on remonte aux visuels
                   # qui affichent la mesure, puis aux mesures qui l'appellent.

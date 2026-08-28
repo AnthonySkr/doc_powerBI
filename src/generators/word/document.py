@@ -6,20 +6,28 @@ et les `blocks` de la configuration et écrit ce qu'elles décrivent, à la suit
 du contenu déjà présent dans le template.
 """
 
+import math
 from collections.abc import Callable
 from typing import Any
 
-from docx.shared import Cm
+from docx.shared import Cm, Emu, Pt
 
 from src import console
-from src.config import DocConfig, evaluate, render, render_list, resolve_items
-from src.generators.word import fields, tables
+from src.config import DocConfig, evaluate, printable, render, render_list, resolve_items
+from src.generators.word import fields, shapes, tables
+from src.generators.word.body import Body
 from src.generators.word.links import LinkIndex
+from src.generators.word.merging import MergeWriter
 from src.generators.word.styles import StyleResolver
+from src.merge import PreviousDocument
 from src.models.data_models import DocLink
 
 # Callback proposant à l'utilisateur de réécrire le texte d'un bloc `editable`.
 TextProvider = Callable[[dict[str, Any], str], str]
+
+
+class DocumentError(Exception):
+    """Le document n'a pas pu être produit."""
 
 
 class DocumentBuilder:
@@ -29,15 +37,22 @@ class DocumentBuilder:
         config: DocConfig,
         context: dict[str, Any],
         text_provider: TextProvider | None = None,
+        previous: PreviousDocument | None = None,
     ):
         self.doc = doc
+        # Toute écriture de contenu passe par là (voir `body.Body`).
+        self.body = Body(doc)
         self.config = config
         self.context = context
         self.text_provider = text_provider
 
         self.styles = StyleResolver(doc, config, context)
         self.links = LinkIndex(config, context, self.styles.ids)
+        self.merge = MergeWriter(self.body, config, previous)
         self._figure_number = 0
+        # Word refuse deux formes de même identifiant : la numérotation des
+        # repères reprend au-dessus de ce que le template contient déjà.
+        self._shape_id = shapes.last_id(doc)
 
         self._block_writers = {
             "paragraph": self._write_paragraph,
@@ -45,7 +60,6 @@ class DocumentBuilder:
             "user_fill": self._write_user_fill,
             "property": self._write_property,
             "table": self._write_table,
-            "loop": self._write_loop,
         }
 
     # ── Point d'entrée ────────────────────────────────────────────
@@ -54,7 +68,7 @@ class DocumentBuilder:
         self._write_properties()
         self._write_header_footer()
         for section in self.config.sections:
-            self._write_section(section, self.context)
+            self._write_section(section, self.context, "")
         self._update_table_of_contents()
         self.links.report()
 
@@ -73,7 +87,11 @@ class DocumentBuilder:
             for run in list(paragraph.runs):
                 run._element.getparent().remove(run._element)
             self._write_rich_text(
-                paragraph, text, self.context, bold=bool(cover.get("bold", True)), links=False
+                paragraph,
+                text,
+                self.context,
+                bold=bool(cover.get("bold", True)),
+                links=False,
             )
             return
 
@@ -129,30 +147,52 @@ class DocumentBuilder:
         console.info(f"Table des matières{detail} : recalculée à l'ouverture dans Word")
 
     # ── Sections ──────────────────────────────────────────────────
-    def _write_section(self, section: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_section(
+        self, section: dict[str, Any], context: dict[str, Any], parent: str = ""
+    ) -> None:
+        """
+        Écrit une section du plan.
+
+        `parent` est l'identifiant de la partie qui la contient : il sert à
+        repérer une sous-partie que le plan n'identifie pas autrement (ni
+        `bookmark:`, ni `id:`), et se transmet à ses propres filles.
+
+        Une partie déclarée `seed:` fait exception : son contenu — sous-parties
+        comprises — n'est pas repéré du tout, et lui revient en bloc.
+        """
         if section.get("generate") is False or section.get("source") == "template":
             return
         if not evaluate(section.get("when"), context):
             return
 
         if self._needs_page_break(section):
-            self.doc.add_page_break()
+            self.body.add_page_break()
 
+        # L'ancre précède le titre : à la relecture, tout ce qui suit lui
+        # appartient jusqu'à l'ancre suivante.
+        element_id = self.merge.anchor(section, context, parent) or parent
+        self._write_title(section, context)
+
+        # `seed:` — la partie est écrite une fois, puis appartient entièrement
+        # à l'utilisateur : ses sous-titres et ses textes ne sont plus repérés,
+        # et lui reviennent tels qu'il les a laissés.
+        with self.merge.freeform(bool(section.get("seed"))):
+            for block in section.get("blocks") or []:
+                self._write_block(block, context, element_id)
+
+            for child in section.get("sections") or []:
+                self._write_section(child, context, element_id)
+
+    def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
         title = render(section.get("title"), context)
-        if title:
-            level = int(section.get("level", 1))
-            paragraph = self.doc.add_paragraph(
-                title, style=self.styles.paragraph(f"heading_{level}")
-            )
-            self._add_title_suffix(paragraph, section, context)
-            if section.get("bookmark"):
-                self.links.add_bookmark(paragraph, render(section["bookmark"], context))
+        if not title:
+            return
 
-        for block in section.get("blocks") or []:
-            self._write_block(block, context)
-
-        for child in section.get("sections") or []:
-            self._write_section(child, context)
+        level = _number(section.get("level"), "level", 1, int)
+        paragraph = self.body.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
+        self._add_title_suffix(paragraph, section, context)
+        if section.get("bookmark"):
+            self.links.add_bookmark(paragraph, render(section["bookmark"], context))
 
     def _add_title_suffix(self, paragraph, section: dict[str, Any], ctx: dict[str, Any]) -> None:
         """Complète un titre par une mention technique discrète (type du visuel...)."""
@@ -169,19 +209,30 @@ class DocumentBuilder:
         if "page_break_before" in section:
             return bool(section["page_break_before"])
         return bool(self.config.rendering.get("page_break_before_heading_1")) and (
-            int(section.get("level", 1)) == 1
+            _number(section.get("level"), "level", 1, int) == 1
         )
 
     # ── Blocs ─────────────────────────────────────────────────────
-    def _write_block(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_block(
+        self, block: dict[str, Any], context: dict[str, Any], parent: str = ""
+    ) -> None:
         if not evaluate(block.get("when"), context):
+            return
+
+        if block.get("type") == "loop":
+            # Une boucle n'écrit rien elle-même : elle déroule un sous-plan,
+            # dont chaque section porte sa propre identité. Elle n'est donc
+            # jamais encadrée.
+            self._write_loop(block, context, parent)
             return
 
         writer = self._block_writers.get(block.get("type", ""))
         if writer is None:
             console.warn(f"Type de bloc inconnu ignoré : '{block.get('type')}' ({block.get('id')})")
             return
-        writer(block, context)
+
+        with self.merge.delimit(block):
+            writer(block, context)
 
     def _write_paragraph(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         text = render(block.get("text"), context)
@@ -191,41 +242,159 @@ class DocumentBuilder:
             return
 
         style = self.styles.paragraph(block.get("style") or "normal")
-        paragraph = self.doc.add_paragraph(style=style)
+        paragraph = self.body.add_paragraph(style=style)
         self._write_rich_text(paragraph, text, context, links=self._links_allowed(block, style))
 
     def _write_image(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Réserve l'emplacement d'une capture, avec sa description."""
         options = self.config.rendering["image_placeholder"]
         description = render(block.get("description"), context)
+        numbering = _numbering_mode(options.get("numbering"))
 
-        if options.get("numbering"):
+        if numbering != "none":
             self._figure_number += 1
 
-        text = str(options.get("text_format", "[IMAGE] {description}")).format(
-            description=description, n=self._figure_number
+        number = str(self._figure_number) if numbering != "none" else ""
+        text = _format(
+            options.get("text_format", "[IMAGE] {description}"),
+            "rendering.image_placeholder.text_format",
+            description=description,
+            n=number,
         )
-        self.doc.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
+        self.body.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
 
         if options.get("show_caption"):
-            caption = str(options.get("caption_format", "{description}")).format(
-                description=description, n=self._figure_number
-            )
-            self.doc.add_paragraph(caption, style=self.styles.paragraph("caption"))
+            self._write_caption(options, description, number, numbering)
+
+        self._write_markers(block, context, options)
 
         if options.get("empty_paragraph_after"):
-            self.doc.add_paragraph()
+            self.body.add_paragraph()
+
+    def _write_caption(
+        self, options: dict[str, Any], description: str, number: str, numbering: str
+    ) -> None:
+        """
+        Légende numérotée de la capture.
+
+        Le numéro est un champ Word (`SEQ`), pas un texte : supprimer une
+        capture renumérote les suivantes à l'ouverture du document, sans
+        reprise à la main. `numbering: fixed` le fige dans le texte, pour un
+        document destiné à un lecteur qui ne recalcule pas les champs.
+        """
+        template = str(options.get("caption_format", "{description}"))
+        key = "rendering.image_placeholder.caption_format"
+        values = {"description": description, "n": number}
+        paragraph = self.body.add_paragraph(style=self.styles.paragraph("caption"))
+
+        head, field, tail = template.partition("{n}")
+        if numbering != "auto" or not field:
+            paragraph.add_run(_format(template, key, **values))
+            return
+
+        paragraph.add_run(_format(head, key, **values))
+        fields.write_sequence_field(paragraph, str(options.get("sequence") or "Figure"), number)
+        paragraph.add_run(_format(tail, key, **values))
+
+    def _write_markers(
+        self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
+    ) -> None:
+        """
+        Repères numérotés à faire glisser sur la capture.
+
+        Les numéros sont ceux du tableau qui suit la capture — le plan désigne
+        la même liste. Ils sont posés en rangée sous l'emplacement, et n'ont
+        plus qu'à être déplacés un à un sur l'image : ce sont des formes
+        flottantes, elles ne bousculent rien en route.
+        """
+        plan = block.get("markers")
+        if not plan:
+            return
+
+        item = plan.get("item") or "item"
+        labels = [
+            render(
+                plan.get("label") or f"{{{{ {item}.number }}}}",
+                {**context, item: value},
+            )
+            for value in resolve_items(plan.get("over"), context)
+        ]
+        labels = [label for label in labels if label]
+        if not labels:
+            return
+
+        look = options.get("markers") or {}
+        marks = "rendering.image_placeholder.markers"
+        size = Cm(_number(look.get("size_cm"), f"{marks}.size_cm", 0.62))
+        spacing = Cm(_number(look.get("spacing_cm"), f"{marks}.spacing_cm", 0.9))
+        line = Cm(_number(look.get("line_cm"), f"{marks}.line_cm", 0.9))
+        per_row = max(_number(look.get("per_row"), f"{marks}.per_row", 12, int), 1)
+
+        paragraph = self.body.add_paragraph(style=self.styles.paragraph(look.get("style")))
+        # Les repères flottent : sans hauteur réservée, ils déborderaient sur
+        # le tableau qui suit. Le paragraphe porte donc celle de leurs rangées.
+        paragraph.paragraph_format.line_spacing = Emu(int(line) * math.ceil(len(labels) / per_row))
+        paragraph.paragraph_format.space_before = Pt(0)
+        paragraph.paragraph_format.space_after = Pt(0)
+
+        positions = shapes.row_positions(len(labels), spacing, per_row, line)
+        for label, (left, top) in zip(labels, positions):
+            self._shape_id += 1
+            paragraph._p.append(
+                shapes.marker(
+                    label,
+                    self._shape_id,
+                    left,
+                    top,
+                    size,  # type: ignore
+                    shape=str(look.get("shape") or "ellipse"),
+                    fill=str(look.get("fill") or "0070C0"),
+                    text_color=str(look.get("text_color") or "FFFFFF"),
+                    font_size=Pt(_number(look.get("font_size_pt"), f"{marks}.font_size_pt", 9)),
+                )
+            )
 
     def _write_user_fill(self, block: dict[str, Any], context: dict[str, Any]) -> None:
-        """Zone laissée à rédiger après génération."""
+        """
+        Zone à rédiger après génération.
+
+        Elle n'est écrite qu'à la première génération : ensuite, ce que
+        l'utilisateur y a mis est repris tel quel par la fusion.
+        """
         options = self.config.rendering["user_fill"]
-        text = (
-            render(block.get("placeholder_text") or options.get("placeholder_text"), context)
-            if options.get("show_placeholder")
-            else ""
-        )
+
+        label = render(block.get("label"), context)
+        if label:
+            self.body.add_paragraph(
+                label,
+                style=self.styles.paragraph(
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
+                ),
+            )
+
+        shown = block.get("show_placeholder", options.get("show_placeholder"))
+        text = self._user_fill_text(block, context, options) if shown else ""
         style = block.get("style") or options.get("style") or "todo"
-        self.doc.add_paragraph(text, style=self.styles.paragraph(style))
+        self.body.add_paragraph(text, style=self.styles.paragraph(style))
+
+    def _user_fill_text(
+        self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
+    ) -> str:
+        """
+        Amorce d'une zone à rédiger.
+
+        Le bloc du plan dit ce qu'on attend à cet endroit (`hint:`) : autant
+        l'écrire, plutôt qu'un « [À compléter] » qui ne guide personne. Même
+        mise en forme dans les deux cas — c'est la même invitation à écrire.
+        """
+        hint = render(block.get("hint"), context)
+        if hint:
+            return _format(
+                options.get("hint_format", "[{hint}]"),
+                "rendering.user_fill.hint_format",
+                hint=hint,
+            )
+        return render(block.get("placeholder_text") or options.get("placeholder_text"), context)
 
     def _write_property(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """Sous-titre + valeur, ou sous-titre + liste de valeurs."""
@@ -233,7 +402,7 @@ class DocumentBuilder:
 
         label = render(block.get("label"), context)
         if label:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 label,
                 style=self.styles.paragraph(block.get("label_style") or options.get("label_style")),
             )
@@ -249,12 +418,12 @@ class DocumentBuilder:
         values = [value for value in values if value]
 
         for value in values:
-            paragraph = self.doc.add_paragraph(style=value_style)
+            paragraph = self.body.add_paragraph(style=value_style)
             self._write_value(paragraph, value, context, links=links)
 
         fallback = render(block.get("fallback"), context)
         if not values and fallback:
-            self.doc.add_paragraph(
+            self.body.add_paragraph(
                 fallback,
                 style=self.styles.paragraph(
                     block.get("fallback_style") or options.get("fallback_style") or "todo"
@@ -262,7 +431,7 @@ class DocumentBuilder:
             )
 
         if options.get("empty_paragraph_after"):
-            self.doc.add_paragraph()
+            self.body.add_paragraph()
 
     def _value_list(self, expression: Any, context: dict[str, Any]) -> list[Any]:
         """
@@ -284,7 +453,18 @@ class DocumentBuilder:
         if not columns or not rows:
             return
 
-        table = self.doc.add_table(rows=0, cols=len(columns))
+        # Sous-titre facultatif, comme pour un bloc `property` : il n'est écrit
+        # que si le tableau l'est, et disparaît donc avec lui.
+        label = render(block.get("label"), context)
+        if label:
+            self.body.add_paragraph(
+                label,
+                style=self.styles.paragraph(
+                    block.get("label_style") or self.config.rendering["property"].get("label_style")
+                ),
+            )
+
+        table = self.body.add_table(rows=0, cols=len(columns))
         style = self.styles.table(render(block.get("style"), context))
         if style:
             table.style = style
@@ -310,7 +490,7 @@ class DocumentBuilder:
                 self._fill_cell(cell, column, {**context, item_name: row_item})
 
         _apply_column_widths(table, columns)
-        self.doc.add_paragraph()
+        self.body.add_paragraph()
 
     def _write_table_header(
         self,
@@ -365,7 +545,7 @@ class DocumentBuilder:
 
         self._write_rich_text(paragraph, text, context, links=self._links_allowed(column, ""))
 
-    def _write_loop(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+    def _write_loop(self, block: dict[str, Any], context: dict[str, Any], parent: str = "") -> None:
         """Répète une section et/ou des blocs sur chaque élément d'une collection."""
         item_name = block.get("item") or "item"
         section = block.get("section")
@@ -373,9 +553,9 @@ class DocumentBuilder:
         for item in resolve_items(block.get("over"), context):
             item_context = {**context, item_name: item}
             if section:
-                self._write_section(section, item_context)
+                self._write_section(section, item_context, parent)
             for inner in block.get("blocks") or []:
-                self._write_block(inner, item_context)
+                self._write_block(inner, item_context, parent)
 
     # ── Écriture du texte ─────────────────────────────────────────
     def _write_value(self, paragraph, value: Any, context: dict[str, Any], links: bool) -> None:
@@ -402,7 +582,9 @@ class DocumentBuilder:
         links: bool = True,
     ) -> None:
         """Écrit un texte en gérant les retours à la ligne et les liens internes."""
-        lines = str(text).split("\n")
+        # Tout le texte du document passe par ici : c'est le seul endroit où
+        # écarter ce qu'un fichier .docx ne peut pas porter (voir `printable`).
+        lines = printable(str(text)).split("\n")
         skip = self.links.self_bookmark(context) if links else None
 
         for index, line in enumerate(lines):
@@ -426,6 +608,47 @@ class DocumentBuilder:
         return True
 
 
+def _format(template: Any, key: str, **values: str) -> str:
+    """
+    Applique un gabarit `{...}` déclaré dans la configuration.
+
+    Ces gabarits s'écrivent à la main dans le YAML, livré en clair à côté de
+    l'exécutable. Un nom de champ mal orthographié doit dire lequel et où,
+    plutôt que de remonter en `KeyError` devant un utilisateur sans Python.
+    """
+    try:
+        return str(template).format(**values)
+    except (KeyError, IndexError, ValueError) as e:
+        available = ", ".join(f"{{{name}}}" for name in values) or "aucun"
+        raise DocumentError(
+            f"`{key}` : gabarit invalide ({e}). Champs disponibles : {available}."
+        ) from e
+
+
+def _number(value: Any, key: str, default: float, cast=float):
+    """Valeur numérique déclarée dans la configuration, ou message explicite."""
+    if value is None or value == "":
+        return cast(default)
+    try:
+        return cast(value)
+    except (TypeError, ValueError) as e:
+        raise DocumentError(f"`{key}` : nombre attendu, reçu '{value}'.") from e
+
+
+def _numbering_mode(value: Any) -> str:
+    """
+    Mode de numérotation des figures : `auto`, `fixed` ou `none`.
+
+    `auto` confie le numéro à un champ Word, qui le tient à jour lui-même —
+    c'est le comportement voulu dans la quasi-totalité des cas. Les anciens
+    plans écrivaient un booléen : `true` vaut `auto`, `false` vaut `none`.
+    """
+    if isinstance(value, bool) or value is None:
+        return "auto" if value is not False else "none"
+    mode = str(value).strip().lower()
+    return mode if mode in ("auto", "fixed", "none") else "auto"
+
+
 def _header_footer_parts(section) -> dict[str, tuple]:
     return {
         "header": (section.header, section.first_page_header, section.even_page_header),
@@ -436,7 +659,7 @@ def _header_footer_parts(section) -> dict[str, tuple]:
 def _column_width(column: dict[str, Any]) -> float | None:
     """Largeur d'une colonne en centimètres (`width_cm`)."""
     width = column.get("width_cm")
-    return float(width) if width else None
+    return _number(width, "width_cm", 0, float) if width else None
 
 
 def _apply_column_widths(table, columns: list[dict[str, Any]]) -> None:

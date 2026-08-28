@@ -51,12 +51,37 @@ class DaxMeasure:
 
 
 @dataclass
+class TransformationStep:
+    """Étape d'un script Power Query (`let ... in ...`)."""
+
+    name: str
+    expression: str  # opération de l'étape, ramenée sur une ligne
+    # L'expression telle qu'écrite, indentation et retours à la ligne compris.
+    raw_expression: str = ""
+
+    def __str__(self) -> str:
+        return f"{self.name} = {self.expression}"
+
+
+@dataclass
+class CalculatedColumn:
+    """Colonne calculée d'une table : son nom et son expression DAX."""
+
+    name: str
+    expression: str
+
+    def __str__(self) -> str:
+        return f"{self.name} = {self.expression}"
+
+
+@dataclass
 class ModelTable:
     """Table du modèle sémantique."""
 
     name: str
     source: str = ""
     transformation_steps: list = field(default_factory=list)
+    calculated_columns: list = field(default_factory=list)
     is_hidden: bool = False
     measures: list = field(default_factory=list)
 
@@ -145,8 +170,82 @@ class Visual:
     has_measures: bool = False
     pos_x: float = 0.0
     pos_y: float = 0.0
+    # Nom technique du conteneur (`name` du visual.json). C'est lui que les
+    # `parentGroupName` des autres visuels désignent.
+    name: str = ""
+    # `parentGroupName` : nom du groupe Power BI qui contient le visuel.
+    parent_group_name: str = ""
     # Renseigné par `generators.references` : lignes du tableau des références.
     references: list = field(default_factory=list)
+
+    @property
+    def signature(self) -> str:
+        """
+        Description stable des champs affichés par le visuel.
+
+        Sert d'empreinte à la régénération : si elle change, la documentation
+        rédigée pour ce visuel porte peut-être sur une version périmée.
+        """
+        return " ".join(
+            sorted(f"{element.role}:{element.model_name}" for element in self.elements)
+            + sorted(item.to_string() for item in self.filters)
+        )
+
+
+@dataclass
+class VisualGroupMember:
+    """
+    Ligne de la légende d'un groupe.
+
+    La légende fait le lien entre la capture du groupe et son contenu : elle
+    liste **tous** les visuels du groupe, y compris ceux que `data.visuals`
+    écarte de la documentation (habillage, boutons...), sans les détailler.
+    """
+
+    number: str
+    title: str
+    visual_type: str
+    documented: bool = True  # False = visuel écarté par les filtres `data.visuals`
+    group_path: str = ""  # sous-groupe(s) traversé(s), vide si enfant direct
+
+    @property
+    def label(self) -> str:
+        """Colonne « Élément » : le titre, précédé du sous-groupe s'il y en a un."""
+        return f"{self.group_path} › {self.title}" if self.group_path else self.title
+
+
+@dataclass
+class VisualGroup:
+    """
+    Groupe de visuels d'une page (`visualGroup` d'un `visual.json`).
+
+    Un groupe est documenté comme un tout : une capture, une légende de son
+    contenu, puis le détail de chacun de ses visuels documentés. Les
+    sous-groupes éventuels sont rattachés à leur groupe racine : la structure
+    du document reste page → groupe → visuel.
+    """
+
+    id: str
+    name: str  # `name` du visual.json — cible des `parentGroupName`
+    title: str  # `displayName` du groupe
+    group_mode: str = ""  # ScaleMode | ScrollMode
+    parent_group_name: str = ""  # groupe parent, pour les groupes imbriqués
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    # Renseignés par `generators.filters` :
+    visuals: list = field(default_factory=list)  # visuels documentés du groupe
+    members: list = field(default_factory=list)  # légende : tout le contenu
+    subgroups: list = field(default_factory=list)  # sous-groupes directs
+
+    @property
+    def signature(self) -> str:
+        """
+        Description stable du contenu du groupe.
+
+        Sert d'empreinte à la régénération : si un visuel entre ou sort du
+        groupe, la rédaction reprise porte peut-être sur une version périmée.
+        """
+        return " ".join(sorted(f"{m.title}:{m.visual_type}" for m in self.members))
 
 
 @dataclass
@@ -159,6 +258,11 @@ class ReportPage:
     is_hidden: bool = False
     filters: list = field(default_factory=list)
     visuals: list = field(default_factory=list)
+    # Conteneurs de groupe lus par le parseur, puis organisés par
+    # `generators.filters` : groupes racines documentés de la page.
+    groups: list = field(default_factory=list)
+    # Visuels documentés n'appartenant à aucun groupe.
+    ungrouped_visuals: list = field(default_factory=list)
 
 
 @dataclass

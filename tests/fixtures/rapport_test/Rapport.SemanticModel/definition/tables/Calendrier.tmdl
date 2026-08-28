@@ -1,0 +1,8 @@
+table Calendrier
+
+	column Date
+		dataType: dateTime
+
+	partition Calendrier = m
+		mode: import
+		source = {1}

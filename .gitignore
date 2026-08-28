@@ -5,3 +5,6 @@ __pycache__
 ~*
 *.egg-info
 Galeries imbriquées.docx
+build
+dist
+.versions

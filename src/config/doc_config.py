@@ -5,7 +5,9 @@ from typing import Any
 
 import yaml
 
+from src import paths
 from src.config.defaults import DEFAULT_CONFIG_PATH, DEFAULTS
+from src.config.expressions import resolve_options
 
 
 class DocConfig:
@@ -33,6 +35,10 @@ class DocConfig:
         return self.raw["data"]
 
     @property
+    def merge(self) -> dict[str, Any]:
+        return self.raw["merge"]
+
+    @property
     def inputs(self) -> list[dict[str, Any]]:
         return self.raw["inputs"]
 
@@ -41,6 +47,17 @@ class DocConfig:
         return self.raw["sections"]
 
     # ── Helpers ───────────────────────────────────────────────────
+    def resolve_data(self, context: dict[str, Any]) -> DocConfig:
+        """
+        Retourne la configuration dont les filtres `data:` sont résolus.
+
+        Ils peuvent ainsi dépendre des réponses au lancement — écarter les
+        visuels que l'utilisateur a désignés, par exemple. Le reste de la
+        configuration est inchangé.
+        """
+        raw = {**self.raw, "data": resolve_options(self.data, context)}
+        return DocConfig(raw, self.path)
+
     def find_section(self, section_id: str) -> dict[str, Any] | None:
         """Retourne une section du plan par son id (recherche récursive)."""
         return _find_section(self.sections, section_id)
@@ -53,11 +70,19 @@ class DocConfig:
 
 def load_config(path: str = DEFAULT_CONFIG_PATH) -> DocConfig:
     """Charge le fichier YAML de configuration."""
+    path = paths.find(path)
     if not os.path.isfile(path):
         raise FileNotFoundError(f"Fichier de configuration introuvable : '{path}'")
 
-    with open(path, "r", encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            raw = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        # Le fichier est livré en clair et se modifie à la main : une faute de
+        # frappe doit se lire, pas remonter en trace d'exception.
+        raise ValueError(f"YAML illisible dans '{path}' : {e}") from e
+    except OSError as e:
+        raise ValueError(f"Configuration illisible : {e}") from e
 
     if raw is not None and not isinstance(raw, dict):
         raise ValueError(f"Configuration invalide dans '{path}' : un dictionnaire est attendu.")
