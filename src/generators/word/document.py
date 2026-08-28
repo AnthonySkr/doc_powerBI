@@ -26,6 +26,10 @@ from src.models.data_models import DocLink
 TextProvider = Callable[[dict[str, Any], str], str]
 
 
+class DocumentError(Exception):
+    """Le document n'a pas pu être produit."""
+
+
 class DocumentBuilder:
     def __init__(
         self,
@@ -184,7 +188,7 @@ class DocumentBuilder:
         if not title:
             return
 
-        level = int(section.get("level", 1))
+        level = _number(section.get("level"), "level", 1, int)
         paragraph = self.body.add_paragraph(title, style=self.styles.paragraph(f"heading_{level}"))
         self._add_title_suffix(paragraph, section, context)
         if section.get("bookmark"):
@@ -205,7 +209,7 @@ class DocumentBuilder:
         if "page_break_before" in section:
             return bool(section["page_break_before"])
         return bool(self.config.rendering.get("page_break_before_heading_1")) and (
-            int(section.get("level", 1)) == 1
+            _number(section.get("level"), "level", 1, int) == 1
         )
 
     # ── Blocs ─────────────────────────────────────────────────────
@@ -251,8 +255,11 @@ class DocumentBuilder:
             self._figure_number += 1
 
         number = str(self._figure_number) if numbering != "none" else ""
-        text = str(options.get("text_format", "[IMAGE] {description}")).format(
-            description=description, n=number
+        text = _format(
+            options.get("text_format", "[IMAGE] {description}"),
+            "rendering.image_placeholder.text_format",
+            description=description,
+            n=number,
         )
         self.body.add_paragraph(text, style=self.styles.paragraph(block.get("style") or "image"))
 
@@ -276,17 +283,18 @@ class DocumentBuilder:
         document destiné à un lecteur qui ne recalcule pas les champs.
         """
         template = str(options.get("caption_format", "{description}"))
+        key = "rendering.image_placeholder.caption_format"
         values = {"description": description, "n": number}
         paragraph = self.body.add_paragraph(style=self.styles.paragraph("caption"))
 
         head, field, tail = template.partition("{n}")
         if numbering != "auto" or not field:
-            paragraph.add_run(template.format(**values))
+            paragraph.add_run(_format(template, key, **values))
             return
 
-        paragraph.add_run(head.format(**values))
+        paragraph.add_run(_format(head, key, **values))
         fields.write_sequence_field(paragraph, str(options.get("sequence") or "Figure"), number)
-        paragraph.add_run(tail.format(**values))
+        paragraph.add_run(_format(tail, key, **values))
 
     def _write_markers(
         self, block: dict[str, Any], context: dict[str, Any], options: dict[str, Any]
@@ -316,10 +324,11 @@ class DocumentBuilder:
             return
 
         look = options.get("markers") or {}
-        size = Cm(float(look.get("size_cm", 0.62)))
-        spacing = Cm(float(look.get("spacing_cm", 0.9)))
-        line = Cm(float(look.get("line_cm", 0.9)))
-        per_row = max(int(look.get("per_row", 12) or 1), 1)
+        marks = "rendering.image_placeholder.markers"
+        size = Cm(_number(look.get("size_cm"), f"{marks}.size_cm", 0.62))
+        spacing = Cm(_number(look.get("spacing_cm"), f"{marks}.spacing_cm", 0.9))
+        line = Cm(_number(look.get("line_cm"), f"{marks}.line_cm", 0.9))
+        per_row = max(_number(look.get("per_row"), f"{marks}.per_row", 12, int), 1)
 
         paragraph = self.body.add_paragraph(style=self.styles.paragraph(look.get("style")))
         # Les repères flottent : sans hauteur réservée, ils déborderaient sur
@@ -341,7 +350,7 @@ class DocumentBuilder:
                     shape=str(look.get("shape") or "ellipse"),
                     fill=str(look.get("fill") or "0070C0"),
                     text_color=str(look.get("text_color") or "FFFFFF"),
-                    font_size=Pt(float(look.get("font_size_pt", 9))),
+                    font_size=Pt(_number(look.get("font_size_pt"), f"{marks}.font_size_pt", 9)),
                 )
             )
 
@@ -380,7 +389,11 @@ class DocumentBuilder:
         """
         hint = render(block.get("hint"), context)
         if hint:
-            return str(options.get("hint_format", "[{hint}]")).format(hint=hint)
+            return _format(
+                options.get("hint_format", "[{hint}]"),
+                "rendering.user_fill.hint_format",
+                hint=hint,
+            )
         return render(block.get("placeholder_text") or options.get("placeholder_text"), context)
 
     def _write_property(self, block: dict[str, Any], context: dict[str, Any]) -> None:
@@ -593,6 +606,33 @@ class DocumentBuilder:
         return True
 
 
+def _format(template: Any, key: str, **values: str) -> str:
+    """
+    Applique un gabarit `{...}` déclaré dans la configuration.
+
+    Ces gabarits s'écrivent à la main dans le YAML, livré en clair à côté de
+    l'exécutable. Un nom de champ mal orthographié doit dire lequel et où,
+    plutôt que de remonter en `KeyError` devant un utilisateur sans Python.
+    """
+    try:
+        return str(template).format(**values)
+    except (KeyError, IndexError, ValueError) as e:
+        available = ", ".join(f"{{{name}}}" for name in values) or "aucun"
+        raise DocumentError(
+            f"`{key}` : gabarit invalide ({e}). Champs disponibles : {available}."
+        ) from e
+
+
+def _number(value: Any, key: str, default: float, cast=float):
+    """Valeur numérique déclarée dans la configuration, ou message explicite."""
+    if value is None or value == "":
+        return cast(default)
+    try:
+        return cast(value)
+    except (TypeError, ValueError) as e:
+        raise DocumentError(f"`{key}` : nombre attendu, reçu '{value}'.") from e
+
+
 def _numbering_mode(value: Any) -> str:
     """
     Mode de numérotation des figures : `auto`, `fixed` ou `none`.
@@ -617,7 +657,7 @@ def _header_footer_parts(section) -> dict[str, tuple]:
 def _column_width(column: dict[str, Any]) -> float | None:
     """Largeur d'une colonne en centimètres (`width_cm`)."""
     width = column.get("width_cm")
-    return float(width) if width else None
+    return _number(width, "width_cm", 0, float) if width else None
 
 
 def _apply_column_widths(table, columns: list[dict[str, Any]]) -> None:
