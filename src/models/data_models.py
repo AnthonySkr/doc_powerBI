@@ -198,14 +198,13 @@ class VisualGroupMember:
     Ligne de la légende d'un groupe.
 
     La légende fait le lien entre la capture du groupe et son contenu : elle
-    liste **tous** les visuels du groupe, y compris ceux que `data.visuals`
-    écarte de la documentation (habillage, boutons...), sans les détailler.
+    liste les visuels documentés du groupe. Ceux que `data.visuals` écarte
+    (habillage, boutons, visuels présentés ailleurs) n'y figurent pas.
     """
 
     number: str
     title: str
     visual_type: str
-    documented: bool = True  # False = visuel écarté par les filtres `data.visuals`
     group_path: str = ""  # sous-groupe(s) traversé(s), vide si enfant direct
 
     @property
@@ -234,7 +233,7 @@ class VisualGroup:
     pos_y: float = 0.0
     # Renseignés par `generators.filters` :
     visuals: list = field(default_factory=list)  # visuels documentés du groupe
-    members: list = field(default_factory=list)  # légende : tout le contenu
+    members: list = field(default_factory=list)  # légende : les visuels documentés
     subgroups: list = field(default_factory=list)  # sous-groupes directs
 
     @property

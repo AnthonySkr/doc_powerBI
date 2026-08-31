@@ -57,10 +57,11 @@ Les visuels regroupés dans Power BI (`parentGroupName` d'un `visual.json`) sont
 documentés ensemble, dans une partie au nom du groupe :
 
 1. un emplacement pour une **capture d'ensemble du groupe** ;
-2. la **légende** de cette capture — un tableau numérotant *tout* le contenu du
-   groupe, y compris les visuels écartés par `data.visuals.exclude_types`
-   (boutons, formes, images) : le lecteur retrouve ainsi chaque élément vu sur
-   l'image, sans que ceux-ci soient détaillés pour autant ;
+2. la **légende** de cette capture — un tableau numérotant les visuels
+   documentés du groupe : le lecteur relie ainsi chaque numéro reporté sur
+   l'image au visuel détaillé plus bas. Les visuels écartés par `data.visuals`
+   (`exclude_types`, `exclude_titles`) n'y figurent pas — un visuel exclu de la
+   documentation l'est aussi à l'intérieur de son groupe ;
 3. puis, d'un cran plus bas, le **détail de chaque visuel documenté**
    du groupe (capture, tableau des références, lecture du visuel).
 

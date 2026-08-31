@@ -262,17 +262,20 @@ class VisualGroupingTest(unittest.TestCase):
     def test_legende_du_groupe(self):
         members = self.organize().groups[0].members
         self.assertEqual([m.title for m in members], ["CA", "Volume"])
-        self.assertTrue(all(m.documented for m in members))
 
-    def test_legende_contient_les_visuels_exclus(self):
+    def test_visuel_exclu_par_type_absent_du_groupe(self):
         self.page.visuals.append(visual("v5", "Bouton", group="g1", visual_type="image", y=3))
         page = self.organize(exclude_types=["image"])
 
-        members = page.groups[0].members
-        self.assertEqual([m.title for m in members], ["CA", "Volume", "Bouton"])
-        self.assertEqual([m.documented for m in members], [True, True, False])
-        # ... mais le visuel exclu n'a pas de partie détaillée
+        # Ni dans la légende, ni dans le détail : un visuel écarté l'est partout.
+        self.assertEqual([m.title for m in page.groups[0].members], ["CA", "Volume"])
         self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Volume"])
+
+    def test_visuel_exclu_par_titre_absent_du_groupe(self):
+        page = self.organize(exclude_titles=["volume"])
+
+        self.assertEqual([m.title for m in page.groups[0].members], ["CA"])
+        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA"])
 
     def test_sous_groupe_rattache_a_son_groupe_racine(self):
         self.page.groups.append(group("g3", "Par mois", parent="g1", y=4))
