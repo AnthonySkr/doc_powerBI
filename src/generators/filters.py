@@ -78,12 +78,14 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
     Les sous-groupes sont rattachés à leur groupe racine : un groupe imbriqué
     ne crée pas de partie supplémentaire, son contenu rejoint la légende et le
     détail du groupe racine en gardant trace du chemin (`member.group_path`).
+
+    Un visuel écarté par `data.visuals` l'est partout : il ne figure ni dans le
+    détail du groupe, ni dans sa légende.
     """
     options = config.data["visuals"]
     group_options = options.get("groups") or {}
 
-    all_visuals = page.visuals
-    documented = filter_visuals(all_visuals, config)
+    documented = filter_visuals(page.visuals, config)
 
     if not group_options.get("enabled", True) or not page.groups:
         page.groups = []
@@ -101,12 +103,11 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
         for visual in documented
         if _excluded_root(visual.parent_group_name, containers, excluded_titles) is None
     ]
-    documented_ids = {visual.id for visual in documented}
 
-    # Chaque visuel rejoint le groupe racine qui le contient, en gardant trace
-    # des sous-groupes traversés au passage.
+    # Chaque visuel documenté rejoint le groupe racine qui le contient, en
+    # gardant trace des sous-groupes traversés au passage.
     contents: dict[str, list[tuple[Visual, str]]] = {group.name: [] for group in page.groups}
-    for visual in all_visuals:
+    for visual in documented:
         root, path = _root_and_path(visual.parent_group_name, containers)
         if root is not None:
             contents[root.name].append((visual, path))
@@ -119,12 +120,9 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
             continue
 
         group.subgroups = [g for g in page.groups if g.parent_group_name == group.name]
-        group.members = _members(
-            contents[group.name], documented_ids, group_options.get("member_sort_by")
-        )
+        group.members = _members(contents[group.name], group_options.get("member_sort_by"))
         group.visuals = _sorted_visuals(
-            [visual for visual, _ in contents[group.name] if visual.id in documented_ids],
-            options.get("sort_by"),
+            [visual for visual, _ in contents[group.name]], options.get("sort_by")
         )
         # Un groupe sans aucun visuel documenté n'apporte que sa capture : il
         # n'est retenu que si la configuration le demande.
@@ -141,16 +139,13 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
     page.visuals = [v for group in groups for v in group.visuals] + page.ungrouped_visuals
 
 
-def _members(
-    contents: list[tuple[Visual, str]], documented_ids: set[str], sort_by: Any
-) -> list[VisualGroupMember]:
-    """Légende d'un groupe : tout son contenu, visuels écartés compris."""
+def _members(contents: list[tuple[Visual, str]], sort_by: Any) -> list[VisualGroupMember]:
+    """Légende d'un groupe : les visuels documentés qu'il contient."""
     return [
         VisualGroupMember(
             number="",
             title=visual.title,
             visual_type=visual.visual_type,
-            documented=visual.id in documented_ids,
             group_path=path,
         )
         for visual, path in _sorted_visuals(contents, sort_by, key=lambda item: item[0])

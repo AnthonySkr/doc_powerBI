@@ -202,18 +202,19 @@ data:
       - basicShape
       - textbox
       - unknown
-    # Titres à ne pas détailler. La question `visuels_non_detailles` posée au
+    # Titres à ne pas documenter. La question `visuels_non_detailles` posée au
     # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
     # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
-    # une seconde fois page par page.
+    # une seconde fois page par page. Un visuel écarté l'est partout, y compris
+    # dans la légende des groupes qui le contiennent.
     exclude_titles: "{{ inputs.visuels_non_detailles }}"
     only_with_measures: false     # true = ne documenter que les visuels avec mesures
     sort_by: position             # title | position
 
     # Groupes Power BI (`visualGroup` d'un visual.json). Les visuels qui
     # portent un `parentGroupName` sont documentés à l'intérieur de leur
-    # groupe : capture d'ensemble, légende du contenu, puis le détail visuel
-    # par visuel.
+    # groupe : capture d'ensemble, légende des visuels documentés, puis le
+    # détail visuel par visuel.
     groups:
       enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
       keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
@@ -618,9 +619,9 @@ sections:
                       label: "{{ member.number }}"
 
                   # Légende du groupe : elle relie les numéros reportés sur la
-                  # capture ci-dessus aux visuels qui composent le groupe. Les
-                  # visuels écartés par data.visuals y figurent aussi — ils
-                  # n'ont simplement pas de partie détaillée plus bas.
+                  # capture ci-dessus aux visuels documentés du groupe. Les
+                  # visuels écartés par data.visuals n'y figurent pas — un
+                  # visuel exclu l'est aussi à l'intérieur de son groupe.
                   - type: table
                     id: groupe_legende
                     over: group.members
