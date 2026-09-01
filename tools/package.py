@@ -22,7 +22,7 @@ DIST = os.path.join(ROOT, "dist")
 PAYLOAD = ("config_doc_pbi.yaml", "template-doc-pbib.docx")
 
 # Mode d'emploi joint au dossier livré.
-README = "LISEZMOI.md"
+README = "README.md"
 
 
 def main() -> int:
@@ -34,7 +34,9 @@ def main() -> int:
         print("Exécutable introuvable dans dist/ — lancez d'abord `task build`.")
         return 1
     if system != "windows":
-        print(f"Attention : construit sous {system}. Un .exe se construit sous Windows.")
+        print(
+            f"Attention : construit sous {system}. Un .exe se construit sous Windows."
+        )
 
     name = f"powerbi-doc-{version}-{system}"
     folder = os.path.join(DIST, name)
@@ -49,7 +51,9 @@ def main() -> int:
     archive = _zip(folder, os.path.join(DIST, f"{name}.zip"))
 
     print(f"Dossier : {os.path.relpath(folder, ROOT)}")
-    print(f"Archive : {os.path.relpath(archive, ROOT)}  ({os.path.getsize(archive) / 1e6:.1f} Mo)")
+    print(
+        f"Archive : {os.path.relpath(archive, ROOT)}  ({os.path.getsize(archive) / 1e6:.1f} Mo)"
+    )
     return 0
 
 
