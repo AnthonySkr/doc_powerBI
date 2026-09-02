@@ -3,7 +3,7 @@
 import unittest
 
 from src import console
-from src.config import DocConfig
+from src.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
 from src.generators.filters import (
     documentable_titles,
     filter_pages,
@@ -79,6 +79,63 @@ class VisualFilterTest(unittest.TestCase):
     def test_seulement_avec_mesures(self):
         kept = filter_visuals(self.visuals, config(visuals={"only_with_measures": True}))
         self.assertEqual([v.title for v in kept], ["CA"])
+
+    def test_exclusion_par_debut_de_type(self):
+        """Un visuel importé porte le GUID de son paquet : seul le début tient."""
+        self.visuals.append(
+            Visual(
+                id="v4",
+                visual_type="EnlightenDataStory1BC1D9FF0E9A4C0BAB6B8C7A9F0F0F0F",
+                title="Récit",
+                has_measures=True,
+            )
+        )
+        kept = filter_visuals(
+            self.visuals, config(visuals={"exclude_type_prefixes": ["EnlightenDataStory"]})
+        )
+        self.assertEqual([v.title for v in kept], ["CA", "Logo", "Marge"])
+
+    def test_debut_de_type_insensible_a_la_casse(self):
+        self.visuals.append(Visual(id="v4", visual_type="EnlightenDataStory99AB", title="Récit"))
+        kept = filter_visuals(
+            self.visuals, config(visuals={"exclude_type_prefixes": ["enlightendatastory"]})
+        )
+        self.assertNotIn("Récit", [v.title for v in kept])
+
+    def test_aucun_debut_declare_n_ecarte_rien(self):
+        """Le `startswith` d'un tuple vide ne doit écarter aucun visuel."""
+        kept = filter_visuals(self.visuals, config(visuals={"exclude_type_prefixes": []}))
+        self.assertEqual([v.title for v in kept], ["CA", "Logo", "Marge"])
+
+    def test_debut_de_type_ne_deborde_pas(self):
+        """Un préfixe ne doit pas écarter un type qui le contient sans commencer par lui."""
+        self.visuals.append(Visual(id="v4", visual_type="myEnlightenDataStory", title="Autre"))
+        kept = filter_visuals(
+            self.visuals, config(visuals={"exclude_type_prefixes": ["EnlightenDataStory"]})
+        )
+        self.assertIn("Autre", [v.title for v in kept])
+
+
+class DefaultExclusionTest(unittest.TestCase):
+    """Types écartés par le plan livré, sans rien y changer."""
+
+    def _kept(self, *types) -> list[str]:
+        visuals = [
+            Visual(id=f"v{i}", visual_type=kind, title=kind, has_measures=True)
+            for i, kind in enumerate(types)
+        ]
+        config = load_config(DEFAULT_CONFIG_PATH).resolve_data({"inputs": {}})
+        return [v.visual_type for v in filter_visuals(visuals, config)]
+
+    def test_segments_ecartes(self):
+        self.assertEqual(self._kept("slicer", "advancedSlicerVisual", "barChart"), ["barChart"])
+
+    def test_visuel_importe_enlighten_ecarte(self):
+        kept = self._kept("EnlightenDataStory1BC1D9FF0E9A4C0BAB6B8C7A9F0F0F0F", "card")
+        self.assertEqual(kept, ["card"])
+
+    def test_habillage_toujours_ecarte(self):
+        self.assertEqual(self._kept("image", "shape", "textbox", "lineChart"), ["lineChart"])
 
 
 def step(name, expression="F()") -> TransformationStep:
