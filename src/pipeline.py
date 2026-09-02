@@ -152,3 +152,23 @@ def _generate(
     console.info(log.summary())
     for line in log.details():
         console.detail(line)
+
+    _report_undocumented_measures(report)
+
+
+def _report_undocumented_measures(report: PowerBIReport) -> None:
+    """
+    Nomme les mesures du modèle que le document ne documente pas.
+
+    `data.measures.scope: used_in_report` écarte les mesures qu'aucun visuel
+    n'affiche et qu'aucun filtre n'emploie. Les compter ne suffit pas : sans
+    leurs noms, impossible de dire si l'une manque à tort.
+    """
+    names = report.undocumented_measures
+    if not names:
+        return
+
+    console.blank()
+    console.info(f"{len(names)} mesure(s) du modèle non documentée(s) — non utilisée(s) :")
+    for name in names:
+        console.detail(f"· {name}")

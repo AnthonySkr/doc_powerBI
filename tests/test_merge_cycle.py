@@ -28,6 +28,9 @@ from src.models.data_models import DaxMeasure, MeasureGroup, SemanticModel
 
 _DRAWING = qn("w:drawing")
 
+# Le plan livré ne surligne plus rien ; les tests du mécanisme le redemandent.
+_HIGHLIGHTED = {"merge": {"highlight_changed": "yellow", "highlight_new": "green"}}
+
 PLAN = {
     "document": {"template": "", "cover": {}, "properties": {}},
     "rendering": {"page_break_before_heading_1": False, "links": {"enabled": False}},
@@ -335,18 +338,30 @@ class MergeCycleTest(MergeHarness):
         self.assertNotIn("SUM(Ventes[Montant])", self.texts())
         self.assertIn("Explication.", self.texts())
 
-    def test_texte_signale_quand_la_technique_change(self):
+    def test_document_sans_marque_quand_la_technique_change(self):
+        """Par défaut le document ne signale rien : le résumé console s'en charge."""
         self.generate(CA="1")
         self.rewrite("[À compléter]", "Explication.")
 
-        self.generate(CA="2")
+        log = self.generate(CA="2")
+
+        self.assertIsNone(self.highlight("Explication."))
+        self.assertEqual([log.title_of(name) for name in log.changed], ["CA"])
+        self.assertIn("· CA", log.details())
+
+    def test_texte_signale_quand_la_technique_change(self):
+        """Le surlignage reste disponible, sur demande explicite."""
+        self.generate(CA="1")
+        self.rewrite("[À compléter]", "Explication.")
+
+        self.generate(_HIGHLIGHTED, CA="2")
         self.assertIsNotNone(self.highlight("Explication."))
 
     def test_signalement_retire_a_la_generation_suivante(self):
-        self.generate(CA="1")
+        self.generate(_HIGHLIGHTED, CA="1")
         self.rewrite("[À compléter]", "Explication.")
-        self.generate(CA="2")
-        self.generate(CA="2")
+        self.generate(_HIGHLIGHTED, CA="2")
+        self.generate(_HIGHLIGHTED, CA="2")
         self.assertIsNone(self.highlight("Explication."))
 
     # ── Écrire à l'intérieur d'un contenu du script ───────────────

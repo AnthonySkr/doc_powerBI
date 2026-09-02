@@ -221,6 +221,43 @@ porteur d'une expression (`column Marge = [Montant] - [Coût]`) ; une colonne
 ramenée de la source n'en a pas, et n'a donc rien à documenter ici. Les mesures
 mentionnées dans le code sont liées à leur définition.
 
+### Mesures documentées
+
+Le plan livré ne documente que les mesures que le rapport **emploie**
+(`data.measures.scope: used_in_report`). Est employée une mesure :
+
+- affichée par un visuel — **étiquettes de référence d'une carte comprises** ;
+- posée en **filtre**, de visuel, de page ou de rapport entier ;
+- **dont dépend** une mesure employée (`DIVIDE([Marge], [CA])` documente `CA`).
+
+Les mesures restantes sont nommées en fin de génération, une par ligne :
+
+```
+2 mesure(s) du modèle non documentée(s) — non utilisée(s) :
+  · Autre orpheline
+  · Jamais utilisée
+```
+
+Les compter ne suffirait pas : sans leur nom, impossible de dire si l'une
+manque à tort. `scope: all` documente tout le modèle et vide cette liste.
+
+### Étiquettes de référence d'une carte
+
+Une carte affiche une valeur principale, et peut porter des **étiquettes de
+référence** — chacune avec sa valeur et, au-dessous, un détail. Ces champs-là
+ne passent pas par la requête du visuel : Power BI les déclare dans l'objet de
+mise en forme. Ils sont lus quand même, et rejoignent le tableau des
+références du visuel avec leur propre rôle :
+
+| N° | Rôle | Élément référencé |
+| --- | --- | --- |
+| 1 | Valeur | Chiffre d'affaires |
+| 2 | Étiquette de référence | Objectif CA |
+| 3 | Étiquette de référence — détail | Écart objectif |
+
+C'est aussi ce qui empêche une mesure qui n'apparaît que là de passer pour
+inutilisée.
+
 ### Liens internes
 
 Le titre d'une mesure déclare un signet :
@@ -281,13 +318,28 @@ y avez mis.
 
 ### Ce qui est signalé
 
+**Le document ne porte aucune marque.** Ce qui a été ajouté ou modifié est
+nommé, un par ligne, dans le résumé affiché en fin de génération :
+
+```
+Mise à jour : 1 élément(s) ajouté(s), 1 élément(s) modifié(s) — à vérifier.
+  1 ajouté(s) :
+  · Tendance mensuelle
+  1 modifié(s) — à vérifier :
+  · Seuil alerte
+  41 contenu(s) rédigé(s) repris tels quels
+```
+
 | Situation | Effet |
 | --- | --- |
-| La technique d'un élément a changé (formule DAX, champs du visuel) | Vos textes de cet élément sont **surlignés en jaune** : ils portent peut-être sur une version périmée |
-| Élément apparu depuis la version précédente | Sa zone à rédiger est **surlignée en vert** |
+| La technique d'un élément a changé (formule DAX, champs du visuel) | Nommé parmi les **modifiés** : vos textes portent peut-être sur une version périmée |
+| Élément apparu depuis la version précédente | Nommé parmi les **ajoutés** |
 | Élément renommé dans Power BI | Reconnu à son état technique : vos textes le suivent |
 | Élément retiré du rapport | Ce que vous y aviez écrit part en annexe (voir ci-dessous) |
-| Bilan | Affiché **en console** en fin de génération |
+
+Le surlignage reste disponible si vous le préférez dans le document :
+`merge.highlight_changed` et `merge.highlight_new` acceptent une couleur
+(`yellow`, `green`, `turquoise`, `gray`) au lieu de `none`.
 
 ### Rien ne se perd — l'annexe
 
@@ -307,8 +359,9 @@ Vous reprenez ce qui vous intéresse, puis vous supprimez la partie : elle ne
 revient pas. Tant qu'elle n'est pas vidée, elle se reconduit d'une génération à
 l'autre. Le bilan console dit combien de contenus y ont été déposés.
 
-Le surlignage est retiré à la génération suivante : il signale ce qui a changé
-*depuis le document que vous aviez en main*, pas un état à cocher.
+Si vous rétablissez le surlignage, il est retiré à la génération suivante : il
+signale ce qui a changé *depuis le document que vous aviez en main*, pas un
+état à cocher.
 
 ### Comment le repérage fonctionne
 

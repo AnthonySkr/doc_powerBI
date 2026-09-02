@@ -1,9 +1,19 @@
 """Tests de la lecture du rapport PBIR : projections, filtres, titres."""
 
+import json
+import os
+import tempfile
 import unittest
 
+from src import console
 from src.models.data_models import VisualGroup
-from src.parsers.report.fields import field_name, parse_elements, parse_filters
+from src.parsers.report import parse_report
+from src.parsers.report.fields import (
+    field_name,
+    parse_elements,
+    parse_filters,
+    parse_reference_labels,
+)
 from src.parsers.report.pages import UNTITLED_GROUP, _title, parse_group, parse_visual
 
 
@@ -108,6 +118,81 @@ class ProjectionTest(unittest.TestCase):
 
     def test_query_state_absent(self):
         self.assertEqual(parse_elements({}), [])
+
+
+def reference_label(**properties) -> dict:
+    """Objet d'étiquette de référence tel que le porte une carte."""
+    return {"objects": {"referenceLabels": [{"properties": properties}]}}
+
+
+class ReferenceLabelTest(unittest.TestCase):
+    """Étiquettes de référence d'une carte : hors requête, donc lues à part."""
+
+    def test_valeur_de_l_etiquette(self):
+        element = parse_reference_labels(
+            reference_label(valueSource={"expr": measure_field(prop="Objectif")})
+        )[0]
+        self.assertEqual(element.type_category, "Mesure")
+        self.assertEqual(element.model_name, "Objectif")
+        self.assertEqual(element.table_name, "Ventes")
+        self.assertEqual(element.role, "ReferenceLabelValue")
+
+    def test_detail_de_l_etiquette(self):
+        element = parse_reference_labels(
+            reference_label(detailSource={"expr": measure_field(prop="Écart")})
+        )[0]
+        self.assertEqual(element.role, "ReferenceLabelDetail")
+        self.assertEqual(element.model_name, "Écart")
+
+    def test_valeur_et_detail_ensemble(self):
+        elements = parse_reference_labels(
+            reference_label(
+                titleText={"expr": {"Literal": {"Value": "'Objectif'"}}},
+                valueSource={"expr": measure_field(prop="Objectif")},
+                detailSource={"expr": measure_field(prop="Écart")},
+            )
+        )
+        self.assertEqual(
+            [(e.role, e.model_name) for e in elements],
+            [("ReferenceLabelValue", "Objectif"), ("ReferenceLabelDetail", "Écart")],
+        )
+
+    def test_nom_de_propriete_indifferent(self):
+        """Power BI a renommé ces propriétés d'une version à l'autre."""
+        elements = parse_reference_labels(
+            reference_label(valueText={"expr": measure_field(prop="Objectif")})
+        )
+        self.assertEqual([e.model_name for e in elements], ["Objectif"])
+
+    def test_colonne_en_etiquette(self):
+        element = parse_reference_labels(
+            reference_label(valueSource={"expr": column_field(prop="Mois")})
+        )[0]
+        self.assertEqual(element.type_category, "Colonne")
+        self.assertEqual(element.table_name, "Calendrier")
+
+    def test_objet_declare_au_singulier(self):
+        elements = parse_reference_labels(
+            {"objects": {"referenceLabel": [{"properties": {"v": {"expr": measure_field()}}}]}}
+        )
+        self.assertEqual(len(elements), 1)
+
+    def test_titre_litteral_ignore(self):
+        """Un titre saisi à la main n'est pas un champ."""
+        self.assertEqual(
+            parse_reference_labels(
+                reference_label(titleText={"expr": {"Literal": {"Value": "'Objectif'"}}})
+            ),
+            [],
+        )
+
+    def test_autres_objets_ignores(self):
+        """La mise en forme conditionnelle référence des mesures : pas des champs affichés."""
+        objects = {"objects": {"dataColors": [{"properties": {"fill": {"expr": measure_field()}}}]}}
+        self.assertEqual(parse_reference_labels(objects), [])
+
+    def test_visuel_sans_objets(self):
+        self.assertEqual(parse_reference_labels({}), [])
 
 
 class FilterTest(unittest.TestCase):
@@ -230,3 +315,52 @@ class VisualGroupParserTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ReportFilterTest(unittest.TestCase):
+    """Filtres posés sur le rapport entier (« Filtres sur toutes les pages »)."""
+
+    def _report(self, relative: str) -> list:
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, relative)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(
+                    {
+                        "filterConfig": {
+                            "filters": [
+                                {
+                                    "field": measure_field(prop="Seuil"),
+                                    "filter": {
+                                        "Where": [
+                                            {
+                                                "Condition": {
+                                                    "Comparison": {
+                                                        "ComparisonKind": "GreaterThan",
+                                                        "Right": {"Literal": {"Value": "0"}},
+                                                    }
+                                                }
+                                            }
+                                        ]
+                                    },
+                                }
+                            ]
+                        }
+                    },
+                    f,
+                )
+            with console.silenced():
+                return parse_report(directory).filters
+
+    def test_filtre_lu_depuis_definition(self):
+        filters = self._report(os.path.join("definition", "report.json"))
+        self.assertEqual([item.measure_name for item in filters], ["Seuil"])
+
+    def test_filtre_lu_depuis_la_racine(self):
+        """Les projets PBIR antérieurs posent le fichier à la racine du .Report."""
+        filters = self._report("report.json")
+        self.assertEqual([item.measure_name for item in filters], ["Seuil"])
+
+    def test_rapport_sans_fichier_de_filtres(self):
+        with tempfile.TemporaryDirectory() as directory, console.silenced():
+            self.assertEqual(parse_report(directory).filters, [])

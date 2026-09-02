@@ -41,8 +41,13 @@ def analyze_dependencies(all_measures: dict[str, DaxMeasure]) -> None:
 
 
 def measures_used_in_report(report: PowerBIReport, all_measures: dict[str, DaxMeasure]) -> set[str]:
-    """Mesures affichées par un visuel, plus leurs dépendances transitives."""
-    used = report.measures_in_visuals
+    """
+    Mesures employées par le rapport, plus leurs dépendances transitives.
+
+    Employée veut dire affichée par un visuel — étiquettes de référence d'une
+    carte comprises — ou posée en filtre, de rapport, de page ou de visuel.
+    """
+    used = report.measures_used
     dependencies = (all_measures[name].dependent_measures for name in used if name in all_measures)
     return used.union(*dependencies) if used else set()
 
