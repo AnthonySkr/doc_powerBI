@@ -119,6 +119,10 @@ class VisualElement:
     # Nom du champ dans le modèle (`Property` du visual.json). Le nom affiché
     # peut être un alias : c'est ce nom-ci qui identifie la mesure.
     property_name: str = ""
+    # Hiérarchie dont ce champ est un niveau, pour un `HierarchyLevel` : nom de
+    # la colonne d'origine pour une hiérarchie de dates (« Date »), nom de la
+    # hiérarchie sinon. Vide pour une mesure ou une colonne.
+    hierarchy_name: str = ""
 
     @property
     def model_name(self) -> str:

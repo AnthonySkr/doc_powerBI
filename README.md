@@ -67,6 +67,35 @@ documentés ensemble, dans une partie au nom du groupe :
 
 Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite.
 
+### Hiérarchies dans le tableau des références
+
+Une hiérarchie déposée sur un axe — une hiérarchie de dates au premier chef —
+est projetée niveau par niveau dans le `visual.json` : posée telle quelle, elle
+remplirait autant de lignes du tableau des références (« Date Année »,
+« Date Trimestre », « Date Mois »). Le lecteur du rapport, lui, ne voit qu'un
+champ.
+
+Les niveaux d'une même hiérarchie **affichés sur le même rôle** sont donc réunis
+en une seule référence, dans l'ordre de forage du visuel :
+
+| N° | Rôle | Élément référencé |
+| --- | --- | --- |
+| 3 | Axe X | Date (Année > Trimestre > Mois) |
+
+La même hiérarchie posée sur deux rôles différents (axe et légende) reste sur
+deux lignes, et un niveau isolé garde son nom d'origine. Une hiérarchie de dates
+est nommée d'après la colonne qui l'engendre (« Date »), comme dans Power BI ;
+une hiérarchie du modèle porte son propre nom.
+
+Le comportement se règle dans `options.references.hierarchies` de la section
+`visuels` :
+
+| Clé | Effet |
+| --- | --- |
+| `group` | `false` rend une ligne à chaque niveau |
+| `format` | Gabarit de la référence — `{hierarchy}`, `{levels}` |
+| `separator` | Séparateur entre les niveaux (`" > "` par défaut) |
+
 ## Configuration — `config_doc_pbi.yaml`
 
 | Bloc | Rôle |

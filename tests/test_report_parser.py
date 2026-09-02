@@ -15,7 +15,8 @@ def column_field(entity="Calendrier", prop="Mois"):
     return {"Column": {"Expression": {"SourceRef": {"Entity": entity}}, "Property": prop}}
 
 
-def hierarchy_field(hierarchy="Dates", level="Mois", entity="Calendrier"):
+def hierarchy_field(hierarchy="Dates", level="Mois", entity="Calendrier", source="Date"):
+    """Hiérarchie de dates : engendrée par une colonne (`PropertyVariationSource`)."""
     return {
         "HierarchyLevel": {
             "Level": level,
@@ -23,8 +24,26 @@ def hierarchy_field(hierarchy="Dates", level="Mois", entity="Calendrier"):
                 "Hierarchy": {
                     "Hierarchy": hierarchy,
                     "Expression": {
-                        "PropertyVariationSource": {"Expression": {"SourceRef": {"Entity": entity}}}
+                        "PropertyVariationSource": {
+                            "Property": source,
+                            "Expression": {"SourceRef": {"Entity": entity}},
+                        }
                     },
+                }
+            },
+        }
+    }
+
+
+def model_hierarchy_field(hierarchy="Hiérarchie Produit", level="Catégorie", entity="Produits"):
+    """Hiérarchie déclarée dans le modèle : rattachée directement à sa table."""
+    return {
+        "HierarchyLevel": {
+            "Level": level,
+            "Expression": {
+                "Hierarchy": {
+                    "Hierarchy": hierarchy,
+                    "Expression": {"SourceRef": {"Entity": entity}},
                 }
             },
         }
@@ -58,6 +77,20 @@ class ProjectionTest(unittest.TestCase):
         self.assertEqual(element.type_category, "Hiérarchie")
         self.assertEqual(element.table_name, "Calendrier")
         self.assertEqual(element.property_name, "Mois")
+        # Une hiérarchie de dates est nommée d'après sa colonne d'origine,
+        # comme Power BI l'affiche — pas d'après la hiérarchie technique.
+        self.assertEqual(element.hierarchy_name, "Date")
+
+    def test_hierarchie_du_modele(self):
+        element = self._elements(
+            {"queryRef": "Produits.Hiérarchie Produit.Catégorie", "field": model_hierarchy_field()}
+        )[0]
+        self.assertEqual(element.table_name, "Produits")
+        self.assertEqual(element.hierarchy_name, "Hiérarchie Produit")
+
+    def test_colonne_sans_hierarchie(self):
+        element = self._elements({"queryRef": "Calendrier.Mois", "field": column_field()})[0]
+        self.assertEqual(element.hierarchy_name, "")
 
     def test_alias_du_visuel_sans_effet_sur_le_nom_du_modele(self):
         element = self._elements(
