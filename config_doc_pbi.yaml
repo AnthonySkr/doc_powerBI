@@ -218,6 +218,10 @@ data:
     groups:
       enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
       keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
+      # Un groupe réduit à un seul visuel documenté n'a pas de partie à lui :
+      # son titre et sa légende d'une ligne redisent ce que le visuel dit déjà.
+      # Le visuel est alors documenté seul, à la suite de la page.
+      keep_single: false       # true = garder la partie même pour un seul visuel
       # Groupes à ne pas détailler — même question qu'au-dessus. Un groupe
       # écarté l'est avec tout son contenu.
       exclude_titles: "{{ inputs.visuels_non_detailles }}"

@@ -241,7 +241,8 @@ class VisualGroupingTest(unittest.TestCase):
             visual("v1", "CA", group="g1", y=1),
             visual("v2", "Volume", group="g1", y=2),
             visual("v3", "Marge", group="g2", y=11),
-            visual("v4", "Détail", y=20),
+            visual("v4", "Taux", group="g2", y=12),
+            visual("v5", "Détail", y=20),
         ]
 
     def organize(self, **options):
@@ -252,19 +253,21 @@ class VisualGroupingTest(unittest.TestCase):
         page = self.organize()
         self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
         self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Volume"])
-        self.assertEqual([v.title for v in page.groups[1].visuals], ["Marge"])
+        self.assertEqual([v.title for v in page.groups[1].visuals], ["Marge", "Taux"])
         self.assertEqual([v.title for v in page.ungrouped_visuals], ["Détail"])
 
     def test_page_visuals_suit_l_ordre_du_document(self):
         page = self.organize()
-        self.assertEqual([v.title for v in page.visuals], ["CA", "Volume", "Marge", "Détail"])
+        self.assertEqual(
+            [v.title for v in page.visuals], ["CA", "Volume", "Marge", "Taux", "Détail"]
+        )
 
     def test_legende_du_groupe(self):
         members = self.organize().groups[0].members
         self.assertEqual([m.title for m in members], ["CA", "Volume"])
 
     def test_visuel_exclu_par_type_absent_du_groupe(self):
-        self.page.visuals.append(visual("v5", "Bouton", group="g1", visual_type="image", y=3))
+        self.page.visuals.append(visual("v6", "Bouton", group="g1", visual_type="image", y=3))
         page = self.organize(exclude_types=["image"])
 
         # Ni dans la légende, ni dans le détail : un visuel écarté l'est partout.
@@ -272,14 +275,15 @@ class VisualGroupingTest(unittest.TestCase):
         self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Volume"])
 
     def test_visuel_exclu_par_titre_absent_du_groupe(self):
+        self.page.visuals.append(visual("v6", "Panier", group="g1", y=3))
         page = self.organize(exclude_titles=["volume"])
 
-        self.assertEqual([m.title for m in page.groups[0].members], ["CA"])
-        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA"])
+        self.assertEqual([m.title for m in page.groups[0].members], ["CA", "Panier"])
+        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Panier"])
 
     def test_sous_groupe_rattache_a_son_groupe_racine(self):
         self.page.groups.append(group("g3", "Par mois", parent="g1", y=4))
-        self.page.visuals.append(visual("v6", "Janvier", group="g3", y=5))
+        self.page.visuals.append(visual("v7", "Janvier", group="g3", y=5))
         page = self.organize()
 
         self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
@@ -291,7 +295,7 @@ class VisualGroupingTest(unittest.TestCase):
 
     def test_groupe_sans_visuel_documente_ecarte(self):
         self.page.groups.append(group("g4", "Habillage", y=30))
-        self.page.visuals.append(visual("v7", "Fond", group="g4", visual_type="shape", y=31))
+        self.page.visuals.append(visual("v8", "Fond", group="g4", visual_type="shape", y=31))
         page = self.organize(exclude_types=["shape"])
 
         self.assertNotIn("Habillage", [g.title for g in page.groups])
@@ -302,8 +306,48 @@ class VisualGroupingTest(unittest.TestCase):
 
         self.assertIn("Habillage", [g.title for g in page.groups])
 
+    def test_groupe_a_un_seul_visuel_efface_au_profit_du_visuel(self):
+        """Un titre et une légende d'une ligne pour un seul visuel : sans objet."""
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=31))
+        page = self.organize()
+
+        self.assertNotIn("Solitaire", [g.title for g in page.groups])
+        # Le visuel n'est pas perdu pour autant : il est documenté seul.
+        self.assertIn("Cumul", [v.title for v in page.ungrouped_visuals])
+        self.assertIn("Cumul", [v.title for v in page.visuals])
+
+    def test_groupe_a_un_seul_visuel_documente_efface(self):
+        """Ce sont les visuels documentés qui comptent, pas ceux du rapport."""
+        self.page.visuals.append(visual("v6", "Bouton", group="g2", visual_type="image", y=13))
+        page = self.organize(exclude_types=["image"], groups={})
+        self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
+
+        self.page.visuals = [v for v in self.page.visuals if v.title != "Taux"]
+        page = self.organize(exclude_types=["image"], groups={})
+        self.assertEqual([g.title for g in page.groups], ["Ventes"])
+        self.assertIn("Marge", [v.title for v in page.ungrouped_visuals])
+
+    def test_sous_groupes_comptes_avec_leur_racine(self):
+        """Un visuel dans un sous-groupe compte pour le groupe racine."""
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.groups.append(group("g5", "Sous", parent="g4", y=31))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=32))
+        self.page.visuals.append(visual("v7", "Détail cumul", group="g5", y=33))
+        page = self.organize()
+
+        self.assertIn("Solitaire", [g.title for g in page.groups])
+
+    def test_groupe_a_un_seul_visuel_conserve_sur_demande(self):
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=31))
+        page = self.organize(groups={"keep_single": True})
+
+        self.assertIn("Solitaire", [g.title for g in page.groups])
+        self.assertNotIn("Cumul", [v.title for v in page.ungrouped_visuals])
+
     def test_groupe_inconnu_laisse_le_visuel_isole(self):
-        self.page.visuals.append(visual("v8", "Orphelin", group="disparu", y=40))
+        self.page.visuals.append(visual("v9", "Orphelin", group="disparu", y=40))
         page = self.organize()
 
         self.assertIn("Orphelin", [v.title for v in page.ungrouped_visuals])
@@ -325,7 +369,7 @@ class VisualGroupingTest(unittest.TestCase):
         page = self.organize(groups={"enabled": False})
 
         self.assertEqual(page.groups, [])
-        self.assertEqual(len(page.ungrouped_visuals), 4)
+        self.assertEqual(len(page.ungrouped_visuals), 5)
         self.assertEqual(page.ungrouped_visuals, page.visuals)
 
     def test_page_sans_groupe(self):
@@ -334,7 +378,7 @@ class VisualGroupingTest(unittest.TestCase):
 
         self.assertEqual(page.groups, [])
         self.assertEqual(
-            [v.title for v in page.ungrouped_visuals], ["CA", "Détail", "Marge", "Volume"]
+            [v.title for v in page.ungrouped_visuals], ["CA", "Détail", "Marge", "Taux", "Volume"]
         )
 
 
@@ -346,8 +390,10 @@ class ExcludedByAnswerTest(unittest.TestCase):
         self.page.groups = [group("g0", "Bandeau d'en-tête", y=0), group("g1", "Ventes", y=10)]
         self.page.visuals = [
             visual("v0", "Titre page", group="g0", y=1),
-            visual("v1", "CA", group="g1", y=11),
-            visual("v2", "Détail", y=20),
+            visual("v1", "Logo", group="g0", y=2),
+            visual("v2", "CA", group="g1", y=11),
+            visual("v3", "Volume", group="g1", y=12),
+            visual("v4", "Détail", y=20),
         ]
 
     def organize(self, excluded):
@@ -367,9 +413,10 @@ class ExcludedByAnswerTest(unittest.TestCase):
         page = self.organize(["Bandeau d'en-tête"])
 
         self.assertEqual([g.title for g in page.groups], ["Ventes"])
-        self.assertEqual([v.title for v in page.visuals], ["CA", "Détail"])
-        # Le visuel du groupe écarté ne réapparaît pas hors groupe
-        self.assertNotIn("Titre page", [v.title for v in page.ungrouped_visuals])
+        self.assertEqual([v.title for v in page.visuals], ["CA", "Volume", "Détail"])
+        # Les visuels du groupe écarté ne réapparaissent pas hors groupe
+        for title in ("Titre page", "Logo"):
+            self.assertNotIn(title, [v.title for v in page.ungrouped_visuals])
 
     def test_visuel_isole_ecarte(self):
         page = self.organize(["Détail"])
@@ -381,13 +428,13 @@ class ExcludedByAnswerTest(unittest.TestCase):
         page = self.organize([])
 
         self.assertEqual([g.title for g in page.groups], ["Bandeau d'en-tête", "Ventes"])
-        self.assertEqual(len(page.visuals), 3)
+        self.assertEqual(len(page.visuals), 5)
 
     def test_expression_non_resolue_n_ecarte_rien(self):
         # Au moment où les questions sont posées, les filtres portent encore
         # leur expression : elle ne doit correspondre à aucun titre.
         organize_page(self.page, config(visuals={"exclude_titles": "{{ inputs.exclus }}"}))
-        self.assertEqual(len(self.page.visuals), 3)
+        self.assertEqual(len(self.page.visuals), 5)
 
 
 class DocumentableTitlesTest(unittest.TestCase):
@@ -429,6 +476,7 @@ class GroupNumberingTest(unittest.TestCase):
             visual("v1", "CA", group="g1", y=1),
             visual("v2", "Volume", group="g1", y=2),
             visual("v3", "Marge", group="g2", y=11),
+            visual("v4", "Taux", group="g2", y=12),
         ]
         organize_page(self.page, config(visuals={}))
         self.report = PowerBIReport(name="R", pages=[self.page])
@@ -438,15 +486,15 @@ class GroupNumberingTest(unittest.TestCase):
 
     def test_numerotation_par_groupe(self):
         index_group_members(self.report, {})
-        self.assertEqual(self.numbers(), [["1", "2"], ["1"]])
+        self.assertEqual(self.numbers(), [["1", "2"], ["1", "2"]])
 
     def test_numerotation_continue_sur_la_page(self):
         index_group_members(self.report, {"groups": {"numbering": {"scope": "page"}}})
-        self.assertEqual(self.numbers(), [["1", "2"], ["3"]])
+        self.assertEqual(self.numbers(), [["1", "2"], ["3", "4"]])
 
     def test_gabarit_de_numero(self):
         index_group_members(self.report, {"groups": {"numbering": {"start": 0, "format": "#{n}"}}})
-        self.assertEqual(self.numbers(), [["#0", "#1"], ["#0"]])
+        self.assertEqual(self.numbers(), [["#0", "#1"], ["#0", "#1"]])
 
 
 if __name__ == "__main__":
