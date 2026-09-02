@@ -55,6 +55,7 @@ def _parse_projection(projection: dict, role: str) -> VisualElement | None:
         role=role,
         table_name=_entity(node, kind),
         property_name=property_name,
+        hierarchy_name=_hierarchy(node) if kind == "HierarchyLevel" else "",
     )
 
 
@@ -70,8 +71,24 @@ def _field_node(field: dict) -> tuple[str, dict]:
 def _entity(node: dict, kind: str) -> str:
     """Table d'origine du champ, telle que déclarée dans le `SourceRef`."""
     if kind == "HierarchyLevel":
-        node = _dig(node, "Expression", "Hierarchy", "Expression", "PropertyVariationSource")
+        hierarchy = _dig(node, "Expression", "Hierarchy")
+        # Hiérarchie de dates : la table est portée par la colonne d'origine ;
+        # hiérarchie du modèle : elle est déclarée sur la hiérarchie elle-même.
+        node = _dig(hierarchy, "Expression", "PropertyVariationSource") or hierarchy
     return _dig(node, "Expression", "SourceRef").get("Entity", "")
+
+
+def _hierarchy(node: dict) -> str:
+    """
+    Hiérarchie dont un `HierarchyLevel` est un niveau.
+
+    Une hiérarchie de dates est engendrée par une colonne (`Date`) : c'est ce
+    nom-là que Power BI affiche, plutôt que celui de la hiérarchie technique
+    (`Date Hierarchy`). Une hiérarchie du modèle porte son propre nom.
+    """
+    hierarchy = _dig(node, "Expression", "Hierarchy")
+    variation = _dig(hierarchy, "Expression", "PropertyVariationSource")
+    return variation.get("Property", "") or hierarchy.get("Hierarchy", "")
 
 
 def _dig(node: Any, *keys: str) -> dict:

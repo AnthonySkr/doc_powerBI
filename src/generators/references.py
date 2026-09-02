@@ -13,7 +13,14 @@ plan, sous `options:` de la section des visuels.
 from typing import Any
 
 from src.config import DocConfig, render
-from src.models.data_models import DaxMeasure, DocLink, PowerBIReport, Visual, VisualReference
+from src.models.data_models import (
+    DaxMeasure,
+    DocLink,
+    PowerBIReport,
+    Visual,
+    VisualElement,
+    VisualReference,
+)
 
 # Section du plan portant les options de numérotation et de libellés. Le
 # générateur n'a pas d'autre attache à un identifiant de section.
@@ -26,6 +33,10 @@ _KIND_BY_CATEGORY = {
 }
 
 _DEFAULT_ORDER = ("mesure", "colonne", "hierarchie", "filtre")
+
+# Regroupement des niveaux d'une hiérarchie posée sur un même rôle.
+_DEFAULT_HIERARCHY_FORMAT = "{hierarchy} ({levels})"
+_DEFAULT_LEVEL_SEPARATOR = " > "
 
 
 def visual_options(config: DocConfig) -> dict[str, Any]:
@@ -113,24 +124,26 @@ def build_references(
     roles = options.get("roles") or {}
     order = list(options.get("order") or _DEFAULT_ORDER)
     number_format = (options.get("numbering") or {}).get("format", "{n}")
+    hierarchies = options.get("hierarchies") or {}
 
     by_kind: dict[str, list[VisualReference]] = {kind: [] for kind in order}
 
-    for element in sorted(visual.elements, key=lambda e: (e.role, e.display_name)):
+    levels = _group_levels(visual.elements, hierarchies)
+    for members in sorted(levels, key=lambda m: (m[0].role, m[0].display_name)):
+        element = members[0]
         kind = _KIND_BY_CATEGORY.get(element.type_category, "colonne")
         role = roles.get(element.role, roles.get("defaut", element.role))
-        # Le libellé reprend le nom du modèle pour les mesures : c'est lui qui
-        # correspond au titre de la définition, donc à la cible du lien.
-        name = (element.model_name if kind == "mesure" else element.display_name) or (
-            element.display_name
-        )
+        name = _reference_name(members, kind, hierarchies)
+        # Le nom affiché dans le visuel peut être un alias ; pour une hiérarchie
+        # rassemblée, c'est le libellé composé qui la désigne.
+        display = name if len(members) > 1 else element.display_name
         by_kind.setdefault(kind, []).append(
             VisualReference(
                 number="",
                 kind=kind,
                 name=name,
                 role=role,
-                label=_label(labels, kind, name, role, element.query_ref, element.display_name),
+                label=_label(labels, kind, name, role, element.query_ref, display),
             )
         )
 
@@ -169,6 +182,63 @@ class _Counter:
         current = self.value
         self.value += 1
         return current
+
+
+def _group_levels(
+    elements: list[VisualElement], options: dict[str, Any]
+) -> list[list[VisualElement]]:
+    """
+    Réunit les niveaux d'une même hiérarchie affichés sur un même rôle.
+
+    Une hiérarchie de dates posée sur un axe est projetée niveau par niveau —
+    Année, Trimestre, Mois… — et remplirait autant de lignes du tableau des
+    références. Le lecteur, lui, ne voit qu'un champ : ces niveaux sont donc
+    ramenés à une seule référence, dans l'ordre de forage du visuel.
+
+    Les autres champs, et les niveaux d'une hiérarchie portée par un rôle
+    différent, restent chacun dans leur groupe d'un seul élément.
+    """
+    if not options.get("group", True):
+        return [[element] for element in elements]
+
+    groups: dict[tuple[str, str, str], list[VisualElement]] = {}
+    result: list[list[VisualElement]] = []
+
+    for element in elements:
+        key = _hierarchy_key(element)
+        members = groups.get(key) if key else None
+        if members is None:
+            members = [element]
+            result.append(members)
+            if key:
+                groups[key] = members
+        else:
+            members.append(element)
+
+    return result
+
+
+def _hierarchy_key(element: VisualElement) -> tuple[str, str, str] | None:
+    """Hiérarchie à laquelle rattacher un niveau, ou None si le champ n'en est pas un."""
+    if element.type_category != "Hiérarchie" or not element.hierarchy_name:
+        return None
+    return (element.role, element.table_name, element.hierarchy_name)
+
+
+def _reference_name(members: list[VisualElement], kind: str, options: dict[str, Any]) -> str:
+    """Nom porté par la ligne du tableau, pour un champ seul ou une hiérarchie."""
+    element = members[0]
+    if kind == "mesure":
+        # Le libellé reprend le nom du modèle pour les mesures : c'est lui qui
+        # correspond au titre de la définition, donc à la cible du lien.
+        return element.model_name or element.display_name
+    if len(members) == 1:
+        return element.display_name or element.model_name
+
+    separator = options.get("separator", _DEFAULT_LEVEL_SEPARATOR)
+    template = options.get("format") or _DEFAULT_HIERARCHY_FORMAT
+    levels = separator.join(member.property_name or member.display_name for member in members)
+    return template.format(hierarchy=element.hierarchy_name, levels=levels)
 
 
 def _measure_names(visual: Visual) -> set[str]:

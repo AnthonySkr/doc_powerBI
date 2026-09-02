@@ -752,6 +752,18 @@ sections:
           format: "{n}"
         # Ordre de constitution des lignes du tableau
         order: [mesure, colonne, hierarchie, filtre]
+        # Hiérarchies (dates surtout) : posée sur un axe, une hiérarchie est
+        # projetée niveau par niveau et occuperait autant de lignes
+        # (« Date Année », « Date Trimestre », « Date Mois »). Les niveaux
+        # d'une même hiérarchie affichés sur un même rôle sont donc réunis en
+        # une seule référence, dans l'ordre de forage du visuel :
+        # « Date (Année > Trimestre > Mois) ».
+        # {hierarchy} = nom de la hiérarchie (la colonne d'origine pour une
+        # hiérarchie de dates), {levels} = niveaux joints par `separator`.
+        hierarchies:
+          group: true
+          format: "{hierarchy} ({levels})"
+          separator: " > "
         # Libellés d'une référence sur une seule ligne. Le tableau du template
         # v2 utilise plutôt `ref.role` et `ref.value` (deux colonnes) ; ces
         # libellés restent disponibles via `ref.label`.
