@@ -73,7 +73,7 @@ class MergeWriter:
             return ""
 
         digest = markers.fingerprint(render(section.get("fingerprint"), context))
-        self.log.record(element_id, self.previous.status(element_id, digest))
+        self.log.record(element_id, self.previous.status(element_id, digest), title)
         markers.write(self.body, markers.element(element_id, digest))
         return element_id
 

@@ -193,7 +193,7 @@ data:
     sort_by: report_order      # report_order | name
 
   visuals:
-    # Types Power BI non documentés (habillage, navigation, filtres...)
+    # Types Power BI non documentés (habillage, navigation...)
     exclude_types:
       - actionButton
       - pageNavigator
@@ -201,16 +201,7 @@ data:
       - shape
       - basicShape
       - textbox
-      - slicer                  # segment
-      - advancedSlicerVisual    # segment « nouveau » (boutons)
       - unknown
-    # Types écartés sur le début de leur nom. Un visuel importé (AppSource)
-    # porte le GUID de son paquet dans son `visualType` — le GUID change d'une
-    # version à l'autre, le début du nom non.
-    # Pour retrouver le type exact d'un visuel du rapport :
-    #   grep -o '"visualType": "[^"]*"' -r <Rapport>.Report/definition/pages
-    exclude_type_prefixes:
-      - EnlightenDataStory      # visuel importé « Enlighten Data Story »
     # Titres à ne pas documenter. La question `visuels_non_detailles` posée au
     # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
     # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
@@ -265,7 +256,12 @@ data:
         - Colonnes permutées
 
   measures:
-    scope: all      # all | used_in_report (mesures + dépendances)
+    # used_in_report : mesures employées par le rapport — affichées par un
+    # visuel (étiquettes de référence des cartes comprises) ou posées en
+    # filtre de rapport, de page ou de visuel — et leurs dépendances.
+    # Les mesures écartées sont nommées dans le résumé de fin d'exécution.
+    # all = documenter tout le modèle.
+    scope: used_in_report   # all | used_in_report
     include_hidden: false
     # Documente malgré tout les mesures référencées ailleurs (mesure masquée
     # utilisée par une autre, dépendance d'une mesure documentée...) : sans
@@ -291,11 +287,14 @@ merge:
   backup: true
   backup_dir: ".versions"
   # Surlignage : yellow | green | turquoise | gray | none
+  # Le document ne porte aucune marque : les éléments ajoutés et modifiés sont
+  # nommés, un par ligne, dans le résumé affiché en fin d'exécution. Remettre
+  # une couleur ici les fait surligner en plus.
   # changed : texte repris alors que l'élément a changé techniquement
   #           (nouvelle formule DAX, champs du visuel modifiés) — à relire.
   # new     : zone à rédiger d'un élément apparu depuis la version précédente.
-  highlight_changed: yellow
-  highlight_new: green
+  highlight_changed: none
+  highlight_new: none
 
   # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
   # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
@@ -794,6 +793,11 @@ sections:
         roles:
           filtre: "Filtre"
           Values: "Valeur"
+          Data: "Valeur"            # carte (visuel « Carte » actuel)
+          # Étiquettes de référence d'une carte : elles ne passent pas par la
+          # requête du visuel, mais ce sont bien des champs affichés.
+          ReferenceLabelValue: "Étiquette de référence"
+          ReferenceLabelDetail: "Étiquette de référence — détail"
           Y: "Axe Y"
           Y2: "Axe Y secondaire"
           X: "Axe X"

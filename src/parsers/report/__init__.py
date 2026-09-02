@@ -12,7 +12,12 @@ import os
 
 from src import console
 from src.models.data_models import PowerBIReport
-from src.parsers.report.pages import load_page_order, parse_page
+from src.parsers.report.fields import parse_filters
+from src.parsers.report.pages import load_page_order, parse_page, read_json
+
+# Filtres posés sur le rapport entier. Le fichier a changé de place selon les
+# versions du format PBIR : les deux emplacements sont essayés.
+_REPORT_FILES = (os.path.join("definition", "report.json"), "report.json")
 
 __all__ = ["parse_report"]
 
@@ -20,6 +25,7 @@ __all__ = ["parse_report"]
 def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> PowerBIReport:
     """Parse le dossier `.Report/` d'un projet .pbip."""
     report = PowerBIReport(name=report_name)
+    report.filters = _report_filters(report_dir)
 
     pages_dir = os.path.join(report_dir, "definition", "pages")
     if not os.path.isdir(pages_dir):
@@ -46,3 +52,17 @@ def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> Powe
         f"| {groups} groupes"
     )
     return report
+
+
+def _report_filters(report_dir: str) -> list:
+    """
+    Filtres posés sur le rapport entier (volet « Filtres sur toutes les pages »).
+
+    Ils ne sont pas documentés page par page, mais une mesure qui n'apparaît
+    que là est bel et bien employée par le rapport.
+    """
+    for relative in _REPORT_FILES:
+        data = read_json(os.path.join(report_dir, relative))
+        if data is not None:
+            return parse_filters((data.get("filterConfig") or {}).get("filters", []))
+    return []

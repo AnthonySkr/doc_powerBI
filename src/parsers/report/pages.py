@@ -6,7 +6,7 @@ from typing import Any
 
 from src import console
 from src.models.data_models import ReportPage, Visual, VisualGroup
-from src.parsers.report.fields import parse_elements, parse_filters
+from src.parsers.report.fields import parse_elements, parse_filters, parse_reference_labels
 
 # Titre de repli d'un groupe dont le `displayName` est vide.
 UNTITLED_GROUP = "Groupe sans nom"
@@ -86,7 +86,10 @@ def parse_visual(data: dict, folder_name: str) -> Visual | None:
         return None
 
     visual_type = node.get("visualType", "unknown")
-    elements = parse_elements(node.get("query") or {})
+    # Une carte porte ses étiquettes de référence hors de la requête : leurs
+    # champs rejoignent les projections, ce sont des champs affichés comme
+    # les autres.
+    elements = parse_elements(node.get("query") or {}) + parse_reference_labels(node)
     position = data.get("position") or {}
 
     return Visual(

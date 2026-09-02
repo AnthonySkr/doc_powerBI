@@ -142,7 +142,9 @@ DEFAULTS: dict[str, Any] = {
         "keep_user_text": True,
         "backup": True,
         "backup_dir": ".versions",
-        "highlight_changed": "yellow",
+        # Aucune mise en forme dans le document : ce qui a été ajouté ou
+        # modifié est nommé dans le résumé de fin d'exécution.
+        "highlight_changed": "none",
         "highlight_new": "none",
         # Annexe recueillant, en fin de document, ce qui n'a pas pu être
         # replacé : élément disparu du rapport, bloc retiré du plan, donnée du

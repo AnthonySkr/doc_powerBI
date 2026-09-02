@@ -7,7 +7,12 @@ from src.merge.previous import CHANGED, NEW, UNCHANGED
 
 @dataclass
 class ChangeLog:
-    """Ce qui a été constaté pendant la génération, affiché en fin d'exécution."""
+    """
+    Ce qui a été constaté pendant la génération, affiché en fin d'exécution.
+
+    Rien n'est signalé dans le document lui-même : ce qui a été ajouté ou
+    modifié se lit ici, par son titre, et le document reste net.
+    """
 
     is_update: bool = False
     new: list[str] = field(default_factory=list)
@@ -21,10 +26,19 @@ class ChangeLog:
 
     def __post_init__(self) -> None:
         self._status: dict[str, str] = {}
+        # Titre de chaque élément ancré : c'est lui qu'on affiche, l'identifiant
+        # technique (`visual:page_ventes:v_evolution`) ne disant rien au lecteur.
+        self._titles: dict[str, str] = {}
 
-    def record(self, element_id: str, status: str) -> None:
+    def record(self, element_id: str, status: str, title: str = "") -> None:
         self._status[element_id] = status
+        if title:
+            self._titles[element_id] = title
         {NEW: self.new, CHANGED: self.changed, UNCHANGED: self.unchanged}[status].append(element_id)
+
+    def title_of(self, element_id: str) -> str:
+        """Titre d'un élément, ou son identifiant faute de titre."""
+        return self._titles.get(element_id) or element_id
 
     def status_of(self, element_id: str) -> str:
         return self._status.get(element_id, UNCHANGED)
@@ -68,18 +82,26 @@ class ChangeLog:
         return "Mise à jour : " + ", ".join(parts) + "."
 
     def details(self) -> list[str]:
-        """Lignes de détail affichées sous le résumé."""
+        """
+        Lignes de détail affichées sous le résumé.
+
+        Les ajouts et les modifications sont énumérés au complet, par leur
+        titre : ce sont eux qu'il faut aller relire dans le document, et le
+        document ne les signale plus lui-même.
+        """
         lines = []
-        for label, names in (
-            ("ajouté(s)", self.new),
-            ("modifié(s)", self.changed),
-            ("renommé(s)", [f"{before} → {after}" for before, after in self.renamed]),
-            ("retiré(s)", self.removed),
+        for label, titles in (
+            ("ajouté(s)", [self.title_of(name) for name in self.new]),
+            ("modifié(s) — à vérifier", [self.title_of(name) for name in self.changed]),
+            (
+                "renommé(s)",
+                [f"{before} → {self.title_of(after)}" for before, after in self.renamed],
+            ),
+            ("retiré(s) du rapport", self.removed),
         ):
-            if names:
-                shown = ", ".join(names[:6])
-                suffix = f" (+{len(names) - 6})" if len(names) > 6 else ""
-                lines.append(f"{len(names)} {label} : {shown}{suffix}")
+            if titles:
+                lines.append(f"{len(titles)} {label} :")
+                lines.extend(f"· {title}" for title in titles)
         if self.preserved:
             lines.append(f"{self.preserved} contenu(s) rédigé(s) repris tels quels")
         return lines
