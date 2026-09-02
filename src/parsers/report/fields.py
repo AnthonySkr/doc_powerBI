@@ -1,7 +1,8 @@
 """
-Champs de données d'un visuel : projections et filtres du `visual.json`.
+Champs de données d'un visuel : projections, étiquettes et filtres.
 
     visual.query.queryState.<Role>.projections[]   → VisualElement
+    visual.objects.referenceLabels[]               → VisualElement
     filterConfig.filters[]                         → VisualFilter
 """
 
@@ -15,6 +16,17 @@ _CATEGORIES = {
     "Column": "Colonne",
     "HierarchyLevel": "Hiérarchie",
 }
+
+# Objets de mise en forme portant des champs : les étiquettes de référence
+# d'une carte. Ces champs ne passent pas par `queryState` — ils sont déclarés
+# dans l'objet lui-même. Le nom de l'objet est reconnu sur son début, Power BI
+# le déclinant selon les versions (`referenceLabels`, `referenceLabel`...).
+_REFERENCE_LABELS = "referencelabel"
+
+# Rôles donnés aux champs d'une étiquette de référence. Une étiquette porte une
+# valeur, et peut porter un détail sous cette valeur.
+REFERENCE_LABEL_VALUE = "ReferenceLabelValue"
+REFERENCE_LABEL_DETAIL = "ReferenceLabelDetail"
 
 
 # ─────────────────────────────────────────────────────────────
@@ -55,6 +67,7 @@ def _parse_projection(projection: dict, role: str) -> VisualElement | None:
         role=role,
         table_name=_entity(node, kind),
         property_name=property_name,
+        hierarchy_name=_hierarchy(node) if kind == "HierarchyLevel" else "",
     )
 
 
@@ -70,8 +83,24 @@ def _field_node(field: dict) -> tuple[str, dict]:
 def _entity(node: dict, kind: str) -> str:
     """Table d'origine du champ, telle que déclarée dans le `SourceRef`."""
     if kind == "HierarchyLevel":
-        node = _dig(node, "Expression", "Hierarchy", "Expression", "PropertyVariationSource")
+        hierarchy = _dig(node, "Expression", "Hierarchy")
+        # Hiérarchie de dates : la table est portée par la colonne d'origine ;
+        # hiérarchie du modèle : elle est déclarée sur la hiérarchie elle-même.
+        node = _dig(hierarchy, "Expression", "PropertyVariationSource") or hierarchy
     return _dig(node, "Expression", "SourceRef").get("Entity", "")
+
+
+def _hierarchy(node: dict) -> str:
+    """
+    Hiérarchie dont un `HierarchyLevel` est un niveau.
+
+    Une hiérarchie de dates est engendrée par une colonne (`Date`) : c'est ce
+    nom-là que Power BI affiche, plutôt que celui de la hiérarchie technique
+    (`Date Hierarchy`). Une hiérarchie du modèle porte son propre nom.
+    """
+    hierarchy = _dig(node, "Expression", "Hierarchy")
+    variation = _dig(hierarchy, "Expression", "PropertyVariationSource")
+    return variation.get("Property", "") or hierarchy.get("Hierarchy", "")
 
 
 def _dig(node: Any, *keys: str) -> dict:
@@ -81,6 +110,69 @@ def _dig(node: Any, *keys: str) -> dict:
             return {}
         node = node.get(key, {})
     return node if isinstance(node, dict) else {}
+
+
+# ─────────────────────────────────────────────────────────────
+#  Étiquettes de référence (cartes)
+# ─────────────────────────────────────────────────────────────
+
+
+def parse_reference_labels(visual_node: dict) -> list[VisualElement]:
+    """
+    Champs des étiquettes de référence d'une carte.
+
+    Une carte affiche une valeur principale — celle-là passe par `queryState` —
+    et peut porter des étiquettes de référence, chacune avec sa valeur et,
+    au-dessous, un détail. Ces champs-là sont déclarés dans l'objet de mise en
+    forme, pas dans la requête du visuel : sans cette lecture, une mesure qui
+    n'apparaît que là passerait pour inutilisée.
+
+    Les noms de propriétés ayant changé d'une version de Power BI à l'autre
+    (`valueSource`, `valueText`...), toute propriété portant un champ est
+    retenue, et c'est son nom qui range le champ en valeur ou en détail.
+    """
+    elements: list[VisualElement] = []
+
+    for container in (visual_node.get("objects"), visual_node.get("visualContainerObjects")):
+        for name, entries in (container or {}).items():
+            if not str(name).lower().startswith(_REFERENCE_LABELS):
+                continue
+            for entry in entries or []:
+                elements.extend(_label_fields(entry))
+
+    return elements
+
+
+def _label_fields(entry: Any) -> list[VisualElement]:
+    """Champs portés par une étiquette, dans l'ordre où elle les déclare."""
+    if not isinstance(entry, dict):
+        return []
+
+    elements = []
+    for name, value in (entry.get("properties") or {}).items():
+        field = value.get("expr") if isinstance(value, dict) else None
+        kind, node = _field_node(field or {})
+        if not kind:
+            continue
+
+        property_name = (
+            node.get("Level", "") if kind == "HierarchyLevel" else node.get("Property", "")
+        )
+        role = REFERENCE_LABEL_DETAIL if "detail" in str(name).lower() else REFERENCE_LABEL_VALUE
+
+        elements.append(
+            VisualElement(
+                query_ref=f"{_entity(node, kind)}.{property_name}".strip("."),
+                display_name=property_name or str(name),
+                type_category=_CATEGORIES.get(kind, "Inconnu"),
+                role=role,
+                table_name=_entity(node, kind),
+                property_name=property_name,
+                hierarchy_name=_hierarchy(node) if kind == "HierarchyLevel" else "",
+            )
+        )
+
+    return elements
 
 
 # ─────────────────────────────────────────────────────────────
@@ -96,7 +188,9 @@ def parse_filters(filters: list) -> list[VisualFilter]:
 
 def _parse_filter(item: dict) -> VisualFilter | None:
     """Parse un filtre. Retourne None s'il ne porte aucune condition active."""
-    name = field_name(item.get("field") or {})
+    field = item.get("field") or {}
+    name = field_name(field)
+    measure = _filtered_measure(field)
 
     for clause in (item.get("filter") or {}).get("Where") or []:
         condition = clause.get("Condition") or {}
@@ -104,12 +198,22 @@ def _parse_filter(item: dict) -> VisualFilter | None:
         # Exclusion : Not(In(...))
         excluded = _values(_dig(condition, "Not", "Expression", "In").get("Values", []))
         if excluded:
-            return VisualFilter(field_name=name, filter_type="Exclut", values=excluded)
+            return VisualFilter(
+                field_name=name,
+                filter_type="Exclut",
+                values=excluded,
+                measure_name=measure,
+            )
 
         # Inclusion : In(...)
         included = _values(_dig(condition, "In").get("Values", []))
         if included:
-            return VisualFilter(field_name=name, filter_type="Inclut", values=included)
+            return VisualFilter(
+                field_name=name,
+                filter_type="Inclut",
+                values=included,
+                measure_name=measure,
+            )
 
         # Comparaison
         comparison = _dig(condition, "Comparison")
@@ -121,6 +225,7 @@ def _parse_filter(item: dict) -> VisualFilter | None:
                 filter_type="Comparison",
                 values=[right],
                 operator=operator,
+                measure_name=measure,
             )
 
     return None
@@ -140,6 +245,12 @@ def field_name(field: dict) -> str:
     entity = _entity(node, kind)
     prop = node.get("Property", "")
     return f"{entity}.{prop}" if entity else prop
+
+
+def _filtered_measure(field: dict) -> str:
+    """Mesure sur laquelle porte un filtre, ou "" s'il porte sur autre chose."""
+    kind, node = _field_node(field)
+    return node.get("Property", "") if kind == "Measure" else ""
 
 
 def _values(nested: list) -> list[str]:

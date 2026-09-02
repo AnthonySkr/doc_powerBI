@@ -78,6 +78,18 @@ class EndToEndTest(unittest.TestCase):
         for expected in ("Chiffre d'affaires", "CA N-1", "Synthèse commerciale", "Ventes"):
             self.assertIn(expected, texts, f"'{expected}' absent du document")
 
+    def test_la_hierarchie_de_dates_tient_sur_une_reference(self):
+        """L'axe du visuel porte une hiérarchie de dates : une ligne, pas trois."""
+        cells = [
+            cell.text.strip()
+            for table in Document(self.document).tables
+            for row in table.rows
+            for cell in row.cells
+        ]
+        self.assertIn("Date (Année > Trimestre > Mois)", cells)
+        for level in ("Date Année", "Date Trimestre", "Date Mois"):
+            self.assertNotIn(level, cells, f"'{level}' occupe encore sa propre ligne")
+
     def test_le_code_dax_est_ecrit(self):
         self.assertTrue(
             any("SUM(Ventes[Montant])" in text for text in self._paragraphs()),

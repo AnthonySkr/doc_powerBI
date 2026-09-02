@@ -13,7 +13,9 @@
           { "queryRef": "Ventes.CA N-1", "field": { "Measure": { "Expression": { "SourceRef": { "Entity": "Ventes" } }, "Property": "CA N-1" } } }
         ] },
         "Category": { "projections": [
-          { "queryRef": "Calendrier.Date", "field": { "Column": { "Expression": { "SourceRef": { "Entity": "Calendrier" } }, "Property": "Date" } } }
+          { "queryRef": "Calendrier.Date.Variation.Date Hierarchy.Année", "nativeQueryRef": "Date Année", "field": { "HierarchyLevel": { "Level": "Année", "Expression": { "Hierarchy": { "Hierarchy": "Date Hierarchy", "Expression": { "PropertyVariationSource": { "Name": "Variation", "Property": "Date", "Expression": { "SourceRef": { "Entity": "Calendrier" } } } } } } } } },
+          { "queryRef": "Calendrier.Date.Variation.Date Hierarchy.Trimestre", "nativeQueryRef": "Date Trimestre", "field": { "HierarchyLevel": { "Level": "Trimestre", "Expression": { "Hierarchy": { "Hierarchy": "Date Hierarchy", "Expression": { "PropertyVariationSource": { "Name": "Variation", "Property": "Date", "Expression": { "SourceRef": { "Entity": "Calendrier" } } } } } } } } },
+          { "queryRef": "Calendrier.Date.Variation.Date Hierarchy.Mois", "nativeQueryRef": "Date Mois", "field": { "HierarchyLevel": { "Level": "Mois", "Expression": { "Hierarchy": { "Hierarchy": "Date Hierarchy", "Expression": { "PropertyVariationSource": { "Name": "Variation", "Property": "Date", "Expression": { "SourceRef": { "Entity": "Calendrier" } } } } } } } } }
         ] }
       }
     }

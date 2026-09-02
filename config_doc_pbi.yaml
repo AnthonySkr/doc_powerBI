@@ -218,6 +218,10 @@ data:
     groups:
       enabled: true            # false = tout à plat, comme s'il n'y avait pas de groupe
       keep_empty: false        # true = garder un groupe dont aucun visuel n'est documenté
+      # Un groupe réduit à un seul visuel documenté n'a pas de partie à lui :
+      # son titre et sa légende d'une ligne redisent ce que le visuel dit déjà.
+      # Le visuel est alors documenté seul, à la suite de la page.
+      keep_single: false       # true = garder la partie même pour un seul visuel
       # Groupes à ne pas détailler — même question qu'au-dessus. Un groupe
       # écarté l'est avec tout son contenu.
       exclude_titles: "{{ inputs.visuels_non_detailles }}"
@@ -252,7 +256,12 @@ data:
         - Colonnes permutées
 
   measures:
-    scope: all      # all | used_in_report (mesures + dépendances)
+    # used_in_report : mesures employées par le rapport — affichées par un
+    # visuel (étiquettes de référence des cartes comprises) ou posées en
+    # filtre de rapport, de page ou de visuel — et leurs dépendances.
+    # Les mesures écartées sont nommées dans le résumé de fin d'exécution.
+    # all = documenter tout le modèle.
+    scope: used_in_report   # all | used_in_report
     include_hidden: false
     # Documente malgré tout les mesures référencées ailleurs (mesure masquée
     # utilisée par une autre, dépendance d'une mesure documentée...) : sans
@@ -278,11 +287,14 @@ merge:
   backup: true
   backup_dir: ".versions"
   # Surlignage : yellow | green | turquoise | gray | none
+  # Le document ne porte aucune marque : les éléments ajoutés et modifiés sont
+  # nommés, un par ligne, dans le résumé affiché en fin d'exécution. Remettre
+  # une couleur ici les fait surligner en plus.
   # changed : texte repris alors que l'élément a changé techniquement
   #           (nouvelle formule DAX, champs du visuel modifiés) — à relire.
   # new     : zone à rédiger d'un élément apparu depuis la version précédente.
-  highlight_changed: yellow
-  highlight_new: green
+  highlight_changed: none
+  highlight_new: none
 
   # Annexe des contenus qui n'ont pas retrouvé leur place : élément disparu du
   # rapport, bloc retiré du plan, donnée du script retouchée à la main. Ils
@@ -752,6 +764,18 @@ sections:
           format: "{n}"
         # Ordre de constitution des lignes du tableau
         order: [mesure, colonne, hierarchie, filtre]
+        # Hiérarchies (dates surtout) : posée sur un axe, une hiérarchie est
+        # projetée niveau par niveau et occuperait autant de lignes
+        # (« Date Année », « Date Trimestre », « Date Mois »). Les niveaux
+        # d'une même hiérarchie affichés sur un même rôle sont donc réunis en
+        # une seule référence, dans l'ordre de forage du visuel :
+        # « Date (Année > Trimestre > Mois) ».
+        # {hierarchy} = nom de la hiérarchie (la colonne d'origine pour une
+        # hiérarchie de dates), {levels} = niveaux joints par `separator`.
+        hierarchies:
+          group: true
+          format: "{hierarchy} ({levels})"
+          separator: " > "
         # Libellés d'une référence sur une seule ligne. Le tableau du template
         # v2 utilise plutôt `ref.role` et `ref.value` (deux colonnes) ; ces
         # libellés restent disponibles via `ref.label`.
@@ -769,6 +793,11 @@ sections:
         roles:
           filtre: "Filtre"
           Values: "Valeur"
+          Data: "Valeur"            # carte (visuel « Carte » actuel)
+          # Étiquettes de référence d'une carte : elles ne passent pas par la
+          # requête du visuel, mais ce sont bien des champs affichés.
+          ReferenceLabelValue: "Étiquette de référence"
+          ReferenceLabelDetail: "Étiquette de référence — détail"
           Y: "Axe Y"
           Y2: "Axe Y secondaire"
           X: "Axe X"

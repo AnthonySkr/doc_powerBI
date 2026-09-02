@@ -8,6 +8,7 @@ from src.models.data_models import (
     ReportPage,
     Visual,
     VisualElement,
+    VisualFilter,
 )
 from src.parsers.dependencies import analyze_dependencies, measures_used_in_report
 
@@ -93,3 +94,89 @@ class UsedInReportTest(unittest.TestCase):
 
     def test_rapport_sans_mesure(self):
         self.assertEqual(measures_used_in_report(PowerBIReport(name="Vide"), {}), set())
+
+
+def measure_filter(name: str) -> VisualFilter:
+    return VisualFilter(
+        field_name=f"Ventes.{name}",
+        filter_type="Comparison",
+        values=["0"],
+        operator="GreaterThan",
+        measure_name=name,
+    )
+
+
+class UsedAsFilterTest(unittest.TestCase):
+    """Filtrer sur une mesure, c'est l'utiliser — à tous les niveaux."""
+
+    def _report(self, *, visual=None, page=None, report=None) -> PowerBIReport:
+        card = Visual(
+            id="v1",
+            visual_type="card",
+            title="Carte",
+            filters=[measure_filter(visual)] if visual else [],
+        )
+        return PowerBIReport(
+            name="Demo",
+            pages=[
+                ReportPage(
+                    "p1",
+                    "Page",
+                    visuals=[card],
+                    filters=[measure_filter(page)] if page else [],
+                )
+            ],
+            filters=[measure_filter(report)] if report else [],
+        )
+
+    def test_filtre_de_visuel(self):
+        self.assertEqual(measures_used_in_report(self._report(visual="Seuil"), {}), {"Seuil"})
+
+    def test_filtre_de_page(self):
+        self.assertEqual(measures_used_in_report(self._report(page="Seuil"), {}), {"Seuil"})
+
+    def test_filtre_de_rapport(self):
+        self.assertEqual(measures_used_in_report(self._report(report="Seuil"), {}), {"Seuil"})
+
+    def test_dependances_du_filtre_suivies(self):
+        all_measures = measures(CA="SUM(Ventes[Montant])", Seuil="[CA] * 0.1")
+        analyze_dependencies(all_measures)
+        self.assertEqual(
+            measures_used_in_report(self._report(visual="Seuil"), all_measures), {"Seuil", "CA"}
+        )
+
+    def test_filtre_sur_colonne_n_est_pas_une_mesure(self):
+        report = PowerBIReport(
+            name="Demo",
+            pages=[
+                ReportPage(
+                    "p1",
+                    "Page",
+                    filters=[
+                        VisualFilter(
+                            field_name="Calendrier.Annee", filter_type="Inclut", values=["2025"]
+                        )
+                    ],
+                )
+            ],
+        )
+        self.assertEqual(measures_used_in_report(report, {}), set())
+
+    def test_etiquette_de_reference_compte_comme_usage(self):
+        """Une mesure qui n'apparaît que dans une étiquette de carte est employée."""
+        card = Visual(
+            id="v1",
+            visual_type="cardVisual",
+            title="Carte",
+            elements=[
+                VisualElement(
+                    query_ref="Ventes.Objectif",
+                    display_name="Objectif",
+                    type_category="Mesure",
+                    role="ReferenceLabelValue",
+                    property_name="Objectif",
+                )
+            ],
+        )
+        report = PowerBIReport(name="Demo", pages=[ReportPage("p1", "Page", visuals=[card])])
+        self.assertEqual(measures_used_in_report(report, {}), {"Objectif"})

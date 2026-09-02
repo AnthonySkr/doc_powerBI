@@ -40,6 +40,11 @@ def build_context(
     tables = filters.filter_tables(report.tables, config)
     groups = filters.group_measures(all_measures, report.measures_used_in_report, tables, config)
 
+    # Ce que le modèle contient et que le document ne dira pas : la liste est
+    # nommée en fin d'exécution, pour que l'écart soit vu plutôt que subi.
+    documented = {measure.name for group in groups for measure in group.measures}
+    report.undocumented_measures = sorted(set(all_measures) - documented, key=str.lower)
+
     return {
         "report": report,
         "model": SemanticModel(tables=tables, tables_with_measures=groups),

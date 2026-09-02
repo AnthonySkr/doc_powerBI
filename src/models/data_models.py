@@ -119,6 +119,10 @@ class VisualElement:
     # Nom du champ dans le modèle (`Property` du visual.json). Le nom affiché
     # peut être un alias : c'est ce nom-ci qui identifie la mesure.
     property_name: str = ""
+    # Hiérarchie dont ce champ est un niveau, pour un `HierarchyLevel` : nom de
+    # la colonne d'origine pour une hiérarchie de dates (« Date »), nom de la
+    # hiérarchie sinon. Vide pour une mesure ou une colonne.
+    hierarchy_name: str = ""
 
     @property
     def model_name(self) -> str:
@@ -134,6 +138,10 @@ class VisualFilter:
     filter_type: str  # "Inclut", "Exclut", "Comparison"
     values: list = field(default_factory=list)
     operator: str = ""
+    # Mesure sur laquelle porte le filtre, telle qu'elle existe dans le modèle.
+    # Vide pour un filtre portant sur une colonne. Filtrer sur une mesure est
+    # une façon de l'utiliser : c'est ce nom qui l'atteste.
+    measure_name: str = ""
 
     def to_string(self) -> str:
         if self.filter_type == "Comparison":
@@ -273,6 +281,12 @@ class PowerBIReport:
     tables: list = field(default_factory=list)
     all_measures: dict = field(default_factory=dict)
     measures_used_in_report: set = field(default_factory=set)
+    # Filtres posés sur le rapport entier (`report.json`), au-dessus des
+    # filtres de page et de visuel.
+    filters: list = field(default_factory=list)
+    # Renseigné par `generators.context` : mesures du modèle qu'aucun visuel ni
+    # aucun filtre n'emploie, et que le document ne documente donc pas.
+    undocumented_measures: list = field(default_factory=list)
 
     @property
     def measures_in_visuals(self) -> set:
@@ -284,3 +298,24 @@ class PowerBIReport:
             for element in visual.elements
             if element.type_category == "Mesure"
         }
+
+    @property
+    def measures_in_filters(self) -> set:
+        """
+        Mesures employées comme filtre — de rapport, de page ou de visuel.
+
+        Filtrer sur une mesure est une façon de s'en servir, au même titre que
+        l'afficher : sans ce relevé, une mesure qui ne sert qu'à filtrer
+        passerait pour inutilisée.
+        """
+        applied = list(self.filters)
+        for page in self.pages:
+            applied += page.filters
+            for visual in page.visuals:
+                applied += visual.filters
+        return {item.measure_name for item in applied if item.measure_name}
+
+    @property
+    def measures_used(self) -> set:
+        """Mesures employées quelque part dans le rapport, hors dépendances."""
+        return self.measures_in_visuals | self.measures_in_filters
