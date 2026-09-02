@@ -51,28 +51,6 @@ Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
 capture correspondante une fois le document généré.
 
-### Visuels non documentés
-
-Tout ce qui ne porte pas de lecture — habillage, navigation, filtres — est
-écarté d'office par `data.visuals`. Un visuel écarté l'est partout : ni dans le
-détail de sa page, ni dans la légende du groupe qui le contient, ni dans les
-titres proposés au lancement.
-
-- `exclude_types` écarte sur le **nom exact** du type : boutons, navigateurs de
-  page, images, formes, zones de texte, et les segments (`slicer`, et
-  `advancedSlicerVisual` pour le segment à boutons).
-- `exclude_type_prefixes` écarte sur le **début** du nom. Un visuel importé
-  depuis AppSource porte le GUID de son paquet dans son `visualType` — par
-  exemple `EnlightenDataStory1BC1D9FF…` — et ce GUID change d'une version à
-  l'autre : seul le début du nom est stable. « Enlighten Data Story » y est
-  déclaré d'office.
-
-Pour relever le type exact d'un visuel du rapport :
-
-```bash
-grep -ro '"visualType": "[^"]*"' <Rapport>.Report/definition/pages
-```
-
 ### Groupes de visuels
 
 Les visuels regroupés dans Power BI (`parentGroupName` d'un `visual.json`) sont

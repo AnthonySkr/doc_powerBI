@@ -193,7 +193,7 @@ data:
     sort_by: report_order      # report_order | name
 
   visuals:
-    # Types Power BI non documentés (habillage, navigation, filtres...)
+    # Types Power BI non documentés (habillage, navigation...)
     exclude_types:
       - actionButton
       - pageNavigator
@@ -201,16 +201,7 @@ data:
       - shape
       - basicShape
       - textbox
-      - slicer                  # segment
-      - advancedSlicerVisual    # segment « nouveau » (boutons)
       - unknown
-    # Types écartés sur le début de leur nom. Un visuel importé (AppSource)
-    # porte le GUID de son paquet dans son `visualType` — le GUID change d'une
-    # version à l'autre, le début du nom non.
-    # Pour retrouver le type exact d'un visuel du rapport :
-    #   grep -o '"visualType": "[^"]*"' -r <Rapport>.Report/definition/pages
-    exclude_type_prefixes:
-      - EnlightenDataStory      # visuel importé « Enlighten Data Story »
     # Titres à ne pas documenter. La question `visuels_non_detailles` posée au
     # lancement alimente cette liste : un visuel déjà présenté ailleurs dans le
     # document (bandeau d'en-tête, bouton de navigation...) n'a pas à l'être
