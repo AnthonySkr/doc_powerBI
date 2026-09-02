@@ -50,14 +50,23 @@ def filter_pages(pages: list[ReportPage], config: DocConfig) -> list[ReportPage]
 
 
 def filter_visuals(visuals: list[Visual], config: DocConfig) -> list[Visual]:
+    """
+    Visuels documentés d'une page.
+
+    Un type s'écarte par son nom exact, ou par son début : un visuel importé
+    depuis AppSource porte le GUID de son paquet dans son `visualType`, et ce
+    GUID change d'une version à l'autre. Seul le début du nom est stable.
+    """
     options = config.data["visuals"]
     excluded_types = _lowercase(options.get("exclude_types"))
+    excluded_prefixes = tuple(_lowercase(options.get("exclude_type_prefixes")))
     excluded_titles = _lowercase(options.get("exclude_titles"))
 
     kept = [
         visual
         for visual in visuals
         if visual.visual_type.lower() not in excluded_types
+        and not visual.visual_type.lower().startswith(excluded_prefixes)
         and visual.title.lower() not in excluded_titles
         and (not options.get("only_with_measures") or visual.has_measures)
     ]
