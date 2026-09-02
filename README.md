@@ -67,6 +67,14 @@ documentés ensemble, dans une partie au nom du groupe :
 
 Les visuels de la page qui n'appartiennent à aucun groupe suivent ensuite.
 
+Un groupe **réduit à un seul visuel documenté** n'ouvre pas de partie : son
+titre et sa légende d'une ligne ne feraient que redire ce que le visuel dit
+déjà, au prix d'un niveau de plan de plus. Le visuel est alors documenté seul,
+à la suite de la page. Ce sont bien les visuels *documentés* qui comptent : un
+groupe de cinq visuels dont quatre sont écartés par `data.visuals` tombe lui
+aussi sur ce cas, et un visuel logé dans un sous-groupe compte pour son groupe
+racine. `data.visuals.groups.keep_single: true` rétablit la partie de groupe.
+
 ### Hiérarchies dans le tableau des références
 
 Une hiérarchie déposée sur un axe — une hiérarchie de dates au premier chef —

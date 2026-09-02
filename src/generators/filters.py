@@ -124,9 +124,7 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
         group.visuals = _sorted_visuals(
             [visual for visual, _ in contents[group.name]], options.get("sort_by")
         )
-        # Un groupe sans aucun visuel documenté n'apporte que sa capture : il
-        # n'est retenu que si la configuration le demande.
-        if group.visuals or group_options.get("keep_empty"):
+        if _deserves_part(group.visuals, group_options):
             groups.append(group)
 
     # Filet de sécurité : tout visuel documenté qui n'a rejoint aucune partie
@@ -137,6 +135,24 @@ def organize_page(page: ReportPage, config: DocConfig) -> None:
     page.groups = groups
     page.ungrouped_visuals = [v for v in documented if v.id not in grouped_ids]
     page.visuals = [v for group in groups for v in group.visuals] + page.ungrouped_visuals
+
+
+def _deserves_part(visuals: list[Visual], options: dict[str, Any]) -> bool:
+    """
+    Un groupe mérite-t-il sa propre partie du document ?
+
+    Sans visuel documenté, il n'apporte que sa capture. Avec un seul, son titre
+    et sa légende d'une ligne ne font que redire ce que le visuel dit déjà,
+    au prix d'un niveau de plan de plus.
+
+    Dans les deux cas la partie de groupe est passée, et le visuel — s'il y en
+    a un — est documenté seul, à la suite de la page.
+    """
+    if not visuals:
+        return bool(options.get("keep_empty"))
+    if len(visuals) == 1:
+        return bool(options.get("keep_single"))
+    return True
 
 
 def _members(contents: list[tuple[Visual, str]], sort_by: Any) -> list[VisualGroupMember]:
