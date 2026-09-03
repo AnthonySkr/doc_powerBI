@@ -113,6 +113,10 @@ DEFAULTS: dict[str, Any] = {
             "groups": {
                 "enabled": True,
                 "keep_empty": False,
+                # Un groupe d'un seul visuel ne mérite pas sa propre partie :
+                # son titre et sa légende d'une ligne redisent ce que le visuel
+                # dit déjà, au prix d'un niveau de plan de plus.
+                "keep_single": False,
                 "exclude_titles": [],
                 "sort_by": "position",
                 "member_sort_by": "position",

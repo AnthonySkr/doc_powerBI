@@ -55,19 +55,37 @@ class IdentifiantsUniquesTest(unittest.TestCase):
                 merge.anchor({"id": "fiche", "title": name}, {})
         self.assertEqual(anchors(document), ["section:fiche", "section:fiche>Achats"])
 
-    def test_ordre_des_iterations_sans_effet_sur_les_identifiants(self):
-        first, second = writer()[1], writer()[1]
+    def test_titres_identiques_restent_distincts(self):
+        """
+        Deux éléments parcourus peuvent porter le même titre.
+
+        Le titre ne suffit alors plus à les distinguer : sans le rang en
+        dernier ressort, deux ancres porteraient le même identifiant et la
+        relecture ne saurait plus à laquelle rendre la rédaction.
+        """
+        document, merge = writer()
         with console.silenced():
-            for merge, names in (
+            for _ in range(3):
+                merge.anchor({"id": "fiche", "title": "Ventes"}, {})
+
+        written = anchors(document)
+        self.assertEqual(len(set(written)), len(written))
+
+    def test_ordre_des_iterations_sans_effet_sur_le_nombre_d_ancres(self):
+        """Quel que soit l'ordre, chaque élément parcouru reçoit son ancre."""
+        first, second = writer(), writer()
+        with console.silenced():
+            for (_, merge), names in (
                 (first, ("Ventes", "Achats")),
                 (second, ("Achats", "Ventes")),
             ):
                 for name in names:
                     merge.anchor({"id": "fiche", "title": name}, {})
-        # Chaque titre garde le même identifiant quel que soit son rang.
-        self.assertEqual(
-            set(first._used) - {"section:fiche"}, set(second._used) - {"section:fiche"}
-        )
+
+        for document, _ in (first, second):
+            written = anchors(document)
+            self.assertEqual(len(written), 2)
+            self.assertEqual(len(set(written)), 2)
 
     def test_identifiant_repete_sans_titre_numerote(self):
         """Sans titre il ne reste que le rang : un pis-aller, mais rien n'est perdu."""

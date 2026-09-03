@@ -127,7 +127,7 @@ class DocumentBuilder:
                             replaced += fields.replace_in_part(part, placeholder, value)
 
         if replaced:
-            console.info(f"En-tête / pied de page : {replaced} texte(s) remplacé(s)")
+            console.done(f"en-tête et pied de page : {replaced} texte(s) remplacé(s)")
 
     def _update_table_of_contents(self) -> None:
         """Marque la table des matières du template comme à recalculer."""
@@ -144,7 +144,7 @@ class DocumentBuilder:
             fields.set_update_fields(self.doc.settings.element)
 
         detail = f" (niveaux {levels})" if levels else ""
-        console.info(f"Table des matières{detail} : recalculée à l'ouverture dans Word")
+        console.done(f"table des matières{detail} : recalculée à l'ouverture dans Word")
 
     # ── Sections ──────────────────────────────────────────────────
     def _write_section(

@@ -158,9 +158,9 @@ class LinkIndex:
             return
 
         measures = len(self._bookmarks & self._targets)
-        console.info(
-            f"Liens internes : {sum(self._anchors.values())} — {measures} mesures et "
-            f"{len(self._bookmarks) - measures} autres emplacements atteignables"
+        console.done(
+            f"{sum(self._anchors.values())} lien(s) interne(s) vers {measures} mesure(s) "
+            f"et {len(self._bookmarks) - measures} autre(s) emplacement(s)"
         )
 
         dangling = sorted(set(self._anchors) - self._bookmarks)
@@ -232,5 +232,8 @@ def bookmark_name(name: str) -> str:
     if cleaned == raw and len(cleaned) <= _BOOKMARK_MAX_LENGTH:
         return cleaned
 
-    digest = hashlib.md5(raw.encode("utf-8")).hexdigest()[:6]
+    # `usedforsecurity=False` : ce condensé distingue deux noms, il ne protège
+    # rien. Sans lui, un poste Windows en mode FIPS refuse md5 et la génération
+    # s'arrête au premier signet — voir la même précaution dans `merge.markers`.
+    digest = hashlib.md5(raw.encode("utf-8"), usedforsecurity=False).hexdigest()[:6]
     return f"{cleaned[: _BOOKMARK_MAX_LENGTH - len(digest) - 1]}_{digest}"

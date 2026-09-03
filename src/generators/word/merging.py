@@ -182,8 +182,14 @@ class MergeWriter:
                 "un `bookmark:` construit sur l'élément parcouru pour un repérage sûr."
             )
 
+        # Deux éléments parcourus peuvent porter le même titre : le rang prend
+        # alors le relais. L'identifiant retenu est enregistré à son tour, sans
+        # quoi le contrôle ne verrait jamais la collision qu'il doit écarter.
         distinct = f"{element_id}>{title}" if title else f"{element_id}#{seen + 1}"
-        return distinct if distinct not in self._used else f"{element_id}#{seen + 1}"
+        if distinct in self._used:
+            distinct = f"{element_id}#{seen + 1}"
+        self._used[distinct] = self._used.get(distinct, 0) + 1
+        return distinct
 
 
 def _digests(opening) -> list[str]:

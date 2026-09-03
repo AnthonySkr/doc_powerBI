@@ -20,13 +20,17 @@ TextProvider = Any
 
 
 def ask_inputs(
-    config: DocConfig, base_context: dict[str, Any], remembered: dict[str, Any] | None = None
+    config: DocConfig,
+    base_context: dict[str, Any],
+    remembered: dict[str, Any] | None = None,
+    step: tuple[int, int] | tuple[()] = (),
 ) -> dict[str, Any]:
     """Pose les questions déclarées dans la configuration."""
     if not config.inputs:
         return {}
 
-    console.step("Renseignements")
+    console.step("Renseignements", *step)
+    console.note("Entrée valide la valeur proposée entre crochets.")
     remembered = remembered or {}
 
     answers: dict[str, Any] = {}
@@ -103,14 +107,12 @@ def make_text_provider(enabled: bool):
         return None
 
     def provider(block: dict[str, Any], default_text: str) -> str:
-        label = block.get("prompt") or block.get("id") or "texte"
-        print()
-        print(f"  ── {label}")
-        print(f"     « {default_text} »")
-        if not ask_confirm("     Modifier ce texte ?", False):
+        console.question(block.get("prompt") or block.get("id") or "texte")
+        console.note(f"« {default_text} »")
+        if not ask_confirm("Modifier ce texte ?", False):
             return default_text
-        print("     Nouveau texte (ligne vide pour terminer) :")
-        return _read_lines("     > ") or default_text
+        console.note("Nouveau texte, puis une ligne vide pour terminer :")
+        return _read_lines() or default_text
 
     return provider
 
@@ -121,8 +123,9 @@ def make_text_provider(enabled: bool):
 
 
 def ask_confirm(label: str, default: bool) -> bool:
-    hint = "[O/n]" if default else "[o/N]"
-    answer = input(f"  {label} {hint} ").strip().lower()
+    hint = "O/n" if default else "o/N"
+    console.blank()
+    answer = console.ask(label, hint).strip().lower()
     if not answer:
         return default
     return answer in ("o", "oui", "y", "yes", "1")
@@ -130,20 +133,20 @@ def ask_confirm(label: str, default: bool) -> bool:
 
 def _ask_text(label: str, default: str, multiline: bool = False) -> str:
     if multiline:
-        print(f"  {label} (ligne vide pour terminer)")
-        return _read_lines("  > ") or default
+        console.question(label)
+        console.note("Une ligne vide pour terminer.")
+        return _read_lines() or default
 
-    suffix = f" [{default}]" if default else ""
-    return input(f"  {label}{suffix} : ").strip() or default
+    console.blank()
+    return console.ask(label, default).strip() or default
 
 
 def _ask_choice(label: str, options: list[Any], default: Any) -> Any:
-    print(f"  {label}")
+    console.question(label)
     for index, option in enumerate(options, start=1):
-        retained = "  ←" if default is not None and option == default else ""
-        print(f"    {index}. {option}{retained}")
+        console.option(index, option, retained=default is not None and option == default)
 
-    answer = input(f"  Choix [1-{len(options)}] : ").strip()
+    answer = console.ask(f"Choix parmi 1-{len(options)}").strip()
     if answer.isdigit() and 1 <= int(answer) <= len(options):
         return options[int(answer) - 1]
     return default if default is not None else (options[0] if options else "")
@@ -162,15 +165,17 @@ def _ask_multi_choice(label: str, options: list[Any], default: list[Any]) -> lis
     if not options:
         return list(default)
 
-    print(f"  {label}")
+    console.question(label)
     for index, option in enumerate(options, start=1):
-        retained = "  ←" if option in default else ""
-        print(f"    {index}. {option}{retained}")
+        console.option(index, option, retained=option in default)
 
-    # Les réponses de la dernière génération sont marquées d'une flèche : les
-    # reconduire d'un Entrée évite de faire disparaître une partie déjà rédigée.
-    keep = f"vide = {'inchangé' if default else 'aucun'}"
-    answer = input(f"  Numéros séparés par une virgule ({keep}) : ").strip()
+    # Les réponses de la dernière génération sont marquées : les reconduire d'un
+    # Entrée évite de faire disparaître une partie déjà rédigée.
+    console.note(
+        "Numéros séparés par une virgule — "
+        + ("vide = on garde les retenus ci-dessus." if default else "vide = on garde tout.")
+    )
+    answer = console.ask("Numéros").strip()
     if not answer:
         return list(default)
 
@@ -190,11 +195,11 @@ def _ask_multi_choice(label: str, options: list[Any], default: list[Any]) -> lis
     return chosen
 
 
-def _read_lines(prompt: str) -> str:
+def _read_lines() -> str:
     """Lit plusieurs lignes jusqu'à une ligne vide."""
     lines: list[str] = []
     while True:
-        line = input(prompt)
+        line = console.ask("")
         if not line.strip():
             return "\n".join(lines)
         lines.append(line)

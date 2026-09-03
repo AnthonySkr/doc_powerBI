@@ -81,9 +81,9 @@ def read(path: str) -> PreviousDocument:
         return PreviousDocument()
 
     free = sum(len(block.free_nodes()) for block in anchored.values())
-    console.info(
-        f"Document précédent lu : {len(anchored)} élément(s) ancré(s), "
-        f"{free} paragraphe(s) et tableau(x) vous appartenant"
+    console.done(
+        f"version précédente relue : {len(anchored)} élément(s) repéré(s), "
+        f"{free} paragraphe(s) et tableau(x) que vous avez écrits"
     )
 
     return PreviousDocument(
