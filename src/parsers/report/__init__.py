@@ -47,9 +47,9 @@ def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> Powe
     visuals = sum(len(page.visuals) for page in report.pages)
     groups = sum(len(page.groups) for page in report.pages)
     with_measures = sum(1 for page in report.pages for v in page.visuals if v.has_measures)
-    console.info(
-        f"{len(report.pages)} pages | {visuals} visuels ({with_measures} avec mesures) "
-        f"| {groups} groupes"
+    console.done(
+        f"{len(report.pages)} page(s), {visuals} visuel(s) dont {with_measures} "
+        f"avec mesures, {groups} groupe(s)"
     )
     return report
 

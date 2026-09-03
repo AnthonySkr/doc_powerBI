@@ -56,7 +56,7 @@ def read(answers_path: str) -> dict[str, Any]:
     if not isinstance(remembered, dict):
         return {}
 
-    console.info(f"Réponses précédentes reprises depuis {os.path.basename(answers_path)}")
+    console.done(f"réponses précédentes reprises de {os.path.basename(answers_path)}")
     return remembered
 
 

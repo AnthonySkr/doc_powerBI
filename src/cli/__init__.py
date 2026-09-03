@@ -3,7 +3,7 @@
 import sys
 import traceback
 
-from src import console, paths
+from src import __version__, console, paths
 from src.cli.arguments import parse_args
 from src.pipeline import PipelineError, run
 
@@ -13,26 +13,31 @@ __all__ = ["main"]
 def main(argv: list[str] | None = None) -> int:
     """Point d'entrée du script. Retourne le code de sortie."""
     options = None
+    console.title("Documentation Power BI", f"v{__version__}")
     try:
         options = parse_args(argv)
         output_dir = run(options)
     except PipelineError as e:
-        console.warn(str(e))
+        console.blank()
+        console.banner("Génération abandonnée", ok=False)
+        console.error(str(e))
         return _finish(1, options)
     except KeyboardInterrupt:
         console.blank()
-        console.warn("Génération interrompue")
+        console.banner("Génération interrompue", ok=False)
         return _finish(130, options)
     except Exception:  # noqa: BLE001
         # Une erreur imprévue ne doit pas disparaître avec la fenêtre : elle
         # est affichée en entier, puis la pause laisse le temps de la lire.
         console.blank()
-        console.warn("Erreur inattendue — détail ci-dessous :")
+        console.banner("Erreur inattendue", ok=False)
+        console.error("Détail ci-dessous — joignez-le à votre demande d'aide :")
         traceback.print_exc()
         return _finish(1, options)
 
     console.blank()
-    console.banner(f"Terminé — Sortie dans : {output_dir}")
+    console.banner("Documentation générée")
+    console.field("Dossier", output_dir)
     return _finish(0, options)
 
 
@@ -51,7 +56,7 @@ def _finish(code: int, options) -> int:
 
     console.blank()
     try:
-        input("Appuyez sur Entrée pour fermer cette fenêtre… ")
+        console.ask("Entrée pour fermer cette fenêtre")
     except Exception:  # noqa: BLE001, S110
         # Entrée absente ou fermée (tâche planifiée) : ne pas bloquer.
         pass

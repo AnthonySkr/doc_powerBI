@@ -52,14 +52,13 @@ def generate_word_documentation(
     builder.build()
 
     log = builder.merge.log
+    archived = ""
     if previous is not None and previous.exists:
         # Le document neuf porte ses ancres : il est maintenant recomposé en
         # suivant l'ordre du document précédent, dont seuls les contenus
         # produits par le script sont remplacés. Ce qui n'a pas pu être
         # replacé est rassemblé en annexe plutôt que perdu.
         orphans.report(apply_merge(doc, previous, merge_options, log, builder.styles))
-    archived = ""
-    if previous is not None and previous.exists:
         log.removed = previous.removed(log.written_ids | log.renamed_ids)
         archived = _archive(output_path, merge_options)
 
@@ -75,7 +74,7 @@ def generate_word_documentation(
         _restore(archived, output_path)
         raise DocumentError(f"Impossible d'enregistrer le document — {e}") from e
 
-    console.info(f"Documentation Word générée : '{output_path}'")
+    console.done(f"{os.path.basename(output_path)} écrit")
 
     if (config.rendering.get("table_of_contents") or {}).get("update_with_word"):
         console.info(word_app.refresh_fields(output_path))
@@ -134,7 +133,7 @@ def _archive(output_path: str, options: dict[str, Any]) -> str:
             "Le document existant n'a pas été touché."
         ) from e
 
-    console.info(f"Version précédente archivée dans {os.path.basename(directory)}/")
+    console.done(f"version précédente archivée dans {os.path.basename(directory)}/")
     return archived
 
 
