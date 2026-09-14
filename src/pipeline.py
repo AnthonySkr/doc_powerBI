@@ -1,176 +1,154 @@
 """
-Enchaînement complet : d'un fichier .pbip au document Word.
+Le chef d'orchestre : il enchaîne les applications, il ne travaille pas.
 
-    .pbip  ──►  modèle sémantique + rapport  ──►  contexte  ──►  .docx
+    .pbip  ──►  extract  ──►  [ capture ]  ──►  document  ──►  .docx
+                    1-rapport.json    2-captures.json
 
-Les questions posées à l'utilisateur et la structure du document viennent de
-`config_doc_pbi.yaml` : ce module ne décide de rien, il orchestre.
+Chaque application est utilisable seule (`python -m src.apps.<nom>`) et ne
+communique avec la suivante que par un fichier d'échange : elle le lit,
+l'enrichit, en écrit un nouveau, et supprime celui qu'elle a consommé. Ce
+module fait la même chose qu'un enchaînement de commandes, en y ajoutant ce qui
+n'appartient à aucune application :
+
+    où vivent les fichiers d'échange, et quand ils disparaissent
+    quelles étapes sont jouées — la capture reste facultative
+    le moment où l'utilisateur est interrogé, entre lecture et écriture
 """
 
 import os
+from dataclasses import dataclass
 from typing import Any
 
-from src import console
-from src.cli import answers, editing, prompts
+from src.apps.document.render import DocumentError, output_directory, report_result, write_document
+from src.apps.extract import ExtractError, PbipProject, collect, open_project
+from src.cli import editing, prompts
 from src.cli.arguments import Options
-from src.config import DEFAULT_OUTPUT_DIR, DocConfig, load_config, render
-from src.generators import filters
-from src.generators.context import build_context
-from src.generators.word import DocumentError, generate_word_documentation
-from src.models.data_models import PowerBIReport
-from src.parsers import dependencies
-from src.parsers.pbip import PbipProject
-from src.parsers.report import parse_report
-from src.parsers.tmdl import load_semantic_model
+from src.shared import answers, console
+from src.shared.config import DocConfig, load_config
+from src.shared.exchange import DEFAULT_DIRECTORY, Exchange, discard, write
+from src.shared.inputs import base_context, default_inputs
+
+__all__ = ["PipelineError", "run"]
+
+# Étapes annoncées à l'utilisateur : extraction, questions, document.
+TOTAL_STEPS = 3
+
+# Ce que chaque application laisse derrière elle, dans l'ordre de la chaîne.
+EXTRACT_FILE = "1-rapport.json"
+CAPTURE_FILE = "2-captures.json"
 
 
 class PipelineError(Exception):
     """Erreur bloquante, à afficher à l'utilisateur avant de sortir."""
 
 
-# Étapes annoncées à l'utilisateur : modèle, rapport, questions, document.
-TOTAL_STEPS = 4
+@dataclass
+class Stage:
+    """Une étape franchie : ce qu'elle a produit, et où elle l'a laissé."""
+
+    exchange: Exchange
+    path: str
 
 
 def run(options: Options) -> str:
     """Génère la documentation et retourne le dossier de sortie."""
-    if not os.path.isfile(options.pbip_path):
-        raise PipelineError(f"Fichier introuvable : '{options.pbip_path}'")
+    config = _config(options.config_path)
+    project = _project(options.pbip_path)
+    _announce(project, config)
 
-    try:
-        config = load_config(options.config_path)
-    except (FileNotFoundError, ValueError) as e:
-        raise PipelineError(f"Configuration : {e}") from e
+    stage = _extract(project)
+    inputs = _ask(stage.exchange, config, project.directory, options.interactive)
+    output_dir = project.output_dir(output_directory(stage.exchange, config, inputs))
+    _document(stage, config, inputs, output_dir, options)
+    return output_dir
 
-    project = PbipProject(options.pbip_path)
 
-    error = project.missing()
-    if error:
-        raise PipelineError(error)
+# ─────────────────────────────────────────────────────────────
+#  Les étapes, dans l'ordre
+# ─────────────────────────────────────────────────────────────
 
-    console.blank()
-    console.field("Rapport", project.name)
-    console.field("Projet", project.directory)
-    console.field("Modèle", os.path.basename(project.semantic_model_dir))  # type: ignore
-    console.field("Pages", os.path.basename(project.report_dir))  # type: ignore
-    console.field("Plan", config.path)
 
-    report = _collect(project)
+def _extract(project: PbipProject) -> Stage:
+    """Première application : le `.pbip` devient un fichier d'échange."""
+    console.step("Lecture du rapport", 1, TOTAL_STEPS)
+    exchange = collect(project)
 
-    # Les réponses de la dernière génération sont reproposées : re-cocher à
-    # l'identique une liste de visuels écartés n'est pas une chose à confier à
-    # la mémoire de l'utilisateur. Elles vivent à côté du .pbip, et non dans le
-    # dossier de sortie — que l'une d'elles désigne.
-    answers_path = answers.path(config, {"report": report}, project.directory)
-    remembered = answers.read(answers_path)
+    path = os.path.join(project.directory, DEFAULT_DIRECTORY, EXTRACT_FILE)
+    write(exchange, path)
+    console.done(f"rapport extrait dans {os.path.basename(path)}")
+    return Stage(exchange, path)
 
-    inputs = _ask_inputs(config, report, options.interactive, remembered)
-    answers.write(answers_path, inputs)
 
-    output_dir = project.output_dir(_output_dir(config, report, inputs))
+def _ask(
+    exchange: Exchange, config: DocConfig, project_dir: str, interactive: bool
+) -> dict[str, Any]:
+    """
+    Les questions du plan, entre la lecture et l'écriture.
+
+    Les réponses de la dernière génération sont reproposées : re-cocher à
+    l'identique une liste de visuels écartés n'est pas une chose à confier à la
+    mémoire de l'utilisateur. Elles vivent à côté du .pbip, et non dans le
+    dossier de sortie — que l'une d'elles désigne.
+    """
+    context = base_context(exchange.report, config)
+    path = answers.path(config, {"report": exchange.report}, project_dir)
+    remembered = answers.read(path)
+
+    if interactive:
+        given = prompts.ask_inputs(config, context, remembered, step=(2, TOTAL_STEPS))
+    else:
+        given = default_inputs(config, context, remembered)
+
+    answers.write(path, given)
+    return given
+
+
+def _document(
+    stage: Stage, config: DocConfig, inputs: dict[str, Any], output_dir: str, options: Options
+) -> None:
+    """Dernière application : le fichier d'échange devient un .docx."""
+    console.step("Document Word", TOTAL_STEPS, TOTAL_STEPS)
+
     # Les textes types du plan ne sont proposés à la réécriture que si
     # l'utilisateur l'a demandé, et seulement en interactif.
     rewrite = editing.make_text_provider(
         options.interactive and bool(inputs.get("editer_textes", False))
     )
-    _generate(config, report, inputs, output_dir, rewrite)
-    return output_dir
-
-
-# ─────────────────────────────────────────────────────────────
-#  Étapes
-# ─────────────────────────────────────────────────────────────
-
-
-def _output_dir(config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]) -> str:
-    """Dossier de sortie déclaré par le plan, une fois les réponses connues."""
-    declared = render(config.document.get("output_dir"), {"report": report, "inputs": inputs})
-    return declared or DEFAULT_OUTPUT_DIR
-
-
-def _collect(project: PbipProject) -> PowerBIReport:
-    """Lit le modèle sémantique et le rapport, puis croise les deux."""
-    console.step("Modèle de données", 1, TOTAL_STEPS)
-    all_measures, tables = load_semantic_model(project.semantic_model_dir)  # type: ignore
-    if all_measures:
-        dependencies.analyze_dependencies(all_measures)
-        console.done(f"dépendances calculées pour {len(all_measures)} mesure(s)")
-
-    console.step("Rapport", 2, TOTAL_STEPS)
-    report = parse_report(project.report_dir, report_name=project.name)  # type: ignore
-    report.all_measures = all_measures
-    report.tables = tables
-    report.measures_used_in_report = dependencies.measures_used_in_report(report, all_measures)
-
-    console.done(f"{len(report.measures_in_visuals)} mesure(s) affichée(s) dans les visuels")
-    console.done(
-        f"{len(report.measures_used_in_report)} mesure(s) à documenter (dépendances comprises)"
-    )
-
-    return report
-
-
-def _ask_inputs(
-    config: DocConfig,
-    report: PowerBIReport,
-    interactive: bool,
-    remembered: dict[str, Any] | None = None,
-) -> dict[str, Any]:
-    # `choices` : ce que le rapport contient réellement, pour les questions qui
-    # font choisir dans son contenu plutôt que dans une liste figée du YAML.
-    base_context = {
-        "report": report,
-        "inputs": {},
-        "styles": config.styles,
-        "choices": {"visuals": filters.documentable_titles(report, config)},
-    }
-    if interactive:
-        return prompts.ask_inputs(config, base_context, remembered, step=(3, TOTAL_STEPS))
-    return prompts.default_inputs(config, base_context, remembered)
-
-
-def _generate(
-    config: DocConfig,
-    report: PowerBIReport,
-    inputs: dict[str, Any],
-    output_dir: str,
-    rewrite: editing.TextProvider | None,
-) -> None:
-    console.step("Document Word", TOTAL_STEPS, TOTAL_STEPS)
-
-    context = build_context(report, report.all_measures, config, inputs)
-    output_name = render(config.document.get("output_name"), context) or (
-        f"documentation_{report.name}.docx"
-    )
 
     try:
-        log = generate_word_documentation(
-            config, context, os.path.join(output_dir, output_name), rewrite
-        )
+        result = write_document(stage.exchange, config, inputs, output_dir, rewrite)
     except DocumentError as e:
         raise PipelineError(str(e)) from e
 
+    report_result(result)
+    # Le tapis roulant s'arrête ici : ce qui a servi disparaît, pour qu'un
+    # fichier périmé ne passe jamais pour le dernier état du rapport.
+    discard(stage.path)
+
+
+# ─────────────────────────────────────────────────────────────
+#  Détails
+# ─────────────────────────────────────────────────────────────
+
+
+def _announce(project: PbipProject, config: DocConfig) -> None:
     console.blank()
-    console.done(log.summary())
-    for line in log.details():
-        console.detail(line)
+    console.field("Rapport", project.name)
+    console.field("Projet", project.directory)
+    console.field("Modèle", os.path.basename(project.semantic_model_dir))  # type: ignore[arg-type]
+    console.field("Pages", os.path.basename(project.report_dir))  # type: ignore[arg-type]
+    console.field("Plan", config.path)
 
-    _report_undocumented_measures(report)
+
+def _config(path: str) -> DocConfig:
+    try:
+        return load_config(path)
+    except (FileNotFoundError, ValueError) as e:
+        raise PipelineError(f"Configuration : {e}") from e
 
 
-def _report_undocumented_measures(report: PowerBIReport) -> None:
-    """
-    Nomme les mesures du modèle que le document ne documente pas.
-
-    `data.measures.scope: used_in_report` écarte les mesures qu'aucun visuel
-    n'affiche et qu'aucun filtre n'emploie. Les compter ne suffit pas : sans
-    leurs noms, impossible de dire si l'une manque à tort.
-    """
-    names = report.undocumented_measures
-    if not names:
-        return
-
-    console.blank()
-    console.info(f"{len(names)} mesure(s) du modèle non documentée(s) — non utilisée(s) :")
-    for name in names:
-        console.detail(f"· {name}")
+def _project(pbip_path: str) -> PbipProject:
+    try:
+        return open_project(pbip_path)
+    except ExtractError as e:
+        raise PipelineError(str(e)) from e

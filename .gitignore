@@ -8,3 +8,5 @@ Galeries imbriquées.docx
 build
 dist
 .versions
+# Fichiers que les applications se passent : ils ne survivent pas à la chaîne.
+.echange

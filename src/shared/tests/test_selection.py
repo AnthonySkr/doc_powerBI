@@ -1,0 +1,329 @@
+"""
+Ce que le plan retient du rapport : pages, visuels, groupes.
+
+Ces règles servent au document — savoir quoi écrire —, à la capture — savoir
+quoi photographier — et au questionnaire de lancement. Elles sont donc
+éprouvées là où elles vivent, dans `shared`.
+"""
+
+import unittest
+
+from src.shared.config import DocConfig
+from src.shared.models import PowerBIReport, ReportPage, Visual, VisualGroup
+from src.shared.selection import (
+    documentable_titles,
+    filter_pages,
+    filter_visuals,
+    organize_page,
+)
+
+
+def config(**data) -> DocConfig:
+    return DocConfig({"data": data})
+
+
+class PageFilterTest(unittest.TestCase):
+    def setUp(self):
+        self.pages = [
+            ReportPage(name="p2", display_name="Détail", order=2),
+            ReportPage(name="p1", display_name="Accueil", order=1),
+            ReportPage(name="p3", display_name="Technique", order=3, is_hidden=True),
+        ]
+
+    def test_tri_par_ordre_du_rapport(self):
+        kept = filter_pages(self.pages, config(pages={"exclude_hidden": False}))
+        self.assertEqual([p.display_name for p in kept], ["Accueil", "Détail", "Technique"])
+
+    def test_tri_par_nom(self):
+        kept = filter_pages(self.pages, config(pages={"exclude_hidden": False, "sort_by": "name"}))
+        self.assertEqual([p.display_name for p in kept], ["Accueil", "Détail", "Technique"])
+
+    def test_pages_masquees_exclues(self):
+        kept = filter_pages(self.pages, config(pages={"exclude_hidden": True}))
+        self.assertEqual([p.display_name for p in kept], ["Accueil", "Détail"])
+
+    def test_exclusion_par_nom(self):
+        kept = filter_pages(
+            self.pages, config(pages={"exclude_hidden": False, "exclude_names": ["détail"]})
+        )
+        self.assertEqual([p.display_name for p in kept], ["Accueil", "Technique"])
+
+
+class VisualFilterTest(unittest.TestCase):
+    def setUp(self):
+        self.visuals = [
+            Visual(id="v1", visual_type="card", title="CA", has_measures=True, pos_x=5, pos_y=1),
+            Visual(id="v2", visual_type="image", title="Logo", pos_x=0, pos_y=0),
+            Visual(id="v3", visual_type="barChart", title="Marge", pos_x=0, pos_y=2),
+        ]
+
+    def test_tri_par_titre(self):
+        kept = filter_visuals(self.visuals, config(visuals={}))
+        self.assertEqual([v.title for v in kept], ["CA", "Logo", "Marge"])
+
+    def test_tri_par_position(self):
+        kept = filter_visuals(self.visuals, config(visuals={"sort_by": "position"}))
+        self.assertEqual([v.title for v in kept], ["Logo", "CA", "Marge"])
+
+    def test_exclusion_par_type(self):
+        kept = filter_visuals(self.visuals, config(visuals={"exclude_types": ["image"]}))
+        self.assertEqual([v.title for v in kept], ["CA", "Marge"])
+
+    def test_seulement_avec_mesures(self):
+        kept = filter_visuals(self.visuals, config(visuals={"only_with_measures": True}))
+        self.assertEqual([v.title for v in kept], ["CA"])
+
+
+def visual(vid, title, group="", visual_type="card", x=0.0, y=0.0) -> Visual:
+    return Visual(
+        id=vid,
+        visual_type=visual_type,
+        title=title,
+        parent_group_name=group,
+        name=vid,
+        pos_x=x,
+        pos_y=y,
+    )
+
+
+def group(name, title, parent="", x=0.0, y=0.0) -> VisualGroup:
+    return VisualGroup(id=name, name=name, title=title, parent_group_name=parent, pos_x=x, pos_y=y)
+
+
+class VisualGroupingTest(unittest.TestCase):
+    """Répartition des visuels d'une page entre groupes Power BI et isolés."""
+
+    def setUp(self):
+        self.page = ReportPage(name="p1", display_name="Accueil")
+        self.page.groups = [group("g1", "Ventes", y=0), group("g2", "Marges", y=10)]
+        self.page.visuals = [
+            visual("v1", "CA", group="g1", y=1),
+            visual("v2", "Volume", group="g1", y=2),
+            visual("v3", "Marge", group="g2", y=11),
+            visual("v4", "Taux", group="g2", y=12),
+            visual("v5", "Détail", y=20),
+        ]
+
+    def organize(self, **options):
+        organize_page(self.page, config(visuals=options))
+        return self.page
+
+    def test_visuels_repartis_dans_leurs_groupes(self):
+        page = self.organize()
+        self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
+        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Volume"])
+        self.assertEqual([v.title for v in page.groups[1].visuals], ["Marge", "Taux"])
+        self.assertEqual([v.title for v in page.ungrouped_visuals], ["Détail"])
+
+    def test_page_visuals_suit_l_ordre_du_document(self):
+        page = self.organize()
+        self.assertEqual(
+            [v.title for v in page.visuals], ["CA", "Volume", "Marge", "Taux", "Détail"]
+        )
+
+    def test_legende_du_groupe(self):
+        members = self.organize().groups[0].members
+        self.assertEqual([m.title for m in members], ["CA", "Volume"])
+
+    def test_visuel_exclu_par_type_absent_du_groupe(self):
+        self.page.visuals.append(visual("v6", "Bouton", group="g1", visual_type="image", y=3))
+        page = self.organize(exclude_types=["image"])
+
+        # Ni dans la légende, ni dans le détail : un visuel écarté l'est partout.
+        self.assertEqual([m.title for m in page.groups[0].members], ["CA", "Volume"])
+        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Volume"])
+
+    def test_visuel_exclu_par_titre_absent_du_groupe(self):
+        self.page.visuals.append(visual("v6", "Panier", group="g1", y=3))
+        page = self.organize(exclude_titles=["volume"])
+
+        self.assertEqual([m.title for m in page.groups[0].members], ["CA", "Panier"])
+        self.assertEqual([v.title for v in page.groups[0].visuals], ["CA", "Panier"])
+
+    def test_sous_groupe_rattache_a_son_groupe_racine(self):
+        self.page.groups.append(group("g3", "Par mois", parent="g1", y=4))
+        self.page.visuals.append(visual("v7", "Janvier", group="g3", y=5))
+        page = self.organize()
+
+        self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
+        ventes = page.groups[0]
+        self.assertEqual([s.title for s in ventes.subgroups], ["Par mois"])
+        self.assertIn("Janvier", [v.title for v in ventes.visuals])
+        self.assertEqual(ventes.members[-1].group_path, "Par mois")
+        self.assertEqual(ventes.members[-1].label, "Par mois › Janvier")
+
+    def test_groupe_sans_visuel_documente_ecarte(self):
+        self.page.groups.append(group("g4", "Habillage", y=30))
+        self.page.visuals.append(visual("v8", "Fond", group="g4", visual_type="shape", y=31))
+        page = self.organize(exclude_types=["shape"])
+
+        self.assertNotIn("Habillage", [g.title for g in page.groups])
+
+    def test_groupe_vide_conserve_sur_demande(self):
+        self.page.groups.append(group("g4", "Habillage", y=30))
+        page = self.organize(groups={"keep_empty": True})
+
+        self.assertIn("Habillage", [g.title for g in page.groups])
+
+    def test_groupe_a_un_seul_visuel_efface_au_profit_du_visuel(self):
+        """Un titre et une légende d'une ligne pour un seul visuel : sans objet."""
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=31))
+        page = self.organize()
+
+        self.assertNotIn("Solitaire", [g.title for g in page.groups])
+        # Le visuel n'est pas perdu pour autant : il est documenté seul.
+        self.assertIn("Cumul", [v.title for v in page.ungrouped_visuals])
+        self.assertIn("Cumul", [v.title for v in page.visuals])
+
+    def test_groupe_a_un_seul_visuel_documente_efface(self):
+        """Ce sont les visuels documentés qui comptent, pas ceux du rapport."""
+        self.page.visuals.append(visual("v6", "Bouton", group="g2", visual_type="image", y=13))
+        page = self.organize(exclude_types=["image"], groups={})
+        self.assertEqual([g.title for g in page.groups], ["Ventes", "Marges"])
+
+        self.page.visuals = [v for v in self.page.visuals if v.title != "Taux"]
+        page = self.organize(exclude_types=["image"], groups={})
+        self.assertEqual([g.title for g in page.groups], ["Ventes"])
+        self.assertIn("Marge", [v.title for v in page.ungrouped_visuals])
+
+    def test_sous_groupes_comptes_avec_leur_racine(self):
+        """Un visuel dans un sous-groupe compte pour le groupe racine."""
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.groups.append(group("g5", "Sous", parent="g4", y=31))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=32))
+        self.page.visuals.append(visual("v7", "Détail cumul", group="g5", y=33))
+        page = self.organize()
+
+        self.assertIn("Solitaire", [g.title for g in page.groups])
+
+    def test_groupe_a_un_seul_visuel_conserve_sur_demande(self):
+        self.page.groups.append(group("g4", "Solitaire", y=30))
+        self.page.visuals.append(visual("v6", "Cumul", group="g4", y=31))
+        page = self.organize(groups={"keep_single": True})
+
+        self.assertIn("Solitaire", [g.title for g in page.groups])
+        self.assertNotIn("Cumul", [v.title for v in page.ungrouped_visuals])
+
+    def test_groupe_inconnu_laisse_le_visuel_isole(self):
+        self.page.visuals.append(visual("v9", "Orphelin", group="disparu", y=40))
+        page = self.organize()
+
+        self.assertIn("Orphelin", [v.title for v in page.ungrouped_visuals])
+
+    def test_groupes_qui_se_contiennent_ne_perdent_aucun_visuel(self):
+        # Deux groupes qui se déclarent parents l'un de l'autre : Power BI ne
+        # produit pas cela, mais le visuel reste documenté quoi qu'il arrive.
+        self.page.groups = [group("a", "A", parent="b"), group("b", "B", parent="a")]
+        self.page.visuals = [visual("v1", "CA", group="a")]
+        page = self.organize()
+
+        self.assertEqual([v.title for v in page.visuals], ["CA"])
+
+    def test_tri_des_groupes_par_titre(self):
+        page = self.organize(groups={"sort_by": "title"})
+        self.assertEqual([g.title for g in page.groups], ["Marges", "Ventes"])
+
+    def test_groupes_desactives(self):
+        page = self.organize(groups={"enabled": False})
+
+        self.assertEqual(page.groups, [])
+        self.assertEqual(len(page.ungrouped_visuals), 5)
+        self.assertEqual(page.ungrouped_visuals, page.visuals)
+
+    def test_page_sans_groupe(self):
+        self.page.groups = []
+        page = self.organize()
+
+        self.assertEqual(page.groups, [])
+        self.assertEqual(
+            [v.title for v in page.ungrouped_visuals], ["CA", "Détail", "Marge", "Taux", "Volume"]
+        )
+
+
+class ExcludedByAnswerTest(unittest.TestCase):
+    """Visuels et groupes écartés par la réponse donnée au lancement."""
+
+    def setUp(self):
+        self.page = ReportPage(name="p1", display_name="Accueil")
+        self.page.groups = [group("g0", "Bandeau d'en-tête", y=0), group("g1", "Ventes", y=10)]
+        self.page.visuals = [
+            visual("v0", "Titre page", group="g0", y=1),
+            visual("v1", "Logo", group="g0", y=2),
+            visual("v2", "CA", group="g1", y=11),
+            visual("v3", "Volume", group="g1", y=12),
+            visual("v4", "Détail", y=20),
+        ]
+
+    def organize(self, excluded):
+        raw = {
+            "data": {
+                "visuals": {
+                    "exclude_titles": "{{ inputs.exclus }}",
+                    "groups": {"exclude_titles": "{{ inputs.exclus }}"},
+                }
+            }
+        }
+        resolved = DocConfig(raw).resolve_data({"inputs": {"exclus": excluded}})
+        organize_page(self.page, resolved)
+        return self.page
+
+    def test_groupe_ecarte_avec_tout_son_contenu(self):
+        page = self.organize(["Bandeau d'en-tête"])
+
+        self.assertEqual([g.title for g in page.groups], ["Ventes"])
+        self.assertEqual([v.title for v in page.visuals], ["CA", "Volume", "Détail"])
+        # Les visuels du groupe écarté ne réapparaissent pas hors groupe
+        for title in ("Titre page", "Logo"):
+            self.assertNotIn(title, [v.title for v in page.ungrouped_visuals])
+
+    def test_visuel_isole_ecarte(self):
+        page = self.organize(["Détail"])
+
+        self.assertEqual([v.title for v in page.ungrouped_visuals], [])
+        self.assertEqual([g.title for g in page.groups], ["Bandeau d'en-tête", "Ventes"])
+
+    def test_aucune_exclusion(self):
+        page = self.organize([])
+
+        self.assertEqual([g.title for g in page.groups], ["Bandeau d'en-tête", "Ventes"])
+        self.assertEqual(len(page.visuals), 5)
+
+    def test_expression_non_resolue_n_ecarte_rien(self):
+        # Au moment où les questions sont posées, les filtres portent encore
+        # leur expression : elle ne doit correspondre à aucun titre.
+        organize_page(self.page, config(visuals={"exclude_titles": "{{ inputs.exclus }}"}))
+        self.assertEqual(len(self.page.visuals), 5)
+
+
+class DocumentableTitlesTest(unittest.TestCase):
+    """Titres proposés au lancement pour être écartés."""
+
+    def test_groupes_et_visuels_dedoublonnes_et_tries(self):
+        pages = [
+            ReportPage(name="p1", display_name="Accueil"),
+            ReportPage(name="p2", display_name="Détail"),
+        ]
+        for page in pages:
+            page.groups = [group("g0", "Bandeau d'en-tête")]
+            page.visuals = [
+                visual("v0", "Titre page", group="g0"),
+                visual("v1", "Logo", "", "image"),
+            ]
+        pages[0].visuals.append(visual("v2", "CA"))
+
+        titles = documentable_titles(PowerBIReport(name="R", pages=pages), config(visuals={}))
+        self.assertEqual(titles, ["Bandeau d'en-tête", "CA", "Logo", "Titre page"])
+
+    def test_visuels_exclus_par_type_non_proposes(self):
+        page = ReportPage(name="p1", display_name="Accueil")
+        page.visuals = [visual("v0", "CA"), visual("v1", "Logo", "", "image")]
+
+        titles = documentable_titles(
+            PowerBIReport(name="R", pages=[page]), config(visuals={"exclude_types": ["image"]})
+        )
+        self.assertEqual(titles, ["CA"])
+
+
+if __name__ == "__main__":
+    unittest.main()

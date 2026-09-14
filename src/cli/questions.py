@@ -3,8 +3,8 @@ Questions élémentaires posées au terminal.
 
 Ce module ne sait rien du plan du document : il pose une question d'un type
 donné — oui/non, texte, texte long, choix, choix multiple — et retourne la
-réponse. C'est `cli.prompts` qui décide lesquelles poser, et `src.console` qui
-sait les dessiner.
+réponse. C'est `cli.prompts` qui décide lesquelles poser, et `shared.console`
+qui sait les dessiner.
 
 Une réponse vide vaut toujours acceptation de la valeur proposée : c'est le
 geste le plus courant, et il ne doit rien défaire.
@@ -12,7 +12,7 @@ geste le plus courant, et il ne doit rien défaire.
 
 from typing import Any
 
-from src import console
+from src.shared import console
 
 _YES = ("o", "oui", "y", "yes", "1")
 

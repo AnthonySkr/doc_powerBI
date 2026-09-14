@@ -14,10 +14,11 @@ travail lui-même est enchaîné par `src.pipeline`.
 
 import sys
 
-from src import __version__, console
+from src import __version__
 from src.cli.arguments import parse_args
 from src.cli.window import ConsoleWindow
 from src.pipeline import PipelineError, run
+from src.shared import console
 
 __all__ = ["main"]
 
