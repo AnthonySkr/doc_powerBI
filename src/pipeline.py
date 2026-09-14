@@ -11,7 +11,7 @@ import os
 from typing import Any
 
 from src import console
-from src.cli import answers, prompts
+from src.cli import answers, editing, prompts
 from src.cli.arguments import Options
 from src.config import DEFAULT_OUTPUT_DIR, DocConfig, load_config, render
 from src.generators import filters
@@ -68,7 +68,12 @@ def run(options: Options) -> str:
     answers.write(answers_path, inputs)
 
     output_dir = project.output_dir(_output_dir(config, report, inputs))
-    _generate(config, report, inputs, output_dir, project.name, options.interactive)
+    # Les textes types du plan ne sont proposés à la réécriture que si
+    # l'utilisateur l'a demandé, et seulement en interactif.
+    rewrite = editing.make_text_provider(
+        options.interactive and bool(inputs.get("editer_textes", False))
+    )
+    _generate(config, report, inputs, output_dir, rewrite)
     return output_dir
 
 
@@ -129,23 +134,18 @@ def _generate(
     report: PowerBIReport,
     inputs: dict[str, Any],
     output_dir: str,
-    report_name: str,
-    interactive: bool,
+    rewrite: editing.TextProvider | None,
 ) -> None:
     console.step("Document Word", TOTAL_STEPS, TOTAL_STEPS)
 
     context = build_context(report, report.all_measures, config, inputs)
     output_name = render(config.document.get("output_name"), context) or (
-        f"documentation_{report_name}.docx"
-    )
-
-    text_provider = prompts.make_text_provider(
-        interactive and bool(inputs.get("editer_textes", False))
+        f"documentation_{report.name}.docx"
     )
 
     try:
         log = generate_word_documentation(
-            config, context, os.path.join(output_dir, output_name), text_provider
+            config, context, os.path.join(output_dir, output_name), rewrite
         )
     except DocumentError as e:
         raise PipelineError(str(e)) from e

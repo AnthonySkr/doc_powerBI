@@ -47,7 +47,7 @@ def read(answers_path: str) -> dict[str, Any]:
         return {}
 
     try:
-        with open(answers_path, "r", encoding="utf-8") as f:
+        with open(answers_path, encoding="utf-8") as f:
             remembered = yaml.safe_load(f)
     except (OSError, yaml.YAMLError) as e:
         console.warn(f"Réponses précédentes illisibles, elles seront ignorées ({e})")
