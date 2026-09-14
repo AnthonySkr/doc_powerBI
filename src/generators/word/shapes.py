@@ -16,9 +16,12 @@ Deux écritures de la même forme, comme Word le fait lui-même : la moderne
 lecteurs qui ne connaissent que celle-là.
 """
 
+import math
+from dataclasses import dataclass
+
 from docx.oxml import parse_xml
 from docx.oxml.ns import qn
-from docx.shared import Cm, Emu, Pt
+from docx.shared import Emu, Pt
 
 # Espaces de noms nécessaires à la forme, déclarés sur le fragment lui-même.
 _NAMESPACES = {
@@ -37,23 +40,48 @@ _Z_ORDER = 251658240
 _EMU_PER_POINT = 12700
 
 
-def marker(
-    label: str,
-    shape_id: int,
-    left: Emu,
-    top: Emu,
-    size: Emu,
-    shape: str = "ellipse",
-    fill: str = "0070C0",
-    text_color: str = "FFFFFF",
-    font_size: Pt = Pt(9),  # noqa: B008
-):
+@dataclass(frozen=True)
+class MarkerStyle:
     """
-    Une pastille numérotée, flottante, posée à `left`/`top` du paragraphe.
+    Aspect et disposition d'une rangée de repères, tels que le plan les déclare.
 
-    Retourne le `w:r` à ajouter au paragraphe qui la porte. `shape_id` doit
-    être unique dans le document : Word refuse deux formes de même identifiant.
+    Les longueurs sont déjà converties en EMU : `rendering.image_placeholder`
+    les exprime en centimètres, la conversion appartient à qui lit le plan.
     """
+
+    size: Emu
+    spacing: Emu
+    line: Emu
+    per_row: int
+    shape: str
+    fill: str
+    text_color: str
+    font_size: Pt
+
+
+def draw_row(paragraph, labels: list[str], style: MarkerStyle, first_id: int) -> int:
+    """
+    Pose une rangée de repères sur le paragraphe, repliée au-delà de `per_row`.
+
+    Retourne le dernier identifiant de forme employé : Word refuse deux formes
+    de même identifiant, la rangée suivante reprend donc au-dessus.
+    """
+    # Les repères flottent : sans hauteur réservée, ils déborderaient sur ce
+    # qui suit la capture. Le paragraphe porte donc celle de leurs rangées.
+    rows = math.ceil(len(labels) / style.per_row)
+    paragraph.paragraph_format.line_spacing = Emu(int(style.line) * rows)
+    paragraph.paragraph_format.space_before = Pt(0)
+    paragraph.paragraph_format.space_after = Pt(0)
+
+    shape_id = first_id
+    for label, (left, top) in zip(labels, _positions(len(labels), style), strict=True):
+        shape_id += 1
+        paragraph._p.append(_marker(label, shape_id, left, top, style))
+    return shape_id
+
+
+def _marker(label: str, shape_id: int, left: Emu, top: Emu, style: MarkerStyle):
+    """Une pastille numérotée, flottante, posée à `left`/`top` du paragraphe."""
     return parse_xml(
         _RUN.format(
             declarations=_DECLARATIONS,
@@ -62,16 +90,16 @@ def marker(
             name=f"Repere {_escape(label)}",
             left=int(left),
             top=int(top),
-            size=int(size),
+            size=int(style.size),
             left_pt=round(int(left) / _EMU_PER_POINT, 2),
             top_pt=round(int(top) / _EMU_PER_POINT, 2),
-            size_pt=round(int(size) / _EMU_PER_POINT, 2),
+            size_pt=round(int(style.size) / _EMU_PER_POINT, 2),
             z_order=_Z_ORDER + shape_id,
-            shape=shape,
-            vml_shape="oval" if shape == "ellipse" else "roundrect",
-            fill=fill,
-            text_color=text_color,
-            half_points=int(font_size.pt * 2),
+            shape=style.shape,
+            vml_shape="oval" if style.shape == "ellipse" else "roundrect",
+            fill=style.fill,
+            text_color=style.text_color,
+            half_points=int(style.font_size.pt * 2),
         )
     )
 
@@ -92,10 +120,13 @@ def last_id(doc) -> int:
     return max(ids, default=0)
 
 
-def row_positions(count: int, spacing: Cm, per_row: int, line: Cm) -> list[tuple[Emu, Emu]]:
-    """Positions d'une rangée de repères, repliée au-delà de `per_row`."""
+def _positions(count: int, style: MarkerStyle) -> list[tuple[Emu, Emu]]:
+    """Décalages de chaque repère par rapport au début du paragraphe."""
     return [
-        (Emu(int(spacing) * (rank % per_row)), Emu(int(line) * (rank // per_row)))
+        (
+            Emu(int(style.spacing) * (rank % style.per_row)),
+            Emu(int(style.line) * (rank // style.per_row)),
+        )
         for rank in range(count)
     ]
 

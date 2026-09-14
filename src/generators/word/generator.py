@@ -10,7 +10,8 @@ from docx import Document
 from src import console, paths
 from src.config import DocConfig, render
 from src.generators.word import word_app
-from src.generators.word.document import DocumentBuilder, DocumentError, TextProvider
+from src.generators.word.document import DocumentBuilder, TextProvider
+from src.generators.word.errors import DocumentError
 from src.merge import ChangeLog, apply_merge, markers, orphans, read_previous
 
 
