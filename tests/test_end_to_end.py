@@ -3,7 +3,7 @@ Le parcours complet, sur le plan réellement livré.
 
 Les autres tests vérifient le moteur avec des plans minimaux écrits pour
 l'occasion. Celui-ci part d'un projet `.pbip` sur disque et de
-`config_doc_pbi.yaml` tel qu'il est distribué : c'est le seul endroit où le
+`config.yaml` tel qu'il est distribué : c'est le seul endroit où le
 plan livré est lui-même mis à l'épreuve.
 
 Ce qu'il verrouille, au-delà du fait que la génération aboutit : **rédiger une
@@ -20,10 +20,9 @@ import unittest
 
 from docx import Document
 
-from src.cli.arguments import Options
-from src.pipeline import run
-from src.shared import console
-from src.shared.config import DEFAULT_CONFIG_PATH
+from core import console
+from core.config import DEFAULT_CONFIG_PATH
+from main import Options, generate
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "rapport_test")
 
@@ -45,7 +44,7 @@ class EndToEndTest(unittest.TestCase):
         cls.pbip = os.path.join(cls.project, "Rapport.pbip")
 
         with console.silenced():
-            cls.output_dir = run(cls._options())
+            cls.output_dir = generate(cls._options())
         cls.document = os.path.join(cls.output_dir, "documentation_Rapport.docx")
 
     @classmethod
@@ -55,7 +54,7 @@ class EndToEndTest(unittest.TestCase):
     @classmethod
     def _options(cls) -> Options:
         return Options(
-            pbip_path=cls.pbip,
+            pbip_path=str(cls.pbip),
             config_path=DEFAULT_CONFIG_PATH,
             interactive=False,
             pause=False,
@@ -64,7 +63,7 @@ class EndToEndTest(unittest.TestCase):
     @classmethod
     def _regenerate(cls) -> None:
         with console.silenced():
-            run(cls._options())
+            generate(cls._options())
 
     def _paragraphs(self) -> list[str]:
         return [p.text.strip() for p in Document(self.document).paragraphs]
