@@ -29,6 +29,10 @@ def parse_page(page_path: str, folder_name: str, page_order: dict[str, int]) -> 
         display_name=data.get("displayName", folder_name),
         order=page_order.get(folder_name, data.get("ordinal", 999)),
         is_hidden=str(data.get("visibility", "")).lower().startswith("hidden"),
+        # `width` / `height` ne sont écrits que si la page s'écarte du format
+        # par défaut : le repli est celui du modèle (voir `ReportPage`).
+        canvas_width=_length(data.get("width"), ReportPage.canvas_width),
+        canvas_height=_length(data.get("height"), ReportPage.canvas_height),
         filters=parse_filters(data.get("filters", [])),
     )
 
@@ -99,11 +103,29 @@ def parse_visual(data: dict, folder_name: str) -> Visual | None:
         elements=elements,
         filters=parse_filters((data.get("filterConfig") or {}).get("filters", [])),
         has_measures=any(element.type_category == "Mesure" for element in elements),
-        pos_x=float(position.get("x") or 0),
-        pos_y=float(position.get("y") or 0),
+        pos_x=_length(position.get("x"), 0.0),
+        pos_y=_length(position.get("y"), 0.0),
+        width=_length(position.get("width"), 0.0),
+        height=_length(position.get("height"), 0.0),
         name=data.get("name") or folder_name,
         parent_group_name=data.get("parentGroupName", ""),
     )
+
+
+def _length(value: Any, default: float) -> float:
+    """
+    Longueur déclarée par le rapport, ou `default` si elle ne l'est pas.
+
+    Ces valeurs sont écrites par Power BI, mais un `visual.json` retouché à la
+    main peut en porter une aberrante : une longueur illisible vaut absente,
+    ce n'est pas de quoi arrêter la lecture du rapport.
+    """
+    if value is None:
+        return default
+    try:
+        return float(value)
+    except TypeError, ValueError:
+        return default
 
 
 def _title(visual_node: dict) -> str | None:

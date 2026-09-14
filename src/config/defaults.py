@@ -159,6 +159,27 @@ DEFAULTS: dict[str, Any] = {
             "intro": "",
         },
     },
+    # Captures d'écran des visuels (`python -m src.capture`). Le document ne
+    # les prend pas lui-même : il les trouve dans `directory` si elles y sont,
+    # et réserve leur place sinon.
+    "capture": {
+        "directory": "captures",
+        # Fenêtre de Power BI Desktop, et ce qui entoure son canevas — ruban,
+        # volets de droite, barre d'onglets. Ces marges dépendent de la version
+        # et de l'écran : `--calibrate` écrit de quoi les régler à coup sûr.
+        "window": {
+            "title": "Power BI Desktop",
+            "inset_left": 0,
+            "inset_top": 130,
+            "inset_right": 340,
+            "inset_bottom": 60,
+        },
+        # Temps laissé au rendu après un changement de page, en secondes.
+        "settle_seconds": 1.5,
+        # Changer de page à la main plutôt que par automatisation : plus lent,
+        # mais jamais pris en défaut.
+        "manual_pages": False,
+    },
     "inputs": [],
     "sections": [],
 }

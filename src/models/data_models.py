@@ -176,8 +176,13 @@ class Visual:
     elements: list = field(default_factory=list)
     filters: list = field(default_factory=list)
     has_measures: bool = False
+    # Place du visuel dans le canevas de la page, telle que le rapport la
+    # déclare. C'est elle qui permet de recadrer une capture d'écran sur ce
+    # seul visuel (voir `src.capture`).
     pos_x: float = 0.0
     pos_y: float = 0.0
+    width: float = 0.0
+    height: float = 0.0
     # Nom technique du conteneur (`name` du visual.json). C'est lui que les
     # `parentGroupName` des autres visuels désignent.
     name: str = ""
@@ -263,6 +268,11 @@ class ReportPage:
     display_name: str
     order: int = 0
     is_hidden: bool = False
+    # Canevas de la page, dans lequel les visuels sont placés. Power BI le
+    # déclare rarement : 1280 × 720 est sa taille par défaut, celle d'un
+    # « 16:9 » — et c'est elle que les positions des visuels supposent.
+    canvas_width: float = 1280.0
+    canvas_height: float = 720.0
     filters: list = field(default_factory=list)
     visuals: list = field(default_factory=list)
     # Conteneurs de groupe lus par le parseur, puis organisés par
