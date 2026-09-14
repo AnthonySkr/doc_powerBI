@@ -565,6 +565,31 @@ le fichier d'échange, et on relance la seule application « document » autant 
 fois qu'il faut. On peut même **retoucher le JSON à la main** pour éprouver un
 cas que le rapport ne contient pas.
 
+### Lire la documentation du code
+
+Les docstrings et les annotations du code sont servies comme un site, par
+[pdoc](https://pdoc.dev) :
+
+```bash
+task docs                  # tout le projet, sur http://127.0.0.1:8080
+task docs -- extract       # la seule application « extract »
+task docs -- capture       # … ou capture, document, shared, cli, pipeline
+task docs-build            # le site statique, dans docs/site/
+```
+
+Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
+à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
+recherche, et le rappel de l'application à laquelle le module appartient.
+
+Ces pages ne peuvent pas se périmer sans que le code change — c'est tout
+l'intérêt par rapport à une documentation écrite à côté. Les tests n'y figurent
+pas : ils vivent avec le code qu'ils éprouvent, et leurs pages noieraient celles
+qui décrivent le programme.
+
+`tools/docs.py` s'occupe d'énumérer les modules (un paquet qui déclare `__all__`
+cache ses sous-modules à pdoc), d'écarter les tests, et de découper par
+application.
+
 ### Le fichier d'échange
 
 Du JSON indenté, clés et collections triées : deux exécutions sur le même
@@ -741,7 +766,9 @@ src/
           tests/
 
 tests/                        le parcours complet, sur le plan livré
+tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
+docs/templates/               habillage du site de documentation
 powerbi-doc.spec              recette de construction de l'exécutable
 config_doc_pbi.yaml           plan du document
 template-doc-pbib.docx        template Word
@@ -781,6 +808,7 @@ task check      # format + lint (ruff) + tests
 task build      # construire l'exécutable
 task package    # construire le zip à distribuer
 task clean      # nettoyer les caches et les artefacts de construction
+task docs       # servir la documentation du code
 ```
 
 Les applications, séparément :

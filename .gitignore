@@ -10,3 +10,5 @@ dist
 .versions
 # Fichiers que les applications se passent : ils ne survivent pas à la chaîne.
 .echange
+# Site de documentation : il se reconstruit d'une commande.
+docs/site
