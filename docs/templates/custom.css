@@ -1,0 +1,93 @@
+/*
+ * Habillage de la page d'accueil et repères de navigation.
+ *
+ * pdoc charge ce fichier par-dessus son thème : tout le reste — sommaire,
+ * signatures, coloration syntaxique, recherche — reste le sien.
+ */
+
+:root {
+    --accent-app: #1f77b4;
+}
+
+/* ── Page d'accueil ──────────────────────────────────────── */
+
+main.landing {
+    max-width: 60rem;
+}
+
+main.landing .lead {
+    font-size: 1.05rem;
+    line-height: 1.6;
+}
+
+main.landing pre.chain {
+    background: var(--pdoc-background, #f6f8fa);
+    border: 1px solid rgba(127, 127, 127, 0.25);
+    border-radius: 6px;
+    padding: 1rem 1.25rem;
+    overflow-x: auto;
+    line-height: 1.5;
+}
+
+main.landing .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+    gap: 1rem;
+    margin: 1.5rem 0 2rem;
+}
+
+main.landing .card {
+    display: block;
+    padding: 1rem 1.25rem;
+    border: 1px solid rgba(127, 127, 127, 0.3);
+    border-left: 3px solid var(--accent-app);
+    border-radius: 6px;
+    text-decoration: none;
+    color: inherit;
+}
+
+main.landing .card:hover {
+    border-color: var(--accent-app);
+    background: rgba(31, 119, 180, 0.06);
+}
+
+main.landing .card h3 {
+    margin: 0 0 0.4rem;
+    font-family: monospace;
+    font-size: 1.05rem;
+    color: var(--accent-app);
+}
+
+main.landing .card p {
+    margin: 0 0 0.6rem;
+    font-size: 0.9rem;
+    line-height: 1.5;
+}
+
+main.landing .card code.run {
+    display: block;
+    font-size: 0.8rem;
+    opacity: 0.75;
+}
+
+main.landing .hint {
+    margin-top: 2.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid rgba(127, 127, 127, 0.25);
+    font-size: 0.9rem;
+    opacity: 0.85;
+}
+
+/* ── Navigation ──────────────────────────────────────────── */
+
+nav.pdoc ul.apps a {
+    font-weight: 600;
+}
+
+nav.pdoc footer .belongs {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(127, 127, 127, 0.25);
+    font-size: 0.8rem;
+    opacity: 0.8;
+}

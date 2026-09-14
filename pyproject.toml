@@ -14,6 +14,8 @@ dev = [
     "taskipy>=1.14.1",
     "ruff>=0.16.0",
     "pyinstaller>=6.10",
+    # Documentation du code, engendrée depuis les docstrings : `task docs`.
+    "pdoc>=16.0",
 ]
 # Captures d'écran des visuels : `pip install -e ".[capture]"`. En option — le
 # document reste complet sans elles, avec ses emplacements réservés.
@@ -37,6 +39,14 @@ run = "python main.py"
 extract = "python -m src.apps.extract"
 capture = "python -m src.apps.capture"
 document = "python -m src.apps.document"
+
+# Documentation du code, engendrée depuis les docstrings et les annotations.
+#   task docs                 tout le projet, servi et rechargé à chaud
+#   task docs -- extract      la seule application « extract »
+#   task docs-build           le site statique, dans docs/site/
+docs = "python tools/docs.py"
+docs-build = "python tools/docs.py --build"
+
 test = "python -m unittest discover -s src -t . && python -m unittest discover -s tests -t ."
 lint = "ruff check ."
 format-check = "ruff format --check ."
