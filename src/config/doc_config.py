@@ -75,7 +75,7 @@ def load_config(path: str = DEFAULT_CONFIG_PATH) -> DocConfig:
         raise FileNotFoundError(f"Fichier de configuration introuvable : '{path}'")
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             raw = yaml.safe_load(f)
     except yaml.YAMLError as e:
         # Le fichier est livré en clair et se modifie à la main : une faute de

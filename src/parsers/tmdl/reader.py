@@ -51,7 +51,7 @@ def read_file(path: str) -> str | None:
     """Lit un fichier en testant plusieurs encodages."""
     for encoding in _ENCODINGS:
         try:
-            with open(path, "r", encoding=encoding) as f:
+            with open(path, encoding=encoding) as f:
                 return f.read()
         except UnicodeDecodeError, LookupError:
             continue
@@ -73,7 +73,7 @@ def opens_block(stripped_line: str) -> bool:
     """Vrai si la ligne commence un bloc TMDL (`measure ...`, `column ...`)."""
     if not stripped_line:
         return False
-    return stripped_line.split()[0].lower().rstrip(":") in BLOCK_KEYWORDS
+    return stripped_line.split(maxsplit=1)[0].lower().rstrip(":") in BLOCK_KEYWORDS
 
 
 # ─────────────────────────────────────────────────────────────

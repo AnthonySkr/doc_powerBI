@@ -19,7 +19,9 @@ def set_fixed_layout(table, widths: list[float | None]) -> None:
     grid = table._tbl.find(qn("w:tblGrid"))
     if grid is None:
         return
-    for column, width in zip(grid.findall(qn("w:gridCol")), widths):
+    # La grille d'un tableau quelconque peut compter plus ou moins de colonnes
+    # que de largeurs déclarées : les surnuméraires gardent la leur.
+    for column, width in zip(grid.findall(qn("w:gridCol")), widths, strict=False):
         if width is not None:
             column.set(qn("w:w"), str(int(round(Cm(width).twips))))  # noqa: RUF046
 

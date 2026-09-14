@@ -140,7 +140,7 @@ class EndToEndTest(unittest.TestCase):
                 extra.text = ""
             document.save(self.document)
             return text
-        self.fail("aucune description de mesure à rédiger dans le document généré")
+        raise AssertionError("aucune description de mesure à rédiger dans le document généré")
 
 
 if __name__ == "__main__":

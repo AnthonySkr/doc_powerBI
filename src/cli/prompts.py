@@ -1,22 +1,22 @@
 """
-Questions posées à l'utilisateur au lancement.
+Questionnaire posé au lancement, tel que le plan le déclare.
 
 Les questions ne sont pas codées ici : elles sont déclarées dans la section
-`inputs:` de la configuration. Ce module se contente de les afficher selon leur
-`type` (text, textarea, confirm, choice, multi_choice) et de collecter les
-réponses.
+`inputs:` de la configuration. Ce module lit cette déclaration, la traduit en
+questions élémentaires (voir `cli.questions`) et rassemble les réponses.
 
 La valeur proposée est celle de la génération précédente quand il y en a une
 (voir `cli.answers`), sinon le `default:` du plan : on valide d'un Entrée.
 """
 
+from collections.abc import Callable
 from typing import Any
 
 from src import console
+from src.cli import questions
 from src.config import DocConfig, evaluate, render, resolve_items
 
-# Callback proposant de réécrire le texte d'un bloc `editable`.
-TextProvider = Any
+__all__ = ["ask_inputs", "default_inputs"]
 
 
 def ask_inputs(
@@ -31,34 +31,7 @@ def ask_inputs(
 
     console.step("Renseignements", *step)
     console.note("Entrée valide la valeur proposée entre crochets.")
-    remembered = remembered or {}
-
-    answers: dict[str, Any] = {}
-    for item in config.inputs:
-        key = item.get("id")
-        if not key:
-            continue
-
-        context = {**base_context, "inputs": answers}
-        label = render(item.get("label") or key, context)
-        kind = item.get("type", "text")
-
-        options = resolve_items(item.get("options"), context)
-        # La réponse d'hier est reprise telle quelle — c'est du texte de
-        # l'utilisateur. Le `default:` du plan, lui, est une expression : il
-        # est substitué, faute de quoi c'est `{{ ... }}` qui s'écrirait dans le
-        # document.
-        proposed = remembered[key] if key in remembered else _rendered(item.get("default"), context)
-
-        if kind == "confirm":
-            answers[key] = ask_confirm(label, evaluate(proposed, context))
-        elif kind == "choice":
-            answers[key] = _ask_choice(label, options, proposed)
-        elif kind == "multi_choice":
-            answers[key] = _ask_multi_choice(label, options, _as_list(proposed))
-        else:
-            answers[key] = _ask_text(label, proposed, multiline=(kind == "textarea"))
-
+    answers = _collect(config, base_context, remembered, _ask)
     console.blank()
     return answers
 
@@ -73,133 +46,61 @@ def default_inputs(
     reconduit ainsi les choix faits la dernière fois, plutôt que de repartir des
     valeurs figées du plan et de défaire le document.
     """
+    return _collect(config, base_context, remembered, lambda _item, _ctx, proposed: proposed)
+
+
+# Répond à une question : (bloc du plan, contexte, valeur proposée) -> réponse.
+_Answer = Callable[[dict[str, Any], dict[str, Any], Any], Any]
+
+
+def _collect(
+    config: DocConfig,
+    base_context: dict[str, Any],
+    remembered: dict[str, Any] | None,
+    answer: _Answer,
+) -> dict[str, Any]:
+    """
+    Déroule les questions du plan et rassemble les réponses.
+
+    Le même parcours sert en interactif et en `--no-input` : seule change la
+    façon de répondre. Chaque réponse entre aussitôt dans le contexte, si bien
+    qu'une question peut s'appuyer sur celles qui la précèdent.
+    """
     remembered = remembered or {}
     answers: dict[str, Any] = {}
+
     for item in config.inputs:
         key = item.get("id")
         if not key:
             continue
-        if key in remembered:
-            answers[key] = remembered[key]
-            continue
+
         context = {**base_context, "inputs": answers}
-        answers[key] = _rendered(item.get("default"), context)
+        # La réponse d'hier est reprise telle quelle — c'est du texte de
+        # l'utilisateur. Le `default:` du plan, lui, est une expression : il
+        # est substitué, faute de quoi c'est `{{ ... }}` qui s'écrirait dans le
+        # document.
+        default = item.get("default")
+        proposed = remembered[key] if key in remembered else _rendered(default, context)
+        answers[key] = answer(item, context, proposed)
+
     return answers
+
+
+def _ask(item: dict[str, Any], context: dict[str, Any], proposed: Any) -> Any:
+    """Pose une question du plan selon son `type:`."""
+    label = render(item.get("label") or item["id"], context)
+    kind = item.get("type", "text")
+    options = resolve_items(item.get("options"), context)
+
+    if kind == "confirm":
+        return questions.confirm(label, evaluate(proposed, context))
+    if kind == "choice":
+        return questions.choice(label, options, proposed)
+    if kind == "multi_choice":
+        return questions.multi_choice(label, options, questions.as_list(proposed))
+    return questions.text(label, proposed, multiline=(kind == "textarea"))
 
 
 def _rendered(value: Any, context: dict[str, Any]) -> Any:
     """Valeur par défaut du plan, ses `{{ ... }}` substitués."""
     return render(value, context) if isinstance(value, str) else value
-
-
-def _as_list(value: Any) -> list[Any]:
-    if value is None:
-        return []
-    return list(value) if isinstance(value, (list, tuple, set)) else [value]
-
-
-def make_text_provider(enabled: bool):
-    """
-    Retourne le callback proposant à l'utilisateur de modifier les textes types
-    des blocs `editable`. Si désactivé, le texte du YAML est conservé.
-    """
-    if not enabled:
-        return None
-
-    def provider(block: dict[str, Any], default_text: str) -> str:
-        console.question(block.get("prompt") or block.get("id") or "texte")
-        console.note(f"« {default_text} »")
-        if not ask_confirm("Modifier ce texte ?", False):
-            return default_text
-        console.note("Nouveau texte, puis une ligne vide pour terminer :")
-        return _read_lines() or default_text
-
-    return provider
-
-
-# ─────────────────────────────────────────────────────────────
-#  Types de question
-# ─────────────────────────────────────────────────────────────
-
-
-def ask_confirm(label: str, default: bool) -> bool:
-    hint = "O/n" if default else "o/N"
-    console.blank()
-    answer = console.ask(label, hint).strip().lower()
-    if not answer:
-        return default
-    return answer in ("o", "oui", "y", "yes", "1")
-
-
-def _ask_text(label: str, default: str, multiline: bool = False) -> str:
-    if multiline:
-        console.question(label)
-        console.note("Une ligne vide pour terminer.")
-        return _read_lines() or default
-
-    console.blank()
-    return console.ask(label, default).strip() or default
-
-
-def _ask_choice(label: str, options: list[Any], default: Any) -> Any:
-    console.question(label)
-    for index, option in enumerate(options, start=1):
-        console.option(index, option, retained=default is not None and option == default)
-
-    answer = console.ask(f"Choix parmi 1-{len(options)}").strip()
-    if answer.isdigit() and 1 <= int(answer) <= len(options):
-        return options[int(answer) - 1]
-    return default if default is not None else (options[0] if options else "")
-
-
-def _ask_multi_choice(label: str, options: list[Any], default: list[Any]) -> list[Any]:
-    """
-    Sélection multiple : l'utilisateur entre les numéros qui l'intéressent.
-
-    Sans option à proposer, la question n'est pas posée — il n'y a rien à
-    choisir dans ce rapport.
-
-    Une réponse vide reconduit la sélection précédente : c'est le geste le plus
-    naturel, et il ne doit rien défaire.
-    """
-    if not options:
-        return list(default)
-
-    console.question(label)
-    for index, option in enumerate(options, start=1):
-        console.option(index, option, retained=option in default)
-
-    # Les réponses de la dernière génération sont marquées : les reconduire d'un
-    # Entrée évite de faire disparaître une partie déjà rédigée.
-    console.note(
-        "Numéros séparés par une virgule — "
-        + ("vide = on garde les retenus ci-dessus." if default else "vide = on garde tout.")
-    )
-    answer = console.ask("Numéros").strip()
-    if not answer:
-        return list(default)
-
-    chosen: list[Any] = []
-    ignored: list[str] = []
-    for piece in answer.replace(";", ",").split(","):
-        piece = piece.strip()
-        if piece.isdigit() and 1 <= int(piece) <= len(options):
-            option = options[int(piece) - 1]
-            if option not in chosen:
-                chosen.append(option)
-        elif piece:
-            ignored.append(piece)
-
-    if ignored:
-        console.warn(f"Réponse ignorée : {', '.join(ignored)}")
-    return chosen
-
-
-def _read_lines() -> str:
-    """Lit plusieurs lignes jusqu'à une ligne vide."""
-    lines: list[str] = []
-    while True:
-        line = console.ask("")
-        if not line.strip():
-            return "\n".join(lines)
-        lines.append(line)

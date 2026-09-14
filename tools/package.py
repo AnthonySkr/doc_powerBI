@@ -66,7 +66,7 @@ def _executable() -> str | None:
 
 def _write_readme(folder: str, version: str) -> None:
     """Recopie le mode d'emploi en y inscrivant la version."""
-    with open(os.path.join(ROOT, "tools", README), "r", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "tools", README), encoding="utf-8") as f:
         # `replace` et non `format` : le mode d'emploi parle de la
         # configuration, où les accolades sont de mise (`{{ report.name }}`).
         # Un gabarit les prendrait pour des champs et échouerait le jour où

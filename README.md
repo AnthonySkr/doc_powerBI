@@ -531,12 +531,15 @@ paquet sont exposés par son `__init__.py`.
 main.py                       lance le script
 
 src/
-  console.py                  tout l'affichage console passe par ici
+  console.py                  tout le dialogue avec le terminal passe par ici
   pipeline.py                 enchaînement .pbip → données → .docx
 
   cli/
       arguments.py            options de la ligne de commande
-      prompts.py              questions déclarées dans `inputs:`
+      window.py               fenêtre de l'exécutable : attente et plantages
+      prompts.py              questionnaire déclaré par `inputs:`
+      questions.py            questions élémentaires posées au terminal
+      editing.py              réécriture des textes types du plan
       answers.py              mémoire des réponses d'une génération à l'autre
 
   config/
@@ -580,12 +583,16 @@ src/
       measure_links.py        repérage des mentions de mesures dans un texte
       word/                   écriture du .docx
           generator.py          document précédent, écriture, archivage
+          errors.py             DocumentError, seule erreur remontée
           merging.py            marqueurs, reprise des textes, surlignage
           document.py           parcours du plan et écriture du contenu
+          body.py               insertion en fin de corps, sans reparcours
           styles.py             clés de style → styles du template
           links.py              signets et liens internes
           tables.py             réglages OOXML des tableaux
+          figures.py            emplacement de capture, légende, repères
           shapes.py             repères numérotés à glisser sur une capture
+          values.py             valeurs déclarées dans le plan, lues avec soin
           fields.py             champs Word : sommaire, numéros de figure, en-têtes
           word_app.py           recalcul des champs par Word (optionnel)
 
@@ -604,7 +611,7 @@ template-doc-pbib.docx        template Word
 | ajouter un type de bloc | `generators/word/document.py` → `_block_writers` |
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
-| ajouter un type de question | `cli/prompts.py` → `ask_inputs` |
+| ajouter un type de question | `cli/questions.py`, branché dans `cli/prompts.py` → `_ask` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |

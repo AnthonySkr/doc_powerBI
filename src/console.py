@@ -21,11 +21,21 @@ une vieille console `cmd`, ou une sortie redirigée vers un fichier :
 
 import os
 import sys
+from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 
 WIDTH = 66
 
-_enabled = True
+
+@dataclass
+class _Output:
+    """État de la sortie. Un objet plutôt qu'une variable globale mutée."""
+
+    enabled: bool = True
+
+
+_output = _Output()
 
 
 # ─────────────────────────────────────────────────────────────
@@ -43,7 +53,9 @@ def _enable_windows_ansi() -> bool:
     sans cela l'utilisateur lirait les codes d'échappement en clair.
     """
     try:
-        import ctypes
+        # Importé ici plutôt qu'en tête : `ctypes` n'a rien à faire dans la
+        # chaîne d'import du script sur les plateformes qui n'en ont pas usage.
+        import ctypes  # noqa: PLC0415
 
         kernel = ctypes.windll.kernel32  # type: ignore[attr-defined]
         handle = kernel.GetStdHandle(-11)  # STD_OUTPUT_HANDLE
@@ -131,14 +143,13 @@ def paint(text: str, style: str) -> str:
 
 
 @contextmanager
-def silenced():
+def silenced() -> Iterator[None]:
     """Supprime toute sortie le temps du bloc (tests, exécution pilotée)."""
-    global _enabled
-    previous, _enabled = _enabled, False
+    previous, _output.enabled = _output.enabled, False
     try:
         yield
     finally:
-        _enabled = previous
+        _output.enabled = previous
 
 
 def _write(line: str = "") -> None:
@@ -152,13 +163,13 @@ def _write(line: str = "") -> None:
     pour un caractère d'affichage. Les caractères qui ne passent pas sont donc
     remplacés, et la ligne est écrite quand même.
     """
-    if not _enabled:
+    if not _output.enabled:
         return
     try:
-        print(line)
+        print(line)  # noqa: T201 — l'un des deux seuls `print` du projet
     except UnicodeEncodeError:
         encoding = getattr(sys.stdout, "encoding", "") or "ascii"
-        print(line.encode(encoding, "replace").decode(encoding, "replace"))
+        print(line.encode(encoding, "replace").decode(encoding, "replace"))  # noqa: T201
 
 
 def blank() -> None:
@@ -304,6 +315,6 @@ def _prompt(text: str) -> str:
     l'écrit sur `stderr` : redirigée, la sortie du script porte ainsi les
     questions posées, et non des réponses sans intitulé.
     """
-    if _enabled:
-        print(text, end="", flush=True)
+    if _output.enabled:
+        print(text, end="", flush=True)  # noqa: T201 — l'autre, pour l'invite
     return input()

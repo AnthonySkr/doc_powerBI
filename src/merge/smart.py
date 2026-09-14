@@ -87,7 +87,7 @@ def merge(
     before_rename = {after: before for before, after in log.renamed}
 
     promoted = _promoted_headings(fresh, old) if _predates_seeds(previous.blocks) else {}
-    merger = _Merger(document, previous, options, log, collector, promoted)
+    merger = _Merger(Transplanter(previous.document, document), options, log, collector, promoted)
     rebuilt = [
         node
         for block in fresh
@@ -116,14 +116,13 @@ def merge(
 class _Merger:
     def __init__(
         self,
-        document,
-        previous: PreviousDocument,
+        transplanter: Transplanter,
         options: dict[str, Any],
         log: ChangeLog,
         collector: orphans.Collector,
         promoted: dict[str, set[str]],
     ):
-        self.transplanter = Transplanter(previous.document, document)
+        self.transplanter = transplanter
         self.log = log
         self.collector = collector
         self.keep_user_text = bool(options.get("keep_user_text", True))
@@ -142,7 +141,7 @@ class _Merger:
             # Élément nouveau : tout ce qui vient d'être généré est conservé,
             # y compris les textes d'amorce (titre, « [À compléter] »).
             nodes += [node for segment in fresh.segments for node in segment.nodes]
-            self._highlight_new(nodes, fresh)
+            self._highlight_new(fresh)
             return nodes
 
         fresh_segments = fresh.identified_segments()
@@ -334,7 +333,7 @@ class _Merger:
         if changed and self._changed_color is not None:
             _set_highlight(node, self._changed_color)
 
-    def _highlight_new(self, nodes: list, block: Block) -> None:
+    def _highlight_new(self, block: Block) -> None:
         """Signale la zone à rédiger d'un élément apparu depuis la version précédente."""
         if not self.log.is_update or self.log.status_of(block.element_id) != NEW:
             return

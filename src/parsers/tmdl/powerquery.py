@@ -24,13 +24,13 @@ def parse_steps(m_code: str) -> list[TransformationStep]:
 
     steps: list[TransformationStep] = []
     for chunk in split_top_level(body, ","):
-        parts = split_top_level(chunk, "=")
-        if len(parts) < 2:
+        # Une étape s'écrit « nom = expression ». Sans nom ni `=`, ce n'en est
+        # pas une : le `let` porte autre chose, qui ne se documente pas.
+        declared, *expression = split_top_level(chunk, "=")
+        name = declared.strip()
+        if not name or not expression:
             continue
-        name = parts[0].strip()
-        if not name:
-            continue
-        raw = dedent("=".join(parts[1:]))
+        raw = dedent("=".join(expression))
         steps.append(
             TransformationStep(
                 name=_clean_identifier(name),
