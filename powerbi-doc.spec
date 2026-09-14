@@ -31,7 +31,14 @@ analysis = Analysis(
     ["main.py"],
     pathex=["."],
     datas=DATA,
-    hiddenimports=[],
+    # Les applications ne sont atteintes que par `src.pipeline` : PyInstaller
+    # suit cette chaîne. Leurs points d'entrée `__main__`, eux, ne sont
+    # importés par personne — ils sont nommés ici pour être embarqués.
+    hiddenimports=[
+        "src.apps.extract.__main__",
+        "src.apps.capture.__main__",
+        "src.apps.document.__main__",
+    ],
     excludes=EXCLUDES,
     noarchive=False,
 )

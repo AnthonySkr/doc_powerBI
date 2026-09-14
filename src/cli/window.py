@@ -23,7 +23,7 @@ import traceback
 from contextlib import suppress
 from types import TracebackType
 
-from src import console, paths
+from src.shared import console, paths
 
 
 class ConsoleWindow:

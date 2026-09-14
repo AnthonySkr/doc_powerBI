@@ -20,10 +20,10 @@ import unittest
 
 from docx import Document
 
-from src import console
 from src.cli.arguments import Options
-from src.config import DEFAULT_CONFIG_PATH
 from src.pipeline import run
+from src.shared import console
+from src.shared.config import DEFAULT_CONFIG_PATH
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "rapport_test")
 

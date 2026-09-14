@@ -3,8 +3,8 @@
 import argparse
 from dataclasses import dataclass
 
-from src import console
-from src.config import DEFAULT_CONFIG_PATH
+from src.shared import console
+from src.shared.config import DEFAULT_CONFIG_PATH
 
 
 @dataclass

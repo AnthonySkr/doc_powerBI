@@ -12,8 +12,8 @@ aucune question.
 from collections.abc import Callable
 from typing import Any
 
-from src import console
 from src.cli import questions
+from src.shared import console
 
 # Callback attendu par le générateur : (bloc du plan, texte du plan) -> texte.
 TextProvider = Callable[[dict[str, Any], str], str]
