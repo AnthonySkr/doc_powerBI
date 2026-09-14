@@ -50,10 +50,6 @@ def parse_args(argv: list[str] | None = None) -> Options:
 def _ask_pbip() -> str:
     """
     Demande le fichier à documenter, faute d'être lancé avec.
-
-    C'est le cas d'un double-clic sur l'exécutable. Le glisser-déposer du
-    `.pbip` dans la fenêtre est la voie la plus sûre : il écrit le chemin
-    complet, entre guillemets, sans faute de frappe possible.
     """
     console.question("Quel rapport documenter ?")
     console.note("Déposez le fichier .pbip dans cette fenêtre, ou collez son chemin.")
