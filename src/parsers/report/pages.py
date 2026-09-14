@@ -127,7 +127,7 @@ def read_json(path: str) -> dict | None:
     if not os.path.isfile(path):
         return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except (json.JSONDecodeError, UnicodeDecodeError, OSError) as e:
         console.warn(f"Erreur de lecture de '{path}' : {e}")

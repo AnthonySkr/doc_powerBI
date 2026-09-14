@@ -47,3 +47,68 @@ version = { attr = "src.__version__" }
 [tool.ruff]
 line-length = 100
 target-version = "py314"
+
+[tool.ruff.lint]
+# Au-delà des règles par défaut (E4/E7/E9, F) : celles qui attrapent de vraies
+# bévues (B, BLE, S, RET), celles qui allègent le code (SIM, C4, PIE, PERF,
+# FURB, UP) et celles qui tiennent les frontières du projet (T20 — aucun
+# `print` hors de `src.console`, TID, ARG).
+select = [
+    "A",      # ombrage des noms de la bibliothèque standard
+    "ARG",    # arguments jamais utilisés
+    "B",      # pièges courants (flake8-bugbear)
+    "BLE",    # `except Exception` aveugle
+    "C4",     # compréhensions inutilement détournées
+    "C90",    # complexité cyclomatique
+    "DTZ",    # dates sans fuseau horaire
+    "E",      # style (pycodestyle)
+    "EXE",    # bit exécutable et shebang
+    "F",      # erreurs certaines (pyflakes)
+    "FURB",   # tournures modernisables
+    "I",      # ordre des imports
+    "ICN",    # alias d'import conventionnels
+    "INT",    # gettext
+    "ISC",    # concaténation de chaînes implicite
+    "LOG",    # journalisation
+    "N",      # conventions de nommage
+    "PERF",   # boucles remplaçables
+    "PIE",    # code superflu
+    "PL",     # pylint (complexité, constantes magiques…)
+    "Q",      # guillemets
+    "RET",    # retours de fonction
+    "RSE",    # `raise` superflu
+    "RUF",    # règles propres à Ruff
+    "S",      # sécurité (bandit)
+    "SIM",    # simplifications
+    "SLOT",   # `__slots__`
+    "T20",    # `print` et `pprint`
+    "TID",    # imports relatifs
+    "TRY",    # gestion des exceptions
+    "UP",     # syntaxe rattrapable (pyupgrade)
+    "W",      # espaces et fins de ligne
+    "YTT",    # tests de version de Python
+]
+# Le document et la console emploient des caractères typographiques que Ruff
+# signale comme homoglyphes : ils sont voulus.
+allowed-confusables = ["›", "‹"]
+ignore = [
+    # Les messages d'erreur sont rédigés en français, à l'endroit où ils sont
+    # levés, et cités tels quels à l'utilisateur : les sortir dans une variable
+    # ou dans la classe d'exception les éloignerait de leur contexte.
+    "TRY003",
+    # Conflit connu avec `ruff format`.
+    "ISC001",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Les tests décrivent des cas : `assert`, nombres en clair, signatures longues
+# et imports tardifs y sont normaux.
+"tests/*" = ["ARG005", "PLC0415", "PLR0913", "PLR0917", "PLR2004", "S101"]
+# Outil de construction : sa sortie console *est* son interface.
+"tools/*" = ["T201"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.pylint]
+max-args = 5

@@ -143,7 +143,14 @@ def build_references(
                 kind=kind,
                 name=name,
                 role=role,
-                label=_label(labels, kind, name, role, element.query_ref, display),
+                label=_label(
+                    labels,
+                    kind,
+                    name=name,
+                    role=role,
+                    expression=element.query_ref,
+                    display=display or name,
+                ),
             )
         )
 
@@ -157,7 +164,12 @@ def build_references(
                 name=item.field_name,
                 role=filter_role,
                 label=_label(
-                    labels, "filtre", item.field_name, filter_role, expression, item.field_name
+                    labels,
+                    "filtre",
+                    name=item.field_name,
+                    role=filter_role,
+                    expression=expression,
+                    display=item.field_name,
                 ),
                 expression=expression,
             )
@@ -245,16 +257,14 @@ def _measure_names(visual: Visual) -> set[str]:
     return {e.model_name for e in visual.elements if e.type_category == "Mesure"}
 
 
-def _label(
-    labels: dict[str, str], kind: str, name: str, role: str, expression: str, display: str
-) -> str:
+def _label(labels: dict[str, str], kind: str, **values: str) -> str:
     """
     Met en forme le libellé d'une référence.
 
-    `{name}` est le nom du modèle (celui qui porte le lien vers la définition),
-    `{display}` le nom affiché dans le visuel, qui peut être un alias.
+    `values` porte ce qu'un gabarit de `labels:` peut citer : `{name}`, le nom
+    du modèle — celui qui porte le lien vers la définition —, `{display}`, le
+    nom affiché dans le visuel, qui peut être un alias, ainsi que `{role}` et
+    `{expression}`.
     """
     template = labels.get(kind) or labels.get("defaut") or "{name}"
-    return template.format(
-        name=name, role=role, expression=expression, display=display or name
-    ).strip()
+    return template.format(**values).strip()

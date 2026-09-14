@@ -89,9 +89,11 @@ def resolve_items(expression: Any, context: dict[str, Any]) -> list[Any]:
         return []
     if isinstance(expression, (list, tuple)):
         return list(expression)
+    return _as_items(resolve(str(expression).strip().strip("{} "), context))
 
-    value = resolve(str(expression).strip().strip("{} "), context)
 
+def _as_items(value: Any) -> list[Any]:
+    """Normalise en liste ce qu'une expression a désigné."""
     if value is None:
         return []
     if isinstance(value, (list, tuple)):
@@ -133,8 +135,8 @@ def resolve(expression: str, context: dict[str, Any]) -> Any:
 
 def _lookup(path: str, context: dict[str, Any]) -> Any:
     current: Any = context
-    for part in path.split("."):
-        part = part.strip()
+    for step in path.split("."):
+        part = step.strip()
         if not part:
             return None
         if isinstance(current, dict):
