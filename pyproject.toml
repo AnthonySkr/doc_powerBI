@@ -15,6 +15,12 @@ dev = [
     "ruff>=0.16.0",
     "pyinstaller>=6.10",
 ]
+# Captures d'écran des visuels : `pip install -e ".[capture]"`. En option — le
+# document reste complet sans elles, avec ses emplacements réservés.
+capture = [
+    "pywinauto>=0.6.9 ; sys_platform == 'win32'",
+    "mss>=9.0",
+]
 
 [project.scripts]
 powerbi-doc = "src.cli:main"
@@ -23,6 +29,9 @@ powerbi-doc = "src.cli:main"
 [tool.taskipy.tasks]
 install = "pip install -e \".[dev]\""
 run = "python main.py"
+# Captures des visuels. `task capture -- rapport.pbip --plan` pour voir ce qui
+# serait pris, `--fake` pour éprouver la chaîne sans Power BI.
+capture = "python -m src.capture"
 test = "python -m unittest discover -s tests -t ."
 lint = "ruff check ."
 format-check = "ruff format --check ."
@@ -90,7 +99,7 @@ select = [
 ]
 # Le document et la console emploient des caractères typographiques que Ruff
 # signale comme homoglyphes : ils sont voulus.
-allowed-confusables = ["›", "‹"]
+allowed-confusables = ["›", "‹", "×"]
 ignore = [
     # Les messages d'erreur sont rédigés en français, à l'endroit où ils sont
     # levés, et cités tels quels à l'utilisateur : les sortir dans une variable

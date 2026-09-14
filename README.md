@@ -522,6 +522,69 @@ La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
 un fichier à embarquer, une icône (`icon=`) ou un module manquant
 (`hiddenimports`).
 
+## Captures d'écran des visuels
+
+Le document réserve la place des captures ; `src.capture` les prend. **Les deux
+ne se connaissent que par un dossier d'images** — celui que `capture.directory`
+désigne, à côté du `.pbip` :
+
+```
+captures/
+    page_ventes/
+        v_evolution.png       ← nom technique du visuel, pas son titre
+        g_indicateurs.png     ← un groupe : l'étendue de ses visuels
+```
+
+C'est tout le contrat. Renommer un visuel dans Power BI ne perd pas sa capture,
+et remplacer une image par une meilleure — retouchée, prise autrement — revient
+à écrire dans ce dossier.
+
+### Comment ça marche
+
+Power BI Desktop ne rend pas ses visuels comme des contrôles Windows : le
+canevas est une surface dessinée d'un bloc, dont aucune API ne sait extraire
+« l'image du visuel X ». Ce qui est possible, en revanche, c'est de
+**photographier l'écran et de recadrer d'après le rapport** — qui déclare la
+place de chaque visuel dans un canevas logique de 1280 × 720.
+
+    pywinauto   trouver la fenêtre, l'amener devant, changer de page
+    mss         photographier une région de l'écran, et la rendre en PNG
+
+Les deux sont en option : `pip install -e ".[capture]"`.
+
+### Tester module par module
+
+Chaque étape s'éprouve seule, de la plus sûre à la moins sûre :
+
+| Commande | Ce qu'elle vérifie | Besoin de Power BI |
+| --- | --- | --- |
+| `task test` | le cadrage, le plan, le dossier, le déroulé d'une séance | non |
+| `python -m src.capture <pbip> --plan` | ce qui serait capturé, et à quelles dimensions | non |
+| `python -m src.capture <pbip> --fake` | la chaîne entière, en rectangles unis | non |
+| `python -m src.capture <pbip> --calibrate` | le cadrage du canevas dans la fenêtre | oui |
+| `python -m src.capture <pbip> --manual-pages` | les vraies captures, pages changées à la main | oui |
+| `python -m src.capture <pbip>` | tout, y compris le changement de page | oui |
+
+`--page` et `--shot` restreignent à une page ou à une prise : de quoi reprendre
+une seule capture sans redérouler le rapport.
+
+### Régler le cadrage
+
+`--calibrate` écrit deux images dans `captures/_calibrage/` : la fenêtre
+entière, et ce que l'outil croit être le canevas. Si `canevas.png` montre un
+bout de ruban ou le volet Visualisations, ajustez `capture.window` du plan :
+
+```yaml
+capture:
+  window:
+    inset_top: 130      # ruban
+    inset_right: 340    # volets Visualisations et Filtres
+    inset_bottom: 60    # barre des onglets de page
+```
+
+Puis relancez `--calibrate` jusqu'à ce que `canevas.png` tienne le rapport
+entier, et rien d'autre.
+
 ## Structure du projet
 
 Chaque module a une responsabilité unique ; les points d'entrée publics d'un
@@ -541,6 +604,16 @@ src/
       questions.py            questions élémentaires posées au terminal
       editing.py              réécriture des textes types du plan
       answers.py              mémoire des réponses d'une génération à l'autre
+
+  capture/                    captures d'écran des visuels (voir plus bas)
+      geometry.py             du repère du rapport à celui de l'écran
+      plan.py                 ce qu'il y a à capturer, sans rien ouvrir
+      library.py              où vivent les images, et sous quel nom
+      recorder.py             le contrat que remplit un preneur de captures
+      fake.py                 un preneur qui n'ouvre rien : rectangles unis
+      desktop.py              le vrai : Power BI Desktop (pywinauto + mss)
+      session.py              le déroulé d'une séance
+      __main__.py             `python -m src.capture`
 
   config/
       defaults.py             valeurs par défaut de la configuration
@@ -612,6 +685,8 @@ template-doc-pbib.docx        template Word
 | exposer une donnée au plan | `models/data_models.py` puis `generators/context.py` |
 | ajouter un filtre `data:` | `generators/filters.py` et `config/defaults.py` |
 | ajouter un type de question | `cli/questions.py`, branché dans `cli/prompts.py` → `_ask` |
+| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `capture/recorder.py`) |
+| corriger un cadrage de capture | `capture/geometry.py`, et ses tests |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `parsers/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
