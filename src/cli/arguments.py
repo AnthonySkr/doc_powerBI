@@ -3,7 +3,7 @@
 import argparse
 from dataclasses import dataclass
 
-from src import console
+from src.cli import menu
 from src.config import DEFAULT_CONFIG_PATH
 
 
@@ -13,6 +13,7 @@ class Options:
     config_path: str
     interactive: bool
     pause: bool
+    readme: bool = False
 
 
 def parse_args(argv: list[str] | None = None) -> Options:
@@ -37,24 +38,48 @@ def parse_args(argv: list[str] | None = None) -> Options:
         action="store_true",
         help="Ne pas attendre de touche à la fin (exécution automatisée)",
     )
+    parser.add_argument(
+        "--mode-emploi",
+        "--readme",
+        dest="readme",
+        action="store_true",
+        help="Affiche le mode d'emploi dans le terminal, et rien d'autre",
+    )
     args = parser.parse_args(argv)
 
+    if args.readme:
+        # Rien à documenter : la question du rapport n'a pas lieu d'être.
+        return Options(
+            pbip_path="",
+            config_path=args.config,
+            interactive=not args.no_input,
+            pause=not args.no_pause,
+            readme=True,
+        )
+
     return Options(
-        pbip_path=(args.pbip or _ask_pbip()).strip().strip('"').strip("'"),
+        pbip_path=_pbip(args).strip().strip('"').strip("'"),
         config_path=args.config,
         interactive=not args.no_input,
         pause=not args.no_pause,
     )
 
 
-def _ask_pbip() -> str:
+def _pbip(args) -> str:
     """
-    Demande le fichier à documenter, faute d'être lancé avec.
+    Le rapport à documenter.
 
-    C'est le cas d'un double-clic sur l'exécutable. Le glisser-déposer du
-    `.pbip` dans la fenêtre est la voie la plus sûre : il écrit le chemin
-    complet, entre guillemets, sans faute de frappe possible.
+    Nommé sur la ligne de commande — un glisser-déposer sur l'exécutable le
+    fait — il est pris tel quel. Sinon l'application s'ouvre sur son menu
+    d'accueil, d'où l'utilisateur peut aussi lire le mode d'emploi avant de
+    se lancer.
+
+    `--no-input` demande qu'aucune question ne soit posée : sans rapport à
+    documenter il n'y a rien à faire, et le pipeline le dira plus clairement
+    qu'un menu qui s'afficherait dans le vide.
     """
-    console.question("Quel rapport documenter ?")
-    console.note("Déposez le fichier .pbip dans cette fenêtre, ou collez son chemin.")
-    return console.ask("Fichier .pbip")
+    if args.pbip:
+        return args.pbip
+    if args.no_input:
+        return ""
+    return menu.choose()

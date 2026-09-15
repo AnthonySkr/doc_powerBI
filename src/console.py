@@ -20,6 +20,7 @@ une vieille console `cmd`, ou une sortie redirigée vers un fichier :
 """
 
 import os
+import shutil
 import sys
 from contextlib import contextmanager
 
@@ -56,10 +57,21 @@ def _enable_windows_ansi() -> bool:
         return False
 
 
+def is_terminal() -> bool:
+    """
+    La sortie est-elle un vrai terminal ?
+
+    Redirigée vers un fichier, elle ne doit recevoir ni couleur ni pagination :
+    un mode d'emploi qui s'arrête tous les vingt lignes pour attendre une
+    touche que personne ne tapera bloquerait le script.
+    """
+    return bool(getattr(sys.stdout, "isatty", None)) and sys.stdout.isatty()
+
+
 def _supports_color() -> bool:
     if os.environ.get("NO_COLOR"):
         return False
-    if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
+    if not is_terminal():
         return False
     if os.name == "nt":
         return _enable_windows_ansi()
@@ -163,6 +175,30 @@ def _write(line: str = "") -> None:
 
 def blank() -> None:
     _write()
+
+
+def line(text: str = "") -> None:
+    """
+    Écrit une ligne déjà composée.
+
+    Sortie de secours pour ce qui ne rentre dans aucun des messages ci-dessous
+    — le mode d'emploi, qui compose lui-même ses titres et ses tableaux à
+    partir de `paint` et de `glyph`. Le reste du code emploie les fonctions
+    nommées : elles disent ce que la ligne signifie, pas à quoi elle ressemble.
+    """
+    _write(text)
+
+
+def height() -> int:
+    """
+    Nombre de lignes affichables d'un coup, 0 hors terminal.
+
+    Sert à la pagination du mode d'emploi : deux lignes sont réservées pour
+    l'invite « la suite » qui sera écrite en bas.
+    """
+    if not is_terminal():
+        return 0
+    return max(shutil.get_terminal_size(fallback=(80, 25)).lines - 2, 8)
 
 
 # ─────────────────────────────────────────────────────────────
