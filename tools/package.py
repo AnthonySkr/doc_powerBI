@@ -17,12 +17,12 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from src import __version__  # noqa: E402  (le dépôt doit d'abord être sur le chemin)
+from core import __version__  # noqa: E402  (le dépôt doit d'abord être sur le chemin)
 
 DIST = os.path.join(ROOT, "dist")
 
 # Fichiers livrés à côté de l'exécutable, et modifiables par l'utilisateur.
-PAYLOAD = ("config_doc_pbi.yaml", "template-doc-pbib.docx")
+PAYLOAD = ("config.yaml", "template-doc-pbib.docx")
 
 # Mode d'emploi joint au dossier livré.
 README = "README.md"

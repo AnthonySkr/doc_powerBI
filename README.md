@@ -4,7 +4,7 @@ Génère la documentation Word d'un rapport Power BI (`.pbip`) à partir du
 template `template-doc-pbib.docx` et d'un plan décrit en YAML.
 
 Le script ne contient aucune structure de document : **tout le plan est dans
-`config_doc_pbi.yaml`**.
+`config.yaml`**.
 
 ## Mise en place
 
@@ -26,7 +26,7 @@ Options :
 
 | Option | Effet |
 | --- | --- |
-| `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
+| `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
 
 Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
@@ -104,7 +104,7 @@ Le comportement se règle dans `options.references.hierarchies` de la section
 | `format` | Gabarit de la référence — `{hierarchy}`, `{levels}` |
 | `separator` | Séparateur entre les niveaux (`" > "` par défaut) |
 
-## Configuration — `config_doc_pbi.yaml`
+## Configuration — `config.yaml`
 
 | Bloc | Rôle |
 | --- | --- |
@@ -485,10 +485,10 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-1.0.0-windows.zip
-└── powerbi-doc-1.0.0-windows/
+powerbi-doc-2.0.0-windows.zip
+└── powerbi-doc-2.0.0-windows/
     ├── powerbi-doc.exe          l'application, autonome
-    ├── config_doc_pbi.yaml      le plan du document, modifiable
+    ├── config.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
     └── LISEZMOI.md              mode d'emploi
 ```
@@ -504,7 +504,7 @@ L'utilisateur les édite et relance — sans rien reconstruire.
 
 L'exécutable en embarque tout de même une copie, utilisée si les fichiers
 livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
-`src/paths.py` :
+`core/paths.py` :
 
 1. le chemin donné (absolu, ou relatif au dossier courant) ;
 2. à côté de l'exécutable — le cas normal ;
@@ -522,48 +522,62 @@ La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
 un fichier à embarquer, une icône (`icon=`) ou un module manquant
 (`hiddenimports`).
 
-## Trois applications, une chaîne
+## Un programme, trois modules
 
-Le projet n'est pas un programme mais **trois, enchaînés par un quatrième**.
-Chacune vit dans son dossier, se lance seule, et ne parle à la suivante que par
-un fichier :
+Le projet est **un seul programme**, découpé en trois modules qui ont chacun
+une responsabilité et une seule :
 
 ```
-.pbip  ──►  extract  ──►  [ capture ]  ──►  document  ──►  .docx
-               1-rapport.json      2-captures.json
+.pbip  ──►  pbi_extractor  ──►  [ gui_automator ]  ──►  report_generator  ──►  .docx
 ```
 
-| Application | Ce qu'elle lit | Ce qu'elle écrit |
-| --- | --- | --- |
-| `src/apps/extract` | le projet `.pbip` | `1-rapport.json` |
-| `src/apps/capture` | `1-rapport.json` | les PNG, et `2-captures.json` |
-| `src/apps/document` | `2-captures.json` | le `.docx` |
+| Module | Sa seule responsabilité |
+| --- | --- |
+| `pbi_extractor` | Lire le projet `.pbip` et retourner ce qu'il contient |
+| `gui_automator` | Piloter Power BI Desktop et enregistrer des images |
+| `report_generator` | Écrire le `.docx` à partir de ces données et de ces images |
 
-**Chacune supprime le fichier qu'elle a consommé.** Le dossier `.echange/` est
-donc vide entre deux exécutions : un fichier qui traîne ne peut jamais passer
-pour le dernier état du rapport. `--keep` le conserve quand on met au point
-l'étape suivante.
+Aucun des trois ne connaît les autres : ils ne partagent que `core`, et les
+données qui passent de l'un à l'autre. `main.py` les enchaîne — c'est tout ce
+qu'il fait.
 
-`src/pipeline.py` est le chef d'orchestre : il enchaîne les trois, décide où
-vivent les fichiers d'échange, et pose à l'utilisateur les questions du plan
-entre la lecture et l'écriture. C'est lui que `main.py` lance.
+### Ce qui circule
 
-### Lancer une application seule
+Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `core/models.py`.
 
-```bash
-python -m src.apps.extract  rapport.pbip     # → .echange/1-rapport.json
-python -m src.apps.capture  --fake           # → les PNG + 2-captures.json
-python -m src.apps.document                  # → le .docx
+```python
+metadata = extract(project)  # pbi_extractor le produit
+capturer.capture(metadata, config, options)  # gui_automator l'enrichit
+write_document(metadata, config, inputs, output_dir)  # report_generator le lit
 ```
 
-Ou par taskipy : `task extract -- rapport.pbip`, `task capture -- --plan`,
-`task document -- --keep`.
+L'extraction le produit, la capture y ajoute l'inventaire de ses images, le
+document s'en sert. Rien ne transite par le disque entre deux étapes : pas de
+fichier intermédiaire à écrire, à relire, à supprimer ni à tenir à jour.
 
-C'est ce découpage qui rend la mise au point supportable. Mettre au point un
-plan de document ne demande plus de relire le `.pbip` à chaque essai : on garde
-le fichier d'échange, et on relance la seule application « document » autant de
-fois qu'il faut. On peut même **retoucher le JSON à la main** pour éprouver un
-cas que le rapport ne contient pas.
+### Le socle commun — `core/`
+
+Ce que les trois partagent, et rien de plus :
+
+| Module | Rôle |
+| --- | --- |
+| `models.py` | Les structures de données, dont `PowerBiMetadata` |
+| `config.py` | Le plan (`config.yaml`), ses valeurs par défaut, son accès |
+| `expressions.py` | Les `{{ ... }}`, les listes `over:`, les conditions `when:` |
+| `selection.py` | Ce que le plan retient du rapport — pages, visuels, groupes |
+| `console.py` | Tout le dialogue avec le terminal |
+| `questions.py` | Les questions élémentaires posées au terminal |
+| `prompts.py` | Le questionnaire déclaré par `inputs:` |
+| `answers.py` | La mémoire des réponses d'une génération à l'autre |
+| `paths.py` | La localisation des fichiers livrés (exécutable compris) |
+| `window.py` | La fenêtre console de l'exécutable : attente et plantages |
+
+**`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
+jamais les uns des autres.**
+
+`selection.py` y vit parce que deux modules le consultent : le document pour
+savoir quoi écrire, la capture pour savoir quoi photographier — photographier
+un visuel que le document tait serait du temps perdu.
 
 ### Lire la documentation du code
 
@@ -571,49 +585,30 @@ Les docstrings et les annotations du code sont servies comme un site, par
 [pdoc](https://pdoc.dev) :
 
 ```bash
-task docs                  # tout le projet, sur http://127.0.0.1:8080
-task docs -- extract       # la seule application « extract »
-task docs -- capture       # … ou capture, document, shared, cli, pipeline
-task docs-build            # le site statique, dans docs/site/
+task docs                    # tout le projet, sur http://127.0.0.1:8080
+task docs -- extractor       # le seul module d'extraction
+task docs -- capturer        # … ou capturer, writer, core, main
+task docs-build              # le site statique, dans docs/site/
 ```
 
 Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
 à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
-recherche, et le rappel de l'application à laquelle le module appartient.
+recherche, et le rappel du module auquel elle appartient.
 
 Ces pages ne peuvent pas se périmer sans que le code change — c'est tout
-l'intérêt par rapport à une documentation écrite à côté. Les tests n'y figurent
-pas : ils vivent avec le code qu'ils éprouvent, et leurs pages noieraient celles
-qui décrivent le programme.
+l'intérêt par rapport à une documentation écrite à côté.
 
 `tools/docs.py` s'occupe d'énumérer les modules (un paquet qui déclare `__all__`
-cache ses sous-modules à pdoc), d'écarter les tests, et de découper par
-application.
-
-### Le fichier d'échange
-
-Du JSON indenté, clés et collections triées : deux exécutions sur le même
-rapport donnent deux fichiers identiques, et `diff` dit ce qui a bougé dans le
-rapport. Son codec (`src/shared/exchange.py`) suit les annotations des
-dataclasses de `shared/models.py` — un champ ajouté là-bas traverse la chaîne
-sans qu'il y ait rien à écrire.
-
-### Ce que les applications partagent
-
-`src/shared/` et rien d'autre : la console, les chemins, les modèles, le
-fichier d'échange, le plan YAML, et la lecture de ce que ce plan retient du
-rapport (`selection.py` — le document s'en sert pour savoir quoi écrire, la
-capture pour savoir quoi photographier). **Une application peut dépendre de
-`shared` ; aucune ne dépend d'une autre.**
+cache ses sous-modules à pdoc) et de découper par module.
 
 ## Captures d'écran des visuels
 
-Le document réserve la place des captures ; `src/apps/capture` les prend.
-**Les deux ne se connaissent que par un dossier d'images** — celui que `capture.directory`
-désigne, à côté du `.pbip` :
+Le document réserve la place des captures ; `gui_automator` les prend.
+**Les deux ne se connaissent que par un dossier d'images** — celui que
+`capture.directory` désigne, à côté du `.pbip` :
 
 ```
-captures/
+assets/
     page_ventes/
         v_evolution.png       ← nom technique du visuel, pas son titre
         g_indicateurs.png     ← un groupe : l'étendue de ses visuels
@@ -643,23 +638,24 @@ Chaque étape s'éprouve seule, de la plus sûre à la moins sûre :
 | Commande | Ce qu'elle vérifie | Besoin de Power BI |
 | --- | --- | --- |
 | `task test` | le cadrage, le plan, le dossier, le déroulé d'une séance | non |
-| `python -m src.apps.capture --plan` | ce qui serait capturé, et à quelles dimensions | non |
-| `python -m src.apps.capture --fake` | la chaîne entière, en rectangles unis | non |
-| `python -m src.apps.capture --calibrate` | le cadrage du canevas dans la fenêtre | oui |
-| `python -m src.apps.capture --manual-pages` | les vraies captures, pages changées à la main | oui |
-| `python -m src.apps.capture` | tout, y compris le changement de page | oui |
+| `python main.py <rapport> --capture-plan` | ce qui serait capturé, et à quelles dimensions | non |
+| `python main.py <rapport> --fake-captures` | la chaîne entière, en rectangles unis | non |
+| `python main.py <rapport> --calibrate` | le cadrage du canevas dans la fenêtre | oui |
+| `python main.py <rapport> --captures --manual-pages` | les vraies captures, pages changées à la main | oui |
+| `python main.py <rapport> --captures` | tout, y compris le changement de page | oui |
 
 `--page` et `--shot` restreignent à une page ou à une prise : de quoi reprendre
 une seule capture sans redérouler le rapport.
 
 ### Régler le cadrage
 
-`--calibrate` écrit deux images dans `captures/_calibrage/` : la fenêtre
+`--calibrate` écrit deux images dans `assets/_calibrage/` : la fenêtre
 entière, et ce que l'outil croit être le canevas. Si `canevas.png` montre un
 bout de ruban ou le volet Visualisations, ajustez `capture.window` du plan :
 
 ```yaml
 capture:
+  directory: assets     # où ranger les images, à côté du .pbip
   window:
     inset_top: 130      # ruban
     inset_right: 340    # volets Visualisations et Filtres
@@ -671,124 +667,105 @@ entier, et rien d'autre.
 
 ## Structure du projet
 
-Chaque module a une responsabilité unique ; les points d'entrée publics d'un
-paquet sont exposés par son `__init__.py`. **Les tests vivent avec le code
-qu'ils éprouvent** : `src/apps/extract/tests/` éprouve l'extraction, et ainsi
-de suite. Seul le parcours complet reste à la racine, dans `tests/`.
+Chaque module a une responsabilité unique ; ce qu'il expose est déclaré par son
+`__init__.py`, et un seul fichier en porte le point d'entrée — `extractor.py`,
+`capturer.py`, `writer.py`. Les tests sont rassemblés sous `tests/`.
 
 ```
-main.py                       lance la chaîne
+main.py                       le chef d'orchestre : enchaîne les trois modules
+config.yaml                   le plan du document
+template-doc-pbib.docx        le template Word
 
-src/
-  pipeline.py                 le chef d'orchestre : enchaîne les applications
+core/                         le socle commun — aucun module n'en dépend d'un autre
+    models.py                 les structures qui circulent, dont PowerBiMetadata
+    config.py                 le plan : chargement, valeurs par défaut, accès
+    expressions.py            variables {{ }}, listes `over:`, conditions `when:`
+    selection.py              ce que le plan retient du rapport
+    console.py                tout le dialogue avec le terminal passe par ici
+    questions.py              questions élémentaires posées au terminal
+    prompts.py                questionnaire déclaré par `inputs:`
+    answers.py                mémoire des réponses d'une génération à l'autre
+    paths.py                  localisation des fichiers livrés (exe compris)
+    window.py                 fenêtre de l'exécutable : attente et plantages
 
-  cli/                        l'interface utilisateur du programme complet
-      arguments.py            options de la ligne de commande
-      window.py               fenêtre de l'exécutable : attente et plantages
-      prompts.py              questionnaire déclaré par `inputs:`
-      questions.py            questions élémentaires posées au terminal
-      editing.py              réécriture des textes types du plan
-      tests/
+pbi_extractor/                le .pbip ──► PowerBiMetadata
+    extractor.py              le point d'entrée : les trois sources croisées
+    pbip.py                   localisation des dossiers d'un projet .pbip
+    dependencies.py           dépendances transitives entre mesures
+    tmdl/                     modèle sémantique
+        reader.py               lecture des fichiers, découpage en blocs
+        measures.py             blocs `measure` → DaxMeasure
+        columns.py              blocs `column ... = ...` → colonnes calculées
+        tables.py               table, visibilité, partition
+        powerquery.py           script `let ... in` → étapes nommées
+    report/                   rapport PBIR
+        pages.py                pages, groupes et visuels
+        fields.py               projections et filtres
 
-  shared/                     le noyau commun — aucune app n'en dépend d'une autre
-      console.py              tout le dialogue avec le terminal passe par ici
-      paths.py                localisation des fichiers livrés (exe compris)
-      models.py               les structures qui circulent entre les apps
-      exchange.py             le fichier qu'elles se passent, et son codec
-      selection.py            ce que le plan retient du rapport
-      answers.py              mémoire des réponses d'une génération à l'autre
-      inputs.py               les réponses du plan, sans dialogue
-      config/                 le plan du document (config_doc_pbi.yaml)
-          defaults.py           valeurs par défaut
-          doc_config.py         chargement du YAML (DocConfig)
-          expressions.py        variables {{ }}, listes `over:`, `when:`
-      tests/
+gui_automator/                Power BI Desktop ──► les PNG
+    capturer.py               le point d'entrée : une séance, de bout en bout
+    geometry.py               du repère du rapport à celui de l'écran
+    plan.py                   ce qu'il y a à capturer, sans rien ouvrir
+    library.py                où vivent les images, et sous quel nom
+    recorder.py               le contrat d'un preneur de captures
+    fake.py                   un preneur qui n'ouvre rien : rectangles unis
+    desktop.py                le vrai : Power BI Desktop (pywinauto + mss)
 
-  apps/
-      extract/                .pbip ──► 1-rapport.json
-          __main__.py           python -m src.apps.extract
-          pbip.py               localisation des dossiers d'un projet .pbip
-          collect.py            l'extraction : les trois sources croisées
-          dependencies.py       dépendances transitives entre mesures
-          tmdl/                 modèle sémantique
-              reader.py           lecture des fichiers, découpage en blocs
-              measures.py         blocs `measure` → DaxMeasure
-              columns.py          blocs `column ... = ...` → colonnes calculées
-              tables.py           table, visibilité, partition
-              powerquery.py       script `let ... in` → étapes nommées
-          report/               rapport PBIR
-              pages.py            pages, groupes et visuels
-              fields.py           projections et filtres
-          tests/
+report_generator/             PowerBiMetadata ──► le .docx
+    writer.py                 le point d'entrée : l'écriture et son bilan
+    context.py                assemble les collections que le plan parcourt
+    filters.py                tables, mesures et étapes retenues par `data:`
+    references.py             tableaux numérotés, « utilisée dans »
+    measure_links.py          mentions de mesures repérées dans un texte
+    word/                     écriture du .docx
+        generator.py            document précédent, écriture, archivage
+        errors.py               DocumentError, seule erreur remontée
+        merging.py              marqueurs, reprise des textes, surlignage
+        builder.py              parcours du plan et écriture du contenu
+        body.py                 insertion en fin de corps, sans reparcours
+        styles.py               clés de style → styles du template
+        links.py                signets et liens internes
+        tables.py               réglages OOXML des tableaux
+        figures.py              emplacement de capture, légende, repères
+        shapes.py               repères numérotés à glisser sur une capture
+        values.py               valeurs déclarées dans le plan
+        fields.py               champs Word : sommaire, numéros, en-têtes
+        word_app.py             recalcul des champs par Word (optionnel)
+    merge/                    régénération au-dessus d'une doc existante
+        markers.py              marqueurs invisibles posés dans le document
+        blocks.py               découpage du corps en blocs ancrés
+        previous.py             relecture du document précédent
+        salvage.py              textes retrouvés dans un contenu du script
+        cells.py                annotations retrouvées dans un tableau
+        smart.py                fusion : données du script, reste à l'auteur
+        orphans.py              annexe des contenus qui n'ont plus de place
+        transplant.py           recopie d'un contenu et de ses dépendances
+        changes.py              bilan des ajouts / modifications / retraits
 
-      capture/                1-rapport.json ──► PNG + 2-captures.json
-          __main__.py           python -m src.apps.capture
-          geometry.py           du repère du rapport à celui de l'écran
-          plan.py               ce qu'il y a à capturer, sans rien ouvrir
-          library.py            où vivent les images, et sous quel nom
-          recorder.py           le contrat d'un preneur de captures
-          fake.py               un preneur qui n'ouvre rien : rectangles unis
-          desktop.py            le vrai : Power BI Desktop (pywinauto + mss)
-          session.py            le déroulé d'une séance
-          tests/
-
-      document/               2-captures.json ──► le .docx
-          __main__.py           python -m src.apps.document
-          render.py             l'écriture, à partir du seul fichier d'échange
-          context.py            assemble les collections que le plan parcourt
-          filters.py            tables, mesures et étapes retenues par `data:`
-          references.py         tableaux numérotés, « utilisée dans »
-          measure_links.py      mentions de mesures repérées dans un texte
-          word/                 écriture du .docx
-              generator.py        document précédent, écriture, archivage
-              errors.py           DocumentError, seule erreur remontée
-              merging.py          marqueurs, reprise des textes, surlignage
-              builder.py          parcours du plan et écriture du contenu
-              body.py             insertion en fin de corps, sans reparcours
-              styles.py           clés de style → styles du template
-              links.py            signets et liens internes
-              tables.py           réglages OOXML des tableaux
-              figures.py          emplacement de capture, légende, repères
-              shapes.py           repères numérotés à glisser sur une capture
-              values.py           valeurs déclarées dans le plan
-              fields.py           champs Word : sommaire, numéros, en-têtes
-              word_app.py         recalcul des champs par Word (optionnel)
-          merge/                régénération au-dessus d'une doc existante
-              markers.py          marqueurs invisibles posés dans le document
-              blocks.py           découpage du corps en blocs ancrés
-              previous.py         relecture du document précédent
-              salvage.py          textes retrouvés dans un contenu du script
-              cells.py            annotations retrouvées dans un tableau
-              smart.py            fusion : données du script, reste à l'auteur
-              orphans.py          annexe des contenus qui n'ont plus de place
-              transplant.py       recopie d'un contenu et de ses dépendances
-              changes.py          bilan des ajouts / modifications / retraits
-          tests/
-
-tests/                        le parcours complet, sur le plan livré
+assets/                       destination des captures (voir assets/README.md)
+tests/                        core/, extract/, capture/, document/, et le
+                              parcours complet sur le plan livré
 tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
 docs/templates/               habillage du site de documentation
 powerbi-doc.spec              recette de construction de l'exécutable
-config_doc_pbi.yaml           plan du document
-template-doc-pbib.docx        template Word
 ```
 
 ### Par où commencer
 
 | Pour... | Ouvrir |
 | --- | --- |
-| changer le plan du document | `config_doc_pbi.yaml` (pas de code) |
-| ajouter un type de bloc | `apps/document/word/builder.py` → `_block_writers` |
-| exposer une donnée au plan | `shared/models.py` puis `apps/document/context.py` |
-| ajouter un filtre `data:` | `shared/selection.py` ou `apps/document/filters.py` |
-| ajouter un type de question | `cli/questions.py`, branché dans `cli/prompts.py` → `_ask` |
-| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `apps/capture/recorder.py`) |
-| corriger un cadrage de capture | `apps/capture/geometry.py`, et ses tests |
-| ajouter une application à la chaîne | un dossier sous `src/apps/`, puis `src/pipeline.py` |
-| changer ce qui passe d'une app à l'autre | `shared/exchange.py` |
+| changer le plan du document | `config.yaml` (pas de code) |
+| ajouter un type de bloc | `report_generator/word/builder.py` → `_block_writers` |
+| exposer une donnée au plan | `core/models.py` puis `report_generator/context.py` |
+| ajouter un filtre `data:` | `core/selection.py` ou `report_generator/filters.py` |
+| ajouter un type de question | `core/questions.py`, branché dans `core/prompts.py` → `_ask` |
+| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `gui_automator/recorder.py`) |
+| corriger un cadrage de capture | `gui_automator/geometry.py`, et ses tests |
+| changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `core/models.py` |
+| changer l'enchaînement des étapes | `main.py` → `generate` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
-| lire une nouvelle propriété TMDL | `apps/extract/tmdl/measures.py` → `_PROPERTIES` |
+| lire une nouvelle propriété TMDL | `pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 
 ## Notes
@@ -802,8 +779,8 @@ template-doc-pbib.docx        template Word
 ## Commandes utiles
 
 ```bash
-task run        # lancer la chaîne complète
-task test       # tests des applications, puis le parcours complet
+task run        # générer la documentation d'un rapport
+task test       # tous les tests
 task check      # format + lint (ruff) + tests
 task build      # construire l'exécutable
 task package    # construire le zip à distribuer
@@ -811,11 +788,9 @@ task clean      # nettoyer les caches et les artefacts de construction
 task docs       # servir la documentation du code
 ```
 
-Les applications, séparément :
+Mise au point des captures, sans écrire de document :
 
 ```bash
-task extract  -- rapport.pbip     # → .echange/1-rapport.json
-task capture  -- --plan           # ce qui serait capturé
-task capture  -- --fake           # la chaîne de capture, sans Power BI
-task document -- --keep           # le .docx, sans consommer le fichier d'échange
+task capture-plan -- rapport.pbip     # ce qui serait capturé
+task calibrate    -- rapport.pbip     # régler le cadrage de la fenêtre
 ```

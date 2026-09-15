@@ -73,7 +73,7 @@ nom). Sans cela il apparaît comme « Groupe sans nom ».
 | Fichier | À quoi il sert |
 | --- | --- |
 | `powerbi-doc.exe` | L'application |
-| `config_doc_pbi.yaml` | Le plan du document : titres, ordre des parties, questions posées |
+| `config.yaml` | Le plan du document : titres, ordre des parties, questions posées |
 | `template-doc-pbib.docx` | L'apparence : styles, page de garde, en-tête et pied de page |
 
 Copiez le dossier entier où vous voulez, mais ne séparez pas les trois
@@ -226,7 +226,7 @@ fin de l'exécution, pour que vous puissiez vérifier qu'aucune ne manque à tor
 
 ## Adapter le document à vos usages
 
-**`config_doc_pbi.yaml`** décrit le plan : les titres, l'ordre des parties, les
+**`config.yaml`** décrit le plan : les titres, l'ordre des parties, les
 textes types, les questions posées au lancement, ce qui est documenté ou
 écarté. C'est un fichier texte, abondamment commenté : ouvrez-le dans le
 Bloc-notes, modifiez-le, relancez. Aucune reconstruction n'est nécessaire.
@@ -248,7 +248,7 @@ un, l'outil vous signalera qu'il ne le trouve plus.
 | `Dossier Report introuvable` | Même cause, même remède. |
 | `Template introuvable` | `template-doc-pbib.docx` doit rester à côté de l'exécutable. Le message liste les emplacements consultés. |
 | `Style ... absent du template` | Un style nommé a été renommé ou supprimé dans le template. Le document est produit malgré tout, avec un style de remplacement. |
-| `Configuration : YAML illisible` | Une faute de frappe dans `config_doc_pbi.yaml`. Le message donne la ligne. |
+| `Configuration : YAML illisible` | Une faute de frappe dans `config.yaml`. Le message donne la ligne. |
 | `Impossible d'enregistrer le document` | Le document est ouvert dans Word. Fermez-le et relancez. |
 | Des visuels nommés `barChart (a1b2c3d4)` | Ces visuels n'ont pas de titre dans Power BI (voir le prérequis n° 3). |
 

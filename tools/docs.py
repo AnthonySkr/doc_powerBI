@@ -1,20 +1,20 @@
 """
 La documentation du code, servie ou construite.
 
-    python tools/docs.py                tout le projet, servi et rechargé à chaud
-    python tools/docs.py extract        la seule application « extract »
-    python tools/docs.py --build        le site statique, dans docs/site/
-    python tools/docs.py capture --build
+    python tools/docs.py                  tout le projet, servi et rechargé à chaud
+    python tools/docs.py extractor        le seul module d'extraction
+    python tools/docs.py --build          le site statique, dans docs/site/
+    python tools/docs.py capturer --build
 
 Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
 
   - **la liste des modules**. Un paquet qui déclare `__all__` cache ses
-    sous-modules à `pdoc` : `src/apps/extract/__init__.py` expose quatre noms,
-    et `tmdl/`, `report/` ou `pbip.py` disparaîtraient du site. Les modules sont
+    sous-modules à `pdoc` : `pbi_extractor/__init__.py` expose quatre noms, et
+    `tmdl/`, `report/` ou `pbip.py` disparaîtraient du site. Les modules sont
     donc énumérés ici, en parcourant l'arborescence ;
-  - **le périmètre**. Les tests vivent avec le code qu'ils éprouvent : sans
-    filtre, la moitié des pages du site seraient des pages de tests ;
-  - **le découpage par application**, pour ouvrir la documentation d'une seule.
+  - **le périmètre**. Les paquets de tests, s'il s'en trouve sous un module,
+    sont écartés du site ;
+  - **le découpage par module**, pour ouvrir la documentation d'un seul.
 
 `pdoc` est en option (`pip install -e ".[dev]"`) : il ne sert qu'au
 développement, et rien du programme livré n'en dépend.
@@ -31,34 +31,37 @@ from importlib import import_module
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-# Ce que chaque nom court désigne. L'ordre est celui de la chaîne.
-APPS = {
-    "pipeline": "src.pipeline",
-    "extract": "src.apps.extract",
-    "capture": "src.apps.capture",
-    "document": "src.apps.document",
-    "shared": "src.shared",
-    "cli": "src.cli",
+# Ce que chaque nom court désigne. L'ordre est celui de la génération.
+PARTS = {
+    "main": ["main"],
+    "extractor": ["pbi_extractor"],
+    "capturer": ["gui_automator"],
+    "writer": ["report_generator"],
+    "core": ["core"],
 }
+
+# Tout le projet : le chef d'orchestre, les trois modules, et leur socle.
+EVERYTHING = ["main", "pbi_extractor", "gui_automator", "report_generator", "core"]
 
 DEFAULT_OUTPUT = os.path.join(ROOT, "docs", "site")
 TEMPLATES = os.path.join(ROOT, "docs", "templates")
 
 # Dépôt du projet : alimente le bouton « Edit on GitHub » de chaque page.
 # La branche est celle que lit un lecteur de passage, pas celle du moment.
-EDIT_URL = "src=https://github.com/AnthonySkr/doc_powerBI/blob/main/src/"
+EDIT_URL = "https://github.com/AnthonySkr/doc_powerBI/blob/main/"
 
 
 def main(argv: list[str] | None = None) -> int:
     """Point d'entrée du script. Retourne le code de sortie."""
     args = _parse_args(argv)
-    names = _modules(APPS[args.app] if args.app else "src")
+    roots = PARTS[args.part] if args.part else EVERYTHING
+    names = [name for root in roots for name in _modules(root)]
     if not names:
-        print(f"Aucun module à documenter pour « {args.app or 'src'} ».")
+        print(f"Aucun module à documenter pour « {args.part or 'tout le projet'} ».")
         return 1
 
     command = [sys.executable, "-m", "pdoc", *names, *_options(args)]
-    print(f"{len(names)} module(s) — {args.app or 'tout le projet'}")
+    print(f"{len(names)} module(s) — {args.part or 'tout le projet'}")
 
     try:
         # Commande entièrement construite ici : l'interpréteur courant, `pdoc`,
@@ -103,7 +106,7 @@ def _modules(root: str) -> list[str]:
     if module is None:
         return []
     if not hasattr(module, "__path__"):
-        # Un module seul — `src.pipeline` : il n'a rien à parcourir.
+        # Un module seul — `main` : il n'a rien à parcourir.
         return [root]
 
     found = {root}
@@ -156,9 +159,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         description="Sert ou construit la documentation du code (pdoc).",
     )
     parser.add_argument(
-        "app",
+        "part",
         nargs="?",
-        choices=sorted(APPS),
+        choices=sorted(PARTS),
         help="N'ouvrir qu'une partie du projet (défaut : tout)",
     )
     parser.add_argument(
