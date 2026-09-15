@@ -8,9 +8,9 @@ pas assez précisément pour qu'on puisse les cadrer.
 
 import unittest
 
-from core.models import ReportPage, Visual, VisualGroup
-from gui_automator import plan
-from gui_automator.geometry import Rect
+from src.core.models import ReportPage, Visual, VisualGroup
+from src.gui_automator import plan
+from src.gui_automator.geometry import Rect
 
 
 def visual(name: str, title: str, x=0.0, y=0.0, width=400.0, height=300.0) -> Visual:

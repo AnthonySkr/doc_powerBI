@@ -7,9 +7,8 @@ Le chef d'orchestre : il enchaîne les trois modules, il ne travaille pas.
                                                                     │
                                                                   .docx
 
-Un seul objet circule d'un bout à l'autre — le `PowerBiMetadata` que
-l'extraction produit, que la capture enrichit de ses images, et dont le
-document se sert. Rien ne transite par le disque entre deux étapes.
+Un seul objet circule d'un bout à l'autre, le `PowerBiMetadata` : rien ne
+transite par le disque entre deux étapes.
 
     python main.py "C:\\chemin\\Rapport.pbip"
 """
@@ -20,16 +19,15 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from core import __version__, answers, console, prompts
-from core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
-from core.models import PowerBiMetadata
-from core.window import ConsoleWindow
-from gui_automator import CaptureError, capturer
-from pbi_extractor import ExtractError, PbipProject, extract, open_project
-from report_generator import DocumentError, output_directory, report_result, write_document
+from src.core import __version__, answers, console, prompts
+from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
+from src.core.models import PowerBiMetadata
+from src.core.window import ConsoleWindow
+from src.gui_automator import CaptureError, capturer
+from src.pbi_extractor import ExtractError, PbipProject, extract, open_project
+from src.report_generator import DocumentError, output_directory, report_result, write_document
 
-# Étapes annoncées à l'utilisateur : lecture, questions, document — et la
-# capture, quand elle est demandée.
+# Lecture, questions, document — et la capture, quand elle est demandée.
 BASE_STEPS = 3
 
 
@@ -112,7 +110,7 @@ def _capture(metadata: PowerBiMetadata, config: DocConfig, options: Options, ste
     Étape facultative : photographier les visuels dans Power BI Desktop.
 
     Une séance qui échoue n'emporte pas la génération : le document garde ses
-    emplacements réservés, comme s'il n'y avait pas eu de captures du tout.
+    emplacements réservés.
     """
     console.step("Captures des visuels", *steps.next())
     try:
@@ -122,7 +120,7 @@ def _capture(metadata: PowerBiMetadata, config: DocConfig, options: Options, ste
 
 
 def _inspect_captures(metadata: PowerBiMetadata, config: DocConfig, options: Options) -> None:
-    """Les deux réglages de la capture, qui n'écrivent aucun document."""
+    """`--capture-plan` et `--calibrate` : ils n'écrivent aucun document."""
     directory = capturer.captures_dir(metadata, config)
     try:
         if options.calibrate:

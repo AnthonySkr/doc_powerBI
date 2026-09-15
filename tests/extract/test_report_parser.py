@@ -5,16 +5,16 @@ import os
 import tempfile
 import unittest
 
-from core import console
-from core.models import VisualGroup
-from pbi_extractor.report import parse_report
-from pbi_extractor.report.fields import (
+from src.core import console
+from src.core.models import VisualGroup
+from src.pbi_extractor.report import parse_report
+from src.pbi_extractor.report.fields import (
     field_name,
     parse_elements,
     parse_filters,
     parse_reference_labels,
 )
-from pbi_extractor.report.pages import UNTITLED_GROUP, _title, parse_group, parse_visual
+from src.pbi_extractor.report.pages import UNTITLED_GROUP, _title, parse_group, parse_visual
 
 
 def measure_field(entity="Ventes", prop="Chiffre d'affaires"):

@@ -9,7 +9,7 @@ La documentation du code, servie ou construite.
 Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
 
   - **la liste des modules**. Un paquet qui déclare `__all__` cache ses
-    sous-modules à `pdoc` : `pbi_extractor/__init__.py` expose quatre noms, et
+    sous-modules à `pdoc` : `src/pbi_extractor/__init__.py` expose quatre noms, et
     `tmdl/`, `report/` ou `pbip.py` disparaîtraient du site. Les modules sont
     donc énumérés ici, en parcourant l'arborescence ;
   - **le périmètre**. Les paquets de tests, s'il s'en trouve sous un module,
@@ -34,14 +34,14 @@ sys.path.insert(0, ROOT)
 # Ce que chaque nom court désigne. L'ordre est celui de la génération.
 PARTS = {
     "main": ["main"],
-    "extractor": ["pbi_extractor"],
-    "capturer": ["gui_automator"],
-    "writer": ["report_generator"],
-    "core": ["core"],
+    "extractor": ["src.pbi_extractor"],
+    "capturer": ["src.gui_automator"],
+    "writer": ["src.report_generator"],
+    "core": ["src.core"],
 }
 
 # Tout le projet : le chef d'orchestre, les trois modules, et leur socle.
-EVERYTHING = ["main", "pbi_extractor", "gui_automator", "report_generator", "core"]
+EVERYTHING = ["main", *(root for roots in PARTS.values() for root in roots if root != "main")]
 
 DEFAULT_OUTPUT = os.path.join(ROOT, "docs", "site")
 TEMPLATES = os.path.join(ROOT, "docs", "templates")

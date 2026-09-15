@@ -2,7 +2,7 @@
 
 import unittest
 
-from core.models import (
+from src.core.models import (
     DaxMeasure,
     PowerBIReport,
     ReportPage,
@@ -10,7 +10,7 @@ from core.models import (
     VisualElement,
     VisualFilter,
 )
-from pbi_extractor.dependencies import analyze_dependencies, measures_used_in_report
+from src.pbi_extractor.dependencies import analyze_dependencies, measures_used_in_report
 
 
 def measures(**expressions: str) -> dict[str, DaxMeasure]:

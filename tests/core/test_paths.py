@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from core import paths
+from src.core import paths
 
 
 class FindTest(unittest.TestCase):

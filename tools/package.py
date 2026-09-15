@@ -17,7 +17,7 @@ import zipfile
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from core import __version__  # noqa: E402  (le dépôt doit d'abord être sur le chemin)
+from src.core import __version__  # noqa: E402  (le dépôt doit d'abord être sur le chemin)
 
 DIST = os.path.join(ROOT, "dist")
 

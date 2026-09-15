@@ -2,9 +2,9 @@
 
 import unittest
 
-from core.models import DaxMeasure, MeasureGroup
-from report_generator.measure_links import MeasureLinker, collect_measures
-from report_generator.word.links import bookmark_name
+from src.core.models import DaxMeasure, MeasureGroup
+from src.report_generator.measure_links import MeasureLinker, collect_measures
+from src.report_generator.word.links import bookmark_name
 
 
 def linker(names: dict[str, str], **options) -> MeasureLinker:

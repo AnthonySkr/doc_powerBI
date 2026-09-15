@@ -15,9 +15,9 @@ from unittest import mock
 
 from docx import Document
 
-from core import paths
-from core.config import DocConfig
-from report_generator.word.generator import DocumentError, _template_path
+from src.core import paths
+from src.core.config import DocConfig
+from src.report_generator.word.generator import DocumentError, _template_path
 
 
 class TemplateLookupTest(unittest.TestCase):

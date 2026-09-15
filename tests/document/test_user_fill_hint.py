@@ -15,9 +15,9 @@ import unittest
 from docx import Document
 from docx.enum.style import WD_STYLE_TYPE
 
-from core import console
-from core.config import DocConfig
-from report_generator.word import generate_word_documentation
+from src.core import console
+from src.core.config import DocConfig
+from src.report_generator.word import generate_word_documentation
 
 TODO_STYLE = "A completer"
 

@@ -20,11 +20,11 @@ from docx.oxml.ns import qn
 from docx.shared import Cm
 from docx.text.paragraph import Paragraph
 
-from core import console
-from core.config import DocConfig
-from core.models import DaxMeasure, MeasureGroup, SemanticModel
-from report_generator.merge import markers, orphans
-from report_generator.word import generate_word_documentation
+from src.core import console
+from src.core.config import DocConfig
+from src.core.models import DaxMeasure, MeasureGroup, SemanticModel
+from src.report_generator.merge import markers, orphans
+from src.report_generator.word import generate_word_documentation
 
 _DRAWING = qn("w:drawing")
 
