@@ -8,4 +8,4 @@ n'embarque pas les métadonnées de son paquet — sans cette constante, il sera
 le seul à ne pas savoir quelle version il est.
 """
 
-__version__ = "1.0.0"
+__version__ = "0.6"
