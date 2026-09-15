@@ -13,9 +13,9 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from core import answers, console, prompts
-from core.config import DocConfig
-from core.prompts import default_inputs
+from src.core import answers, console, prompts
+from src.core.config import DocConfig
+from src.core.prompts import default_inputs
 
 PLAN = {
     "document": {"answers_file": "reponses_{{ report.name }}.yaml"},

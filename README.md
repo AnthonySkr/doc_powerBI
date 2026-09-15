@@ -504,7 +504,7 @@ L'utilisateur les édite et relance — sans rien reconstruire.
 
 L'exécutable en embarque tout de même une copie, utilisée si les fichiers
 livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
-`core/paths.py` :
+`src/core/paths.py` :
 
 1. le chemin donné (absolu, ou relatif au dossier courant) ;
 2. à côté de l'exécutable — le cas normal ;
@@ -537,25 +537,24 @@ une responsabilité et une seule :
 | `gui_automator` | Piloter Power BI Desktop et enregistrer des images |
 | `report_generator` | Écrire le `.docx` à partir de ces données et de ces images |
 
-Aucun des trois ne connaît les autres : ils ne partagent que `core`, et les
-données qui passent de l'un à l'autre. `main.py` les enchaîne — c'est tout ce
-qu'il fait.
+Ils vivent sous `src/`. Aucun des trois ne connaît les autres : ils ne
+partagent que `src/core`, et les données qui passent de l'un à l'autre.
+`main.py`, à la racine, les enchaîne — c'est tout ce qu'il fait.
 
 ### Ce qui circule
 
-Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `core/models.py`.
+Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `src/core/models.py`.
 
 ```python
-metadata = extract(project)  # pbi_extractor le produit
-capturer.capture(metadata, config, options)  # gui_automator l'enrichit
-write_document(metadata, config, inputs, output_dir)  # report_generator le lit
+metadata = extract(project)  # produit par l'extraction
+capturer.capture(metadata, config, options)  # enrichi de ses images
+write_document(metadata, config, inputs, output_dir)  # lu par le document
 ```
 
-L'extraction le produit, la capture y ajoute l'inventaire de ses images, le
-document s'en sert. Rien ne transite par le disque entre deux étapes : pas de
-fichier intermédiaire à écrire, à relire, à supprimer ni à tenir à jour.
+Rien ne transite par le disque entre deux étapes : pas de fichier intermédiaire
+à écrire, à relire, à supprimer ni à tenir à jour.
 
-### Le socle commun — `core/`
+### Le socle commun — `src/core/`
 
 Ce que les trois partagent, et rien de plus :
 
@@ -676,71 +675,72 @@ main.py                       le chef d'orchestre : enchaîne les trois modules
 config.yaml                   le plan du document
 template-doc-pbib.docx        le template Word
 
-core/                         le socle commun — aucun module n'en dépend d'un autre
-    models.py                 les structures qui circulent, dont PowerBiMetadata
-    config.py                 le plan : chargement, valeurs par défaut, accès
-    expressions.py            variables {{ }}, listes `over:`, conditions `when:`
-    selection.py              ce que le plan retient du rapport
-    console.py                tout le dialogue avec le terminal passe par ici
-    questions.py              questions élémentaires posées au terminal
-    prompts.py                questionnaire déclaré par `inputs:`
-    answers.py                mémoire des réponses d'une génération à l'autre
-    paths.py                  localisation des fichiers livrés (exe compris)
-    window.py                 fenêtre de l'exécutable : attente et plantages
+src/
+  core/                       le socle commun — aucun module n'en dépend d'un autre
+      models.py               les structures qui circulent, dont PowerBiMetadata
+      config.py               le plan : chargement, valeurs par défaut, accès
+      expressions.py          variables {{ }}, listes `over:`, conditions `when:`
+      selection.py            ce que le plan retient du rapport
+      console.py              tout le dialogue avec le terminal passe par ici
+      questions.py            questions élémentaires posées au terminal
+      prompts.py              questionnaire déclaré par `inputs:`
+      answers.py              mémoire des réponses d'une génération à l'autre
+      paths.py                localisation des fichiers livrés (exe compris)
+      window.py               fenêtre de l'exécutable : attente et plantages
 
-pbi_extractor/                le .pbip ──► PowerBiMetadata
-    extractor.py              le point d'entrée : les trois sources croisées
-    pbip.py                   localisation des dossiers d'un projet .pbip
-    dependencies.py           dépendances transitives entre mesures
-    tmdl/                     modèle sémantique
-        reader.py               lecture des fichiers, découpage en blocs
-        measures.py             blocs `measure` → DaxMeasure
-        columns.py              blocs `column ... = ...` → colonnes calculées
-        tables.py               table, visibilité, partition
-        powerquery.py           script `let ... in` → étapes nommées
-    report/                   rapport PBIR
-        pages.py                pages, groupes et visuels
-        fields.py               projections et filtres
+  pbi_extractor/              le .pbip ──► PowerBiMetadata
+      extractor.py            le point d'entrée : les trois sources croisées
+      pbip.py                 localisation des dossiers d'un projet .pbip
+      dependencies.py         dépendances transitives entre mesures
+      tmdl/                   modèle sémantique
+          reader.py             lecture des fichiers, découpage en blocs
+          measures.py           blocs `measure` → DaxMeasure
+          columns.py            blocs `column ... = ...` → colonnes calculées
+          tables.py             table, visibilité, partition
+          powerquery.py         script `let ... in` → étapes nommées
+      report/                 rapport PBIR
+          pages.py              pages, groupes et visuels
+          fields.py             projections et filtres
 
-gui_automator/                Power BI Desktop ──► les PNG
-    capturer.py               le point d'entrée : une séance, de bout en bout
-    geometry.py               du repère du rapport à celui de l'écran
-    plan.py                   ce qu'il y a à capturer, sans rien ouvrir
-    library.py                où vivent les images, et sous quel nom
-    recorder.py               le contrat d'un preneur de captures
-    fake.py                   un preneur qui n'ouvre rien : rectangles unis
-    desktop.py                le vrai : Power BI Desktop (pywinauto + mss)
+  gui_automator/              Power BI Desktop ──► les PNG
+      capturer.py             le point d'entrée : une séance, de bout en bout
+      geometry.py             du repère du rapport à celui de l'écran
+      plan.py                 ce qu'il y a à capturer, sans rien ouvrir
+      library.py              où vivent les images, et sous quel nom
+      recorder.py             le contrat d'un preneur de captures
+      fake.py                 un preneur qui n'ouvre rien : rectangles unis
+      desktop.py              le vrai : Power BI Desktop (pywinauto + mss)
 
-report_generator/             PowerBiMetadata ──► le .docx
-    writer.py                 le point d'entrée : l'écriture et son bilan
-    context.py                assemble les collections que le plan parcourt
-    filters.py                tables, mesures et étapes retenues par `data:`
-    references.py             tableaux numérotés, « utilisée dans »
-    measure_links.py          mentions de mesures repérées dans un texte
-    word/                     écriture du .docx
-        generator.py            document précédent, écriture, archivage
-        errors.py               DocumentError, seule erreur remontée
-        merging.py              marqueurs, reprise des textes, surlignage
-        builder.py              parcours du plan et écriture du contenu
-        body.py                 insertion en fin de corps, sans reparcours
-        styles.py               clés de style → styles du template
-        links.py                signets et liens internes
-        tables.py               réglages OOXML des tableaux
-        figures.py              emplacement de capture, légende, repères
-        shapes.py               repères numérotés à glisser sur une capture
-        values.py               valeurs déclarées dans le plan
-        fields.py               champs Word : sommaire, numéros, en-têtes
-        word_app.py             recalcul des champs par Word (optionnel)
-    merge/                    régénération au-dessus d'une doc existante
-        markers.py              marqueurs invisibles posés dans le document
-        blocks.py               découpage du corps en blocs ancrés
-        previous.py             relecture du document précédent
-        salvage.py              textes retrouvés dans un contenu du script
-        cells.py                annotations retrouvées dans un tableau
-        smart.py                fusion : données du script, reste à l'auteur
-        orphans.py              annexe des contenus qui n'ont plus de place
-        transplant.py           recopie d'un contenu et de ses dépendances
-        changes.py              bilan des ajouts / modifications / retraits
+  report_generator/           PowerBiMetadata ──► le .docx
+      writer.py               le point d'entrée : l'écriture et son bilan
+      context.py              assemble les collections que le plan parcourt
+      filters.py              tables, mesures et étapes retenues par `data:`
+      references.py           tableaux numérotés, « utilisée dans »
+      measure_links.py        mentions de mesures repérées dans un texte
+      word/                   écriture du .docx
+          generator.py          document précédent, écriture, archivage
+          errors.py             DocumentError, seule erreur remontée
+          merging.py            marqueurs, reprise des textes, surlignage
+          builder.py            parcours du plan et écriture du contenu
+          body.py               insertion en fin de corps, sans reparcours
+          styles.py             clés de style → styles du template
+          links.py              signets et liens internes
+          tables.py             réglages OOXML des tableaux
+          figures.py            emplacement de capture, légende, repères
+          shapes.py             repères numérotés à glisser sur une capture
+          values.py             valeurs déclarées dans le plan
+          fields.py             champs Word : sommaire, numéros, en-têtes
+          word_app.py           recalcul des champs par Word (optionnel)
+      merge/                  régénération au-dessus d'une doc existante
+          markers.py            marqueurs invisibles posés dans le document
+          blocks.py             découpage du corps en blocs ancrés
+          previous.py           relecture du document précédent
+          salvage.py            textes retrouvés dans un contenu du script
+          cells.py              annotations retrouvées dans un tableau
+          smart.py              fusion : données du script, reste à l'auteur
+          orphans.py            annexe des contenus qui n'ont plus de place
+          transplant.py         recopie d'un contenu et de ses dépendances
+          changes.py            bilan des ajouts / modifications / retraits
 
 assets/                       destination des captures (voir assets/README.md)
 tests/                        core/, extract/, capture/, document/, et le
@@ -756,16 +756,16 @@ powerbi-doc.spec              recette de construction de l'exécutable
 | Pour... | Ouvrir |
 | --- | --- |
 | changer le plan du document | `config.yaml` (pas de code) |
-| ajouter un type de bloc | `report_generator/word/builder.py` → `_block_writers` |
-| exposer une donnée au plan | `core/models.py` puis `report_generator/context.py` |
-| ajouter un filtre `data:` | `core/selection.py` ou `report_generator/filters.py` |
-| ajouter un type de question | `core/questions.py`, branché dans `core/prompts.py` → `_ask` |
-| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `gui_automator/recorder.py`) |
-| corriger un cadrage de capture | `gui_automator/geometry.py`, et ses tests |
-| changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `core/models.py` |
+| ajouter un type de bloc | `src/report_generator/word/builder.py` → `_block_writers` |
+| exposer une donnée au plan | `src/core/models.py` puis `src/report_generator/context.py` |
+| ajouter un filtre `data:` | `src/core/selection.py` ou `src/report_generator/filters.py` |
+| ajouter un type de question | `src/core/questions.py`, branché dans `src/core/prompts.py` → `_ask` |
+| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `src/gui_automator/recorder.py`) |
+| corriger un cadrage de capture | `src/gui_automator/geometry.py`, et ses tests |
+| changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `src/core/models.py` |
 | changer l'enchaînement des étapes | `main.py` → `generate` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
-| lire une nouvelle propriété TMDL | `pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
+| lire une nouvelle propriété TMDL | `src/pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
 
 ## Notes

@@ -2,11 +2,11 @@
 
 import unittest
 
-from pbi_extractor.tmdl.columns import extract_calculated_columns
-from pbi_extractor.tmdl.measures import extract_measures
-from pbi_extractor.tmdl.powerquery import parse_steps, source_expression
-from pbi_extractor.tmdl.reader import table_name
-from pbi_extractor.tmdl.tables import parse_table
+from src.pbi_extractor.tmdl.columns import extract_calculated_columns
+from src.pbi_extractor.tmdl.measures import extract_measures
+from src.pbi_extractor.tmdl.powerquery import parse_steps, source_expression
+from src.pbi_extractor.tmdl.reader import table_name
+from src.pbi_extractor.tmdl.tables import parse_table
 
 VENTES = """table Ventes
 

@@ -2,9 +2,9 @@
 
 import unittest
 
-from core import console
-from core.config import DocConfig
-from core.models import (
+from src.core import console
+from src.core.config import DocConfig
+from src.core.models import (
     DaxMeasure,
     ModelTable,
     PowerBIReport,
@@ -13,9 +13,9 @@ from core.models import (
     Visual,
     VisualGroup,
 )
-from core.selection import organize_page
-from report_generator.filters import filter_steps, filter_tables, group_measures
-from report_generator.references import index_group_members
+from src.core.selection import organize_page
+from src.report_generator.filters import filter_steps, filter_tables, group_measures
+from src.report_generator.references import index_group_members
 
 
 def config(**data) -> DocConfig:

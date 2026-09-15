@@ -13,7 +13,7 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.text.paragraph import Paragraph
 
-from report_generator.merge import markers
+from src.report_generator.merge import markers
 from tests.document.test_merge_cycle import MergeHarness
 
 PLAN = {

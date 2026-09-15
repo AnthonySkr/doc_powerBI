@@ -66,11 +66,11 @@ py-modules = ["main"]
 
 # Les trois modules de la génération, et le socle qu'ils partagent.
 [tool.setuptools.packages.find]
-include = ["core*", "pbi_extractor*", "gui_automator*", "report_generator*"]
+include = ["src*"]
 
-# La version est déclarée dans `core/__init__.py`, seul endroit où elle vit.
+# La version est déclarée dans `src/core/__init__.py`, seul endroit où elle vit.
 [tool.setuptools.dynamic]
-version = { attr = "core.__version__" }
+version = { attr = "src.core.__version__" }
 
 [tool.ruff]
 line-length = 100
@@ -80,7 +80,7 @@ target-version = "py314"
 # Au-delà des règles par défaut (E4/E7/E9, F) : celles qui attrapent de vraies
 # bévues (B, BLE, S, RET), celles qui allègent le code (SIM, C4, PIE, PERF,
 # FURB, UP) et celles qui tiennent les frontières du projet (T20 — aucun
-# `print` hors de `core.console`, TID, ARG).
+# `print` hors de `src.core.console`, TID, ARG).
 select = [
     "A",      # ombrage des noms de la bibliothèque standard
     "ARG",    # arguments jamais utilisés

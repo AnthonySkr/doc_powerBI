@@ -8,9 +8,9 @@ quoi photographier — et au questionnaire de lancement. Elles sont donc
 
 import unittest
 
-from core.config import DocConfig
-from core.models import PowerBIReport, ReportPage, Visual, VisualGroup
-from core.selection import (
+from src.core.config import DocConfig
+from src.core.models import PowerBIReport, ReportPage, Visual, VisualGroup
+from src.core.selection import (
     documentable_titles,
     filter_pages,
     filter_visuals,

@@ -8,7 +8,7 @@ Recette PyInstaller — construit l'exécutable distribué aux utilisateurs.
 L'exécutable embarque une copie de `config.yaml` et du template, qui
 sert de secours. Ce sont les fichiers livrés **à côté** de l'exe qui font foi :
 c'est ainsi que l'utilisateur adapte le plan du document sans reconstruire
-(voir `core/paths.py`).
+(voir `src/core/paths.py`).
 """
 
 from PyInstaller.utils.hooks import collect_data_files
@@ -31,10 +31,9 @@ analysis = Analysis(
     ["main.py"],
     pathex=["."],
     datas=DATA,
-    # Tout est atteint depuis `main.py`, que PyInstaller suit. Seul le
-    # pilotage de Power BI est chargé au dernier moment (`gui_automator.
-    # desktop`), et ses deux outils sont facultatifs : ils ne sont embarqués
-    # que s'ils sont installés.
+    # Tout est atteint depuis `main.py`, que PyInstaller suit. Les deux outils
+    # de capture sont facultatifs : ils ne sont embarqués que s'ils sont
+    # installés.
     hiddenimports=[],
     excludes=EXCLUDES,
     noarchive=False,

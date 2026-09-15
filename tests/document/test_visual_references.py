@@ -2,8 +2,8 @@
 
 import unittest
 
-from core.models import Visual, VisualElement, VisualFilter
-from report_generator.references import _Counter, build_references
+from src.core.models import Visual, VisualElement, VisualFilter
+from src.report_generator.references import _Counter, build_references
 
 # Niveaux tels que Power BI les projette pour une hiérarchie de dates : un
 # élément par niveau, dans l'ordre de forage.

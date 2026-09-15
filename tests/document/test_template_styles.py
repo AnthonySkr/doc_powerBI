@@ -20,7 +20,7 @@ import zipfile
 
 from lxml import etree
 
-from core import paths
+from src.core import paths
 
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 

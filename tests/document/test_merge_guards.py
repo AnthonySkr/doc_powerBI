@@ -7,10 +7,10 @@ faisaient perdre la rédaction de l'utilisateur à la génération suivante.
 
 import unittest
 
-from core import console
-from core.config import DocConfig
-from report_generator.merge import markers
-from report_generator.word.merging import MergeWriter
+from src.core import console
+from src.core.config import DocConfig
+from src.report_generator.merge import markers
+from src.report_generator.word.merging import MergeWriter
 
 
 def writer(**merge_options):

@@ -6,16 +6,16 @@ from docx import Document
 from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
-from core.config import DocConfig
-from core.models import (
+from src.core.config import DocConfig
+from src.core.models import (
     DaxMeasure,
     PowerBIReport,
     ReportPage,
     Visual,
     VisualElement,
 )
-from report_generator.references import index_usages, visual_options
-from report_generator.word.fields import (
+from src.report_generator.references import index_usages, visual_options
+from src.report_generator.word.fields import (
     mark_toc_fields_dirty,
     replace_in_paragraph,
     set_toc_levels,

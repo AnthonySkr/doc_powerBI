@@ -20,9 +20,9 @@ import unittest
 
 from docx import Document
 
-from core import console
-from core.config import DEFAULT_CONFIG_PATH
 from main import Options, generate
+from src.core import console
+from src.core.config import DEFAULT_CONFIG_PATH
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "rapport_test")
 

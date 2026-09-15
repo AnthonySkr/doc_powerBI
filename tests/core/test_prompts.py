@@ -5,9 +5,9 @@ import io
 import unittest
 from unittest import mock
 
-from core import prompts
-from core.config import DocConfig
-from core.prompts import default_inputs
+from src.core import prompts
+from src.core.config import DocConfig
+from src.core.prompts import default_inputs
 
 
 def config(*inputs) -> DocConfig:

@@ -6,8 +6,8 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Cm
 
-from core.models import VisualReference
-from report_generator.word.tables import (
+from src.core.models import VisualReference
+from src.report_generator.word.tables import (
     keep_row_together,
     repeat_header_row,
     set_fixed_layout,

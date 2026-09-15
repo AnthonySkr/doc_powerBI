@@ -14,8 +14,8 @@ import unittest
 from unittest import mock
 
 import main
-from core.window import ConsoleWindow
 from main import Options, PipelineError
+from src.core.window import ConsoleWindow
 
 
 def options(**values) -> Options:
@@ -86,7 +86,7 @@ class PauseTest(MainTestCase):
         with (
             mock.patch("main.parse_args", return_value=options(pause=pause)),
             mock.patch("main.generate", side_effect=generate_side_effect or (lambda o: "/sortie")),
-            mock.patch("core.paths.is_frozen", return_value=frozen),
+            mock.patch("src.core.paths.is_frozen", return_value=frozen),
             mock.patch("builtins.input") as prompted,
             mock.patch("builtins.print"),
         ):
@@ -110,7 +110,7 @@ class PauseTest(MainTestCase):
         with (
             mock.patch("main.parse_args", return_value=options()),
             mock.patch("main.generate", return_value="/sortie"),
-            mock.patch("core.paths.is_frozen", return_value=True),
+            mock.patch("src.core.paths.is_frozen", return_value=True),
             mock.patch("builtins.input", side_effect=OSError("lost sys.stdin")),
             mock.patch("builtins.print"),
         ):

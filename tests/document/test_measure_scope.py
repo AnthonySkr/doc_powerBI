@@ -8,8 +8,8 @@ sans qu'on sache laquelle est un trou, pas un choix.
 
 import unittest
 
-from core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
-from core.models import (
+from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
+from src.core.models import (
     DaxMeasure,
     PowerBIReport,
     ReportPage,
@@ -17,8 +17,8 @@ from core.models import (
     VisualElement,
     VisualFilter,
 )
-from pbi_extractor.dependencies import analyze_dependencies, measures_used_in_report
-from report_generator.context import build_context
+from src.pbi_extractor.dependencies import analyze_dependencies, measures_used_in_report
+from src.report_generator.context import build_context
 
 
 def measure(name: str, expression: str = "1") -> DaxMeasure:

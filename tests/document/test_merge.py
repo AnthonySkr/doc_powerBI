@@ -9,8 +9,8 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 from docx.shared import Pt
 
-from core import console
-from report_generator.merge import (
+from src.core import console
+from src.report_generator.merge import (
     CHANGED,
     NEW,
     UNCHANGED,
@@ -19,9 +19,9 @@ from report_generator.merge import (
     read_previous,
     salvage,
 )
-from report_generator.merge import blocks as block_parser
-from report_generator.merge.blocks import FREE, OWNED
-from report_generator.merge.previous import PreviousDocument
+from src.report_generator.merge import blocks as block_parser
+from src.report_generator.merge.blocks import FREE, OWNED
+from src.report_generator.merge.previous import PreviousDocument
 
 
 class MarkerFormatTest(unittest.TestCase):

@@ -16,10 +16,10 @@ from docx import Document
 from docx.oxml.ns import qn
 from docx.shared import Cm
 
-from core import console
-from core.config import DocConfig
-from report_generator.merge import markers
-from report_generator.word import generate_word_documentation
+from src.core import console
+from src.core.config import DocConfig
+from src.report_generator.merge import markers
+from src.report_generator.word import generate_word_documentation
 from tests.document.test_merge_cycle import png
 
 ANCHOR = qn("wp:anchor")

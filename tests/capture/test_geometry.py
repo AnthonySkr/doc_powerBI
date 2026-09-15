@@ -8,7 +8,7 @@ capture tombe sur le visuel ou à côté.
 
 import unittest
 
-from gui_automator.geometry import Rect, Size, fit, place, union
+from src.gui_automator.geometry import Rect, Size, fit, place, union
 
 
 class FitTest(unittest.TestCase):

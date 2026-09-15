@@ -13,14 +13,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from core import console
-from core.models import ReportPage, Visual
-from gui_automator import plan as capture_plan
-from gui_automator.capturer import run_session as run
-from gui_automator.fake import FakeRecorder, solid_png
-from gui_automator.geometry import Rect
-from gui_automator.library import CaptureLibrary
-from gui_automator.recorder import CaptureError
+from src.core import console
+from src.core.models import ReportPage, Visual
+from src.gui_automator import plan as capture_plan
+from src.gui_automator.capturer import run_session as run
+from src.gui_automator.fake import FakeRecorder, solid_png
+from src.gui_automator.geometry import Rect
+from src.gui_automator.library import CaptureLibrary
+from src.gui_automator.recorder import CaptureError
 
 
 def visual(name: str, title: str, x=0.0, y=0.0, width=400.0, height=300.0) -> Visual:
