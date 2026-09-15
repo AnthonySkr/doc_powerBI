@@ -28,6 +28,10 @@ class PipelineError(Exception):
     """Erreur bloquante, à afficher à l'utilisateur avant de sortir."""
 
 
+# Étapes annoncées à l'utilisateur : modèle, rapport, questions, document.
+TOTAL_STEPS = 4
+
+
 def run(options: Options) -> str:
     """Génère la documentation et retourne le dossier de sortie."""
     if not os.path.isfile(options.pbip_path):
@@ -39,16 +43,17 @@ def run(options: Options) -> str:
         raise PipelineError(f"Configuration : {e}") from e
 
     project = PbipProject(options.pbip_path)
-    console.banner(f"Rapport : {project.name}")
-    console.info(f"Config : {config.path}")
 
     error = project.missing()
     if error:
         raise PipelineError(error)
 
-    console.info(f"SemanticModel : {os.path.basename(project.semantic_model_dir)}")  # type: ignore
-    console.info(f"Report        : {os.path.basename(project.report_dir)}")  # type: ignore
     console.blank()
+    console.field("Rapport", project.name)
+    console.field("Projet", project.directory)
+    console.field("Modèle", os.path.basename(project.semantic_model_dir))  # type: ignore
+    console.field("Pages", os.path.basename(project.report_dir))  # type: ignore
+    console.field("Plan", config.path)
 
     report = _collect(project)
 
@@ -80,25 +85,22 @@ def _output_dir(config: DocConfig, report: PowerBIReport, inputs: dict[str, Any]
 
 def _collect(project: PbipProject) -> PowerBIReport:
     """Lit le modèle sémantique et le rapport, puis croise les deux."""
-    console.step("Étape 1 — Chargement du modèle sémantique")
+    console.step("Modèle de données", 1, TOTAL_STEPS)
     all_measures, tables = load_semantic_model(project.semantic_model_dir)  # type: ignore
-    console.blank()
-
     if all_measures:
-        console.step("Étape 2 — Analyse des dépendances")
         dependencies.analyze_dependencies(all_measures)
-        console.info(f"Dépendances calculées pour {len(all_measures)} mesures")
-        console.blank()
+        console.done(f"dépendances calculées pour {len(all_measures)} mesure(s)")
 
-    console.step("Étape 3 — Lecture du rapport")
+    console.step("Rapport", 2, TOTAL_STEPS)
     report = parse_report(project.report_dir, report_name=project.name)  # type: ignore
     report.all_measures = all_measures
     report.tables = tables
     report.measures_used_in_report = dependencies.measures_used_in_report(report, all_measures)
 
-    console.info(f"Mesures dans les visuels : {len(report.measures_in_visuals)}")
-    console.info(f"Mesures totales (+ deps) : {len(report.measures_used_in_report)}")
-    console.blank()
+    console.done(f"{len(report.measures_in_visuals)} mesure(s) affichée(s) dans les visuels")
+    console.done(
+        f"{len(report.measures_used_in_report)} mesure(s) à documenter (dépendances comprises)"
+    )
 
     return report
 
@@ -118,7 +120,7 @@ def _ask_inputs(
         "choices": {"visuals": filters.documentable_titles(report, config)},
     }
     if interactive:
-        return prompts.ask_inputs(config, base_context, remembered)
+        return prompts.ask_inputs(config, base_context, remembered, step=(3, TOTAL_STEPS))
     return prompts.default_inputs(config, base_context, remembered)
 
 
@@ -130,7 +132,7 @@ def _generate(
     report_name: str,
     interactive: bool,
 ) -> None:
-    console.step("Étape 4 — Génération du document")
+    console.step("Document Word", TOTAL_STEPS, TOTAL_STEPS)
 
     context = build_context(report, report.all_measures, config, inputs)
     output_name = render(config.document.get("output_name"), context) or (
@@ -149,7 +151,7 @@ def _generate(
         raise PipelineError(str(e)) from e
 
     console.blank()
-    console.info(log.summary())
+    console.done(log.summary())
     for line in log.details():
         console.detail(line)
 

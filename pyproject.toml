@@ -1,6 +1,6 @@
 [project]
 name = "powerbi-doc"
-version = "1.0.0"
+dynamic = ["version"]
 description = "Générateur automatique de documentation Power BI (.pbip)"
 requires-python = ">=3.14"
 dependencies = [
@@ -39,6 +39,10 @@ help = "task --list"
 
 [tool.setuptools]
 packages = ["src"]
+
+# La version est déclarée dans `src/__init__.py`, seul endroit où elle vit.
+[tool.setuptools.dynamic]
+version = { attr = "src.__version__" }
 
 [tool.ruff]
 line-length = 100

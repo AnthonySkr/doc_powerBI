@@ -12,10 +12,14 @@ import os
 import platform
 import shutil
 import sys
-import tomllib
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+# Le dépôt doit d'abord être sur le chemin d'import (voir sys.path ci-dessus).
+from src import __version__
+
 DIST = os.path.join(ROOT, "dist")
 
 # Fichiers livrés à côté de l'exécutable, et modifiables par l'utilisateur.
@@ -26,7 +30,7 @@ README = "README.md"
 
 
 def main() -> int:
-    version = _version()
+    version = __version__
     system = platform.system().lower()
     executable = _executable()
 
@@ -51,11 +55,6 @@ def main() -> int:
     print(f"Dossier : {os.path.relpath(folder, ROOT)}")
     print(f"Archive : {os.path.relpath(archive, ROOT)}  ({os.path.getsize(archive) / 1e6:.1f} Mo)")
     return 0
-
-
-def _version() -> str:
-    with open(os.path.join(ROOT, "pyproject.toml"), "rb") as f:
-        return tomllib.load(f)["project"]["version"]
 
 
 def _executable() -> str | None:

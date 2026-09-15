@@ -26,7 +26,7 @@ def load_semantic_model(
     signale une anomalie, et la seconde définition est ignorée.
     """
     paths = tmdl_files(semantic_model_path)
-    console.info(f"Fichiers .tmdl trouvés : {len(paths)}")
+    console.done(f"{len(paths)} fichier(s) de table lu(s)")
 
     measures: dict[str, DaxMeasure] = {}
     tables: list[ModelTable] = []
@@ -47,5 +47,5 @@ def load_semantic_model(
                 continue
             measures[measure.name] = measure
 
-    console.info(f"{len(tables)} tables et {len(measures)} mesures chargées")
+    console.done(f"{len(tables)} table(s) et {len(measures)} mesure(s) chargée(s)")
     return measures, tables
