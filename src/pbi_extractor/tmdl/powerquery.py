@@ -14,9 +14,8 @@ def parse_steps(m_code: str) -> list[TransformationStep]:
     """
     Découpe un script `let ... in ...` en étapes.
 
-    Chaque étape retient son expression deux fois : ramenée sur une ligne, pour
-    tenir dans une cellule de tableau, et telle qu'écrite, pour être reproduite
-    avec son indentation dans un bloc de code.
+    Chaque étape retient son expression deux fois : ramenée sur une ligne pour
+    tenir dans un tableau, et telle qu'écrite pour un bloc de code.
     """
     body = _let_body(m_code) if m_code else None
     if body is None:
@@ -43,8 +42,10 @@ def parse_steps(m_code: str) -> list[TransformationStep]:
 
 def source_expression(steps: list[TransformationStep], m_code: str) -> str:
     """
-    Paramètres de connexion de la table : l'expression de son étape source,
-    telle qu'écrite — son indentation fait partie de ce qui est documenté.
+    Paramètres de connexion de la table.
+
+    C'est l'expression de son étape source, telle qu'écrite : son indentation
+    fait partie de ce qui est documenté.
     """
     for step in steps:
         if step.name.lower() in ("source", "src"):
@@ -81,10 +82,10 @@ def split_top_level(text: str, separator: str) -> list[str]:
 
 def dedent(text: str) -> str:
     """
-    Ramène un bloc de code à la marge en gardant son indentation relative.
+    Ramène un bloc de code à la marge, son indentation relative gardée.
 
-    Le code M d'une partition est indenté par rapport au fichier .tmdl qui le
-    contient : sans cela, chaque ligne du document hériterait de cette marge.
+    Le code M d'une partition est indenté dans le fichier `.tmdl` : sans cela,
+    chaque ligne du document hériterait de cette marge.
     """
     lines = text.strip("\n").split("\n")
     indented = [line for line in lines[1:] if line.strip()]

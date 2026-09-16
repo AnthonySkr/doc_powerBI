@@ -15,22 +15,12 @@ dev = [
     "pyinstaller>=6.10",
     "pdoc>=16.0",
 ]
-capture = [
-    "pywinauto>=0.6.9 ; sys_platform == 'win32'",
-    "mss>=9.0",
-]
-
 [project.scripts]
 powerbi-doc = "main:main"
 
 [tool.taskipy.tasks]
 install = "pip install -e \".[dev]\""
 run = "python main.py"
-
-#   task capture-plan -- rapport.pbip     ce qui serait capturé
-#   task calibrate -- rapport.pbip        régler le cadrage de la fenêtre
-capture-plan = "python main.py --no-pause --capture-plan"
-calibrate = "python main.py --no-pause --calibrate"
 
 #   task docs                 tout le projet, servi et rechargé à chaud
 #   task docs-build           le site statique, dans docs/site/

@@ -2,9 +2,8 @@
 Lecture du document généré précédemment.
 
 Le document est ouvert, découpé en blocs ancrés, et **laissé ouvert** : la
-fusion y puise non seulement du XML mais aussi les parties associées (une
-capture collée par l'utilisateur vit dans une partie du .docx, pas dans son
-paragraphe).
+fusion y puise non seulement du XML mais aussi les parties associées — une
+image collée vit dans une partie du `.docx`, pas dans son paragraphe.
 
 Le document n'est jamais modifié : il est lu, puis un document neuf est écrit.
 """
@@ -27,7 +26,15 @@ UNCHANGED = "unchanged"
 
 @dataclass
 class PreviousDocument:
-    """Le document précédent, tel qu'il servira à la fusion."""
+    """
+    Le document précédent, tel qu'il servira à la fusion.
+
+    Attributes:
+        path: son chemin, vide s'il n'y en avait pas.
+        document: le `.docx` ouvert, gardé pour ses parties liées.
+        blocks: son corps découpé en blocs ancrés.
+        fingerprints: identifiant d'élément → empreinte relevée sur son ancre.
+    """
 
     path: str = ""
     document: object | None = None
@@ -36,6 +43,7 @@ class PreviousDocument:
 
     @property
     def exists(self) -> bool:
+        """Y a-t-il seulement un document précédent à fusionner ?"""
         return bool(self.path)
 
     def status(self, element_id: str, fingerprint: str) -> str:

@@ -49,7 +49,8 @@ demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
 
 Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
 avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
-capture correspondante une fois le document généré.
+capture correspondante une fois le document généré. Une régénération les
+retrouve et les remet en place.
 
 ### Groupes de visuels
 
@@ -522,24 +523,23 @@ La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
 un fichier à embarquer, une icône (`icon=`) ou un module manquant
 (`hiddenimports`).
 
-## Un programme, trois modules
+## Un programme, deux modules
 
-Le projet est **un seul programme**, découpé en trois modules qui ont chacun
+Le projet est **un seul programme**, découpé en deux modules qui ont chacun
 une responsabilité et une seule :
 
 ```
-.pbip  ──►  pbi_extractor  ──►  [ gui_automator ]  ──►  report_generator  ──►  .docx
+.pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
 ```
 
 | Module | Sa seule responsabilité |
 | --- | --- |
 | `pbi_extractor` | Lire le projet `.pbip` et retourner ce qu'il contient |
-| `gui_automator` | Piloter Power BI Desktop et enregistrer des images |
-| `report_generator` | Écrire le `.docx` à partir de ces données et de ces images |
+| `report_generator` | Écrire le `.docx` à partir de ces données |
 
-Ils vivent sous `src/`. Aucun des trois ne connaît les autres : ils ne
-partagent que `src/core`, et les données qui passent de l'un à l'autre.
-`main.py`, à la racine, les enchaîne — c'est tout ce qu'il fait.
+Ils vivent sous `src/`. Aucun des deux ne connaît l'autre : ils ne partagent
+que `src/core`, et les données qui passent de l'un à l'autre. `main.py`, à la
+racine, les enchaîne — c'est tout ce qu'il fait.
 
 ### Ce qui circule
 
@@ -547,7 +547,6 @@ Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `src/core/models.p
 
 ```python
 metadata = extract(project)  # produit par l'extraction
-capturer.capture(metadata, config, options)  # enrichi de ses images
 write_document(metadata, config, inputs, output_dir)  # lu par le document
 ```
 
@@ -556,7 +555,7 @@ Rien ne transite par le disque entre deux étapes : pas de fichier intermédiair
 
 ### Le socle commun — `src/core/`
 
-Ce que les trois partagent, et rien de plus :
+Ce que les deux partagent, et rien de plus :
 
 | Module | Rôle |
 | --- | --- |
@@ -571,12 +570,8 @@ Ce que les trois partagent, et rien de plus :
 | `paths.py` | La localisation des fichiers livrés (exécutable compris) |
 | `window.py` | La fenêtre console de l'exécutable : attente et plantages |
 
-**`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
-jamais les uns des autres.**
-
-`selection.py` y vit parce que deux modules le consultent : le document pour
-savoir quoi écrire, la capture pour savoir quoi photographier — photographier
-un visuel que le document tait serait du temps perdu.
+**`core` ne dépend d'aucun des deux modules ; les deux dépendent de lui, et
+jamais l'un de l'autre.**
 
 ### Lire la documentation du code
 
@@ -586,7 +581,7 @@ Les docstrings et les annotations du code sont servies comme un site, par
 ```bash
 task docs                    # tout le projet, sur http://127.0.0.1:8080
 task docs -- extractor       # le seul module d'extraction
-task docs -- capturer        # … ou capturer, writer, core, main
+task docs -- writer          # … ou writer, core, main
 task docs-build              # le site statique, dans docs/site/
 ```
 
@@ -600,83 +595,19 @@ l'intérêt par rapport à une documentation écrite à côté.
 `tools/docs.py` s'occupe d'énumérer les modules (un paquet qui déclare `__all__`
 cache ses sous-modules à pdoc) et de découper par module.
 
-## Captures d'écran des visuels
-
-Le document réserve la place des captures ; `gui_automator` les prend.
-**Les deux ne se connaissent que par un dossier d'images** — celui que
-`capture.directory` désigne, à côté du `.pbip` :
-
-```
-assets/
-    page_ventes/
-        v_evolution.png       ← nom technique du visuel, pas son titre
-        g_indicateurs.png     ← un groupe : l'étendue de ses visuels
-```
-
-C'est tout le contrat. Renommer un visuel dans Power BI ne perd pas sa capture,
-et remplacer une image par une meilleure — retouchée, prise autrement — revient
-à écrire dans ce dossier.
-
-### Comment ça marche
-
-Power BI Desktop ne rend pas ses visuels comme des contrôles Windows : le
-canevas est une surface dessinée d'un bloc, dont aucune API ne sait extraire
-« l'image du visuel X ». Ce qui est possible, en revanche, c'est de
-**photographier l'écran et de recadrer d'après le rapport** — qui déclare la
-place de chaque visuel dans un canevas logique de 1280 × 720.
-
-    pywinauto   trouver la fenêtre, l'amener devant, changer de page
-    mss         photographier une région de l'écran, et la rendre en PNG
-
-Les deux sont en option : `pip install -e ".[capture]"`.
-
-### Tester module par module
-
-Chaque étape s'éprouve seule, de la plus sûre à la moins sûre :
-
-| Commande | Ce qu'elle vérifie | Besoin de Power BI |
-| --- | --- | --- |
-| `task test` | le cadrage, le plan, le dossier, le déroulé d'une séance | non |
-| `python main.py <rapport> --capture-plan` | ce qui serait capturé, et à quelles dimensions | non |
-| `python main.py <rapport> --fake-captures` | la chaîne entière, en rectangles unis | non |
-| `python main.py <rapport> --calibrate` | le cadrage du canevas dans la fenêtre | oui |
-| `python main.py <rapport> --captures --manual-pages` | les vraies captures, pages changées à la main | oui |
-| `python main.py <rapport> --captures` | tout, y compris le changement de page | oui |
-
-`--page` et `--shot` restreignent à une page ou à une prise : de quoi reprendre
-une seule capture sans redérouler le rapport.
-
-### Régler le cadrage
-
-`--calibrate` écrit deux images dans `assets/_calibrage/` : la fenêtre
-entière, et ce que l'outil croit être le canevas. Si `canevas.png` montre un
-bout de ruban ou le volet Visualisations, ajustez `capture.window` du plan :
-
-```yaml
-capture:
-  directory: assets     # où ranger les images, à côté du .pbip
-  window:
-    inset_top: 130      # ruban
-    inset_right: 340    # volets Visualisations et Filtres
-    inset_bottom: 60    # barre des onglets de page
-```
-
-Puis relancez `--calibrate` jusqu'à ce que `canevas.png` tienne le rapport
-entier, et rien d'autre.
-
 ## Structure du projet
 
 Chaque module a une responsabilité unique ; ce qu'il expose est déclaré par son
 `__init__.py`, et un seul fichier en porte le point d'entrée — `extractor.py`,
-`capturer.py`, `writer.py`. Les tests sont rassemblés sous `tests/`.
+`writer.py`. Les tests sont rassemblés sous `tests/`.
 
 ```
-main.py                       le chef d'orchestre : enchaîne les trois modules
+main.py                       le chef d'orchestre : enchaîne les deux modules
 config.yaml                   le plan du document
 template-doc-pbib.docx        le template Word
 
 src/
-  core/                       le socle commun — aucun module n'en dépend d'un autre
+  core/                       le socle commun, dont aucun module ne dépend
       models.py               les structures qui circulent, dont PowerBiMetadata
       config.py               le plan : chargement, valeurs par défaut, accès
       expressions.py          variables {{ }}, listes `over:`, conditions `when:`
@@ -701,15 +632,6 @@ src/
       report/                 rapport PBIR
           pages.py              pages, groupes et visuels
           fields.py             projections et filtres
-
-  gui_automator/              Power BI Desktop ──► les PNG
-      capturer.py             le point d'entrée : une séance, de bout en bout
-      geometry.py             du repère du rapport à celui de l'écran
-      plan.py                 ce qu'il y a à capturer, sans rien ouvrir
-      library.py              où vivent les images, et sous quel nom
-      recorder.py             le contrat d'un preneur de captures
-      fake.py                 un preneur qui n'ouvre rien : rectangles unis
-      desktop.py              le vrai : Power BI Desktop (pywinauto + mss)
 
   report_generator/           PowerBiMetadata ──► le .docx
       writer.py               le point d'entrée : l'écriture et son bilan
@@ -742,9 +664,8 @@ src/
           transplant.py         recopie d'un contenu et de ses dépendances
           changes.py            bilan des ajouts / modifications / retraits
 
-assets/                       destination des captures (voir assets/README.md)
-tests/                        core/, extract/, capture/, document/, et le
-                              parcours complet sur le plan livré
+tests/                        core/, extract/, document/, et le parcours
+                              complet sur le plan livré
 tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
 docs/templates/               habillage du site de documentation
@@ -760,8 +681,6 @@ powerbi-doc.spec              recette de construction de l'exécutable
 | exposer une donnée au plan | `src/core/models.py` puis `src/report_generator/context.py` |
 | ajouter un filtre `data:` | `src/core/selection.py` ou `src/report_generator/filters.py` |
 | ajouter un type de question | `src/core/questions.py`, branché dans `src/core/prompts.py` → `_ask` |
-| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `src/gui_automator/recorder.py`) |
-| corriger un cadrage de capture | `src/gui_automator/geometry.py`, et ses tests |
 | changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `src/core/models.py` |
 | changer l'enchaînement des étapes | `main.py` → `generate` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
@@ -786,11 +705,4 @@ task build      # construire l'exécutable
 task package    # construire le zip à distribuer
 task clean      # nettoyer les caches et les artefacts de construction
 task docs       # servir la documentation du code
-```
-
-Mise au point des captures, sans écrire de document :
-
-```bash
-task capture-plan -- rapport.pbip     # ce qui serait capturé
-task calibrate    -- rapport.pbip     # régler le cadrage de la fenêtre
 ```

@@ -86,8 +86,8 @@ def default_inputs(
     Réponses retenues sans rien demander (`--no-input`).
 
     Celles de la génération précédente d'abord : une exécution automatisée
-    reconduit ainsi les choix faits la dernière fois, plutôt que de repartir des
-    valeurs figées du plan et de défaire le document.
+    reconduit les choix déjà faits, plutôt que de défaire le document en
+    repartant des valeurs figées du plan.
     """
     return collect(config, context, remembered, lambda _item, _ctx, proposed: proposed)
 
@@ -101,13 +101,11 @@ def ask_inputs(
     config: DocConfig,
     context: dict[str, Any],
     remembered: dict[str, Any] | None = None,
-    step: tuple[int, int] | tuple[()] = (),
 ) -> dict[str, Any]:
-    """Pose les questions déclarées dans le plan."""
+    """Pose à l'utilisateur les questions déclarées dans le plan."""
     if not config.inputs:
         return {}
 
-    console.step("Renseignements", *step)
     console.note("Entrée valide la valeur proposée entre crochets.")
     answers = collect(config, context, remembered, _ask)
     console.blank()
@@ -131,16 +129,16 @@ def _ask(item: dict[str, Any], context: dict[str, Any], proposed: Any) -> Any:
 
 def make_text_provider(enabled: bool) -> TextProvider | None:
     """
-    Retourne de quoi proposer la réécriture des textes, ou None.
+    De quoi proposer la réécriture des textes du plan, ou None.
 
-    Un bloc marqué `editable:` porte dans le YAML un texte par défaut. Quand
-    l'utilisateur le demande, chacun lui est proposé avant d'être écrit : il le
-    garde d'un Entrée, ou le remplace.
+    Un bloc marqué `editable:` porte un texte par défaut. Quand l'utilisateur
+    le demande, chacun lui est montré avant d'être écrit : un Entrée le garde.
     """
     return _propose if enabled else None
 
 
 def _propose(block: dict[str, Any], default_text: str) -> str:
+    """Montre le texte du plan et retourne celui que l'utilisateur retient."""
     console.question(block.get("prompt") or block.get("id") or "texte")
     console.note(f"« {default_text} »")
     if not questions.confirm("Modifier ce texte ?", False):

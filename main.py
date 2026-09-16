@@ -1,7 +1,9 @@
 """
 Génération de la documentation Word d'un rapport Power BI (`.pbip`).
 
-Le chef d'orchestre : il enchaîne les trois modules, il ne travaille pas.
+Le chef d'orchestre : il enchaîne les étapes, il ne travaille pas.
+
+    .pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
 
 Un seul objet circule d'un bout à l'autre, le `PowerBiMetadata` : rien ne
 transite par le disque entre deux étapes.
@@ -9,7 +11,7 @@ transite par le disque entre deux étapes.
 
 import argparse
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -17,48 +19,33 @@ from src.core import __version__, answers, console, prompts
 from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
 from src.core.models import PowerBiMetadata
 from src.core.window import ConsoleWindow
-from src.gui_automator import CaptureError, capturer
 from src.pbi_extractor import ExtractError, PbipProject, extract, open_project
-from src.report_generator import (
-    DocumentError,
-    output_directory,
-    report_result,
-    write_document,
-)
+from src.report_generator import DocumentError, output_directory, report_result, write_document
 
-BASE_STEPS = 3
+STEPS = 3
+"""Lecture du rapport, questions, écriture du document."""
 
 
 class PipelineError(Exception):
     """Erreur bloquante, à afficher à l'utilisateur avant de sortir."""
 
 
-class Steps:
-    """Le rang de l'étape en cours, sur le nombre d'étapes de l'exécution."""
-
-    def __init__(self, total: int):
-        self.total = total
-        self.done = 0
-
-    def next(self) -> tuple[int, int]:
-        self.done += 1
-        return self.done, self.total
-
-
 @dataclass(frozen=True)
 class Options:
-    """Ce que la ligne de commande demande."""
+    """
+    Ce que la ligne de commande demande.
+
+    Attributes:
+        pbip_path: chemin du fichier `.pbip` à documenter.
+        config_path: chemin du plan YAML.
+        interactive: poser les questions du plan, plutôt que prendre ses défauts.
+        pause: attendre une touche avant de fermer la fenêtre.
+    """
 
     pbip_path: str
     config_path: str = DEFAULT_CONFIG_PATH
     interactive: bool = True
     pause: bool = True
-    captures: bool = False
-    capture_options: capturer.CaptureOptions = field(
-        default_factory=capturer.CaptureOptions
-    )
-    show_capture_plan: bool = False
-    calibrate: bool = False
 
 
 # ─────────────────────────────────────────────────────────────
@@ -67,95 +54,49 @@ class Options:
 
 
 def generate(options: Options) -> Path:
-    """Génère la documentation et retourne le dossier de sortie."""
+    """
+    Enchaîne les trois étapes et retourne le dossier de sortie.
+
+    Raises:
+        PipelineError: plan illisible, projet introuvable, écriture impossible.
+    """
     config = _config(options.config_path)
     project = _project(options.pbip_path)
     _announce(project, config)
 
-    steps = Steps(BASE_STEPS + (1 if options.captures else 0))
-
-    metadata = _extract(project, steps)
-    if options.calibrate or options.show_capture_plan:
-        _inspect_captures(metadata, config, options)
-        return project.directory
-
-    if options.captures:
-        _capture(metadata, config, options, steps)
-
-    inputs = _ask(metadata, config, options.interactive, steps)
+    metadata = _extract(project)
+    inputs = _ask(metadata, config, options.interactive)
     output_dir = project.output_dir(output_directory(metadata, config, inputs))
 
-    # Les textes types du plan ne sont proposés à la réécriture que si
-    # l'utilisateur l'a demandé, et seulement en interactif.
-    rewrite = prompts.make_text_provider(
-        options.interactive and bool(inputs.get("editer_textes", False))
-    )
-
-    console.step("Document Word", *steps.next())
-    _document(metadata, config, inputs, output_dir, rewrite)
+    console.step("Document Word", 3, STEPS)
+    _document(metadata, config, inputs, output_dir, _rewriter(options, inputs))
     return output_dir
 
 
-def _extract(project: PbipProject, steps: Steps) -> PowerBiMetadata:
+def _extract(project: PbipProject) -> PowerBiMetadata:
     """Première étape : le `.pbip` devient un `PowerBiMetadata`."""
-    console.step("Lecture du rapport", *steps.next())
+    console.step("Lecture du rapport", 1, STEPS)
     try:
         return extract(project)
     except ExtractError as e:
         raise PipelineError(str(e)) from e
 
 
-def _capture(
-    metadata: PowerBiMetadata, config: DocConfig, options: Options, steps: Steps
-) -> None:
+def _ask(metadata: PowerBiMetadata, config: DocConfig, interactive: bool) -> dict[str, Any]:
     """
-    Étape facultative : photographier les visuels dans Power BI Desktop.
+    Deuxième étape : les réponses aux questions du plan.
 
-    Une séance qui échoue n'emporte pas la génération : le document garde ses
-    emplacements réservés.
+    Celles de la génération précédente sont reproposées, puis réécrites. Elles
+    vivent à côté du `.pbip`, et non dans le dossier de sortie — que l'une
+    d'elles désigne.
     """
-    console.step("Captures des visuels", *steps.next())
-    try:
-        capturer.capture(metadata, config, options.capture_options)
-    except CaptureError as e:
-        console.warn(f"Captures abandonnées ({e}) — le document réservera leur place.")
-
-
-def _inspect_captures(
-    metadata: PowerBiMetadata, config: DocConfig, options: Options
-) -> None:
-    """`--capture-plan` et `--calibrate` : ils n'écrivent aucun document."""
-    directory = capturer.captures_dir(metadata, config)
-    try:
-        if options.calibrate:
-            capturer.calibrate(config, directory)
-        else:
-            plans = capturer.shot_plan(metadata, config, options.capture_options)
-            capturer.describe_plan(plans, capturer.CaptureLibrary(directory))
-    except CaptureError as e:
-        raise PipelineError(str(e)) from e
-
-
-def _ask(
-    metadata: PowerBiMetadata, config: DocConfig, interactive: bool, steps: Steps
-) -> dict[str, Any]:
-    """
-    Les questions du plan, entre la lecture et l'écriture.
-
-    Les réponses de la dernière génération sont reproposées : re-cocher à
-    l'identique une liste de visuels écartés n'est pas une chose à confier à la
-    mémoire de l'utilisateur. Elles vivent à côté du `.pbip`, et non dans le
-    dossier de sortie — que l'une d'elles désigne.
-    """
+    console.step("Renseignements", 2, STEPS)
     context = prompts.base_context(metadata.report, config)
     path = answers.path(config, {"report": metadata.report}, metadata.project_dir)
     remembered = answers.read(path)
 
-    if interactive:
-        given = prompts.ask_inputs(config, context, remembered, step=steps.next())
-    else:
-        steps.next()
-        given = prompts.default_inputs(config, context, remembered)
+    ask = prompts.ask_inputs if interactive else prompts.default_inputs
+    given = ask(config, context, remembered)
 
     answers.write(path, given)
     return given
@@ -177,12 +118,20 @@ def _document(
     report_result(result)
 
 
+def _rewriter(options: Options, inputs: dict[str, Any]) -> prompts.TextProvider | None:
+    """Relecture des textes types du plan, si l'utilisateur l'a demandée."""
+    return prompts.make_text_provider(
+        options.interactive and bool(inputs.get("editer_textes", False))
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 #  Détails
 # ─────────────────────────────────────────────────────────────
 
 
 def _announce(project: PbipProject, config: DocConfig) -> None:
+    """Rappelle à l'écran ce qui va être documenté, et avec quel plan."""
     console.blank()
     console.field("Rapport", project.name)
     console.field("Projet", str(project.directory))
@@ -192,6 +141,7 @@ def _announce(project: PbipProject, config: DocConfig) -> None:
 
 
 def _config(path: str) -> DocConfig:
+    """Charge le plan, ou dit pourquoi il est inutilisable."""
     try:
         return load_config(path)
     except (FileNotFoundError, ValueError) as e:
@@ -199,6 +149,7 @@ def _config(path: str) -> DocConfig:
 
 
 def _project(pbip_path: str) -> PbipProject:
+    """Ouvre le projet `.pbip`, ou dit pourquoi il est inutilisable."""
     try:
         return open_project(pbip_path)
     except ExtractError as e:
@@ -211,6 +162,7 @@ def _project(pbip_path: str) -> PbipProject:
 
 
 def parse_args(argv: list[str] | None = None) -> Options:
+    """Lit la ligne de commande, et demande le `.pbip` s'il n'y figure pas."""
     parser = argparse.ArgumentParser(
         prog="main.py",
         description="Génère la documentation Word d'un rapport Power BI (.pbip).",
@@ -233,44 +185,6 @@ def parse_args(argv: list[str] | None = None) -> Options:
         action="store_true",
         help="Ne pas attendre de touche à la fin (exécution automatisée)",
     )
-
-    captures = parser.add_argument_group("captures d'écran (facultatives)")
-    captures.add_argument(
-        "--captures",
-        action="store_true",
-        help="Photographier les visuels dans Power BI Desktop avant d'écrire",
-    )
-    captures.add_argument(
-        "--fake-captures",
-        action="store_true",
-        help="Produire des images unies sans ouvrir Power BI (éprouve la chaîne)",
-    )
-    captures.add_argument(
-        "--capture-plan",
-        action="store_true",
-        help="Afficher ce qui serait capturé, et s'arrêter là",
-    )
-    captures.add_argument(
-        "--calibrate",
-        action="store_true",
-        help="Écrire la fenêtre et le canevas, pour régler le cadrage",
-    )
-    captures.add_argument(
-        "--manual-pages",
-        action="store_true",
-        help="Changer de page à la main : le script attend avant chaque page",
-    )
-    captures.add_argument(
-        "--all-visuals",
-        action="store_true",
-        help="Capturer tout le rapport, sans suivre ce que le plan retient",
-    )
-    captures.add_argument(
-        "--page", default="", help="Ne capturer que les pages nommées ainsi"
-    )
-    captures.add_argument(
-        "--shot", default="", help="Ne capturer que les prises nommées ainsi"
-    )
     args = parser.parse_args(argv)
 
     return Options(
@@ -278,16 +192,6 @@ def parse_args(argv: list[str] | None = None) -> Options:
         config_path=args.config,
         interactive=not args.no_input,
         pause=not args.no_pause,
-        captures=args.captures or args.fake_captures,
-        capture_options=capturer.CaptureOptions(
-            fake=args.fake_captures,
-            manual_pages=args.manual_pages,
-            every_visual=args.all_visuals,
-            page=args.page,
-            shot=args.shot,
-        ),
-        show_capture_plan=args.capture_plan,
-        calibrate=args.calibrate,
     )
 
 

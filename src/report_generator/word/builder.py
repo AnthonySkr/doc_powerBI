@@ -6,8 +6,8 @@ et les `blocks` de la configuration et écrit ce qu'elles décrivent, à la suit
 du contenu déjà présent dans le template.
 
 Chaque `type:` de bloc a son écrivain, rassemblés dans `_block_writers`. Les
-emplacements de captures ont le leur à part (`figures.FigureWriter`) : ils
-portent une numérotation qui court d'une figure à l'autre.
+emplacements d'images ont le leur à part (`figures.FigureWriter`) : ils portent
+une numérotation qui court d'une figure à l'autre.
 """
 
 from collections.abc import Callable
@@ -33,6 +33,13 @@ TextProvider = Callable[[dict[str, Any], str], str]
 
 
 class DocumentBuilder:
+    """
+    Déroule le plan et écrit le document.
+
+    Un seul appel à faire, `build`. Le reste des méthodes est l'écriture d'une
+    section, d'un bloc ou d'un fragment de texte.
+    """
+
     def __init__(
         self,
         doc,
@@ -41,6 +48,7 @@ class DocumentBuilder:
         text_provider: TextProvider | None = None,
         previous: PreviousDocument | None = None,
     ):
+        """Prépare les écrivains que le parcours du plan mettra à contribution."""
         self.doc = doc
         # Toute écriture de contenu passe par là (voir `body.Body`).
         self.body = Body(doc)
@@ -65,6 +73,7 @@ class DocumentBuilder:
 
     # ── Point d'entrée ────────────────────────────────────────────
     def build(self) -> None:
+        """Écrit tout le document : page de garde, plan, table des matières."""
         self._write_cover()
         self._write_properties()
         self._write_header_footer()
@@ -104,8 +113,9 @@ class DocumentBuilder:
 
     def _write_header_footer(self) -> None:
         """
-        Remplace dans les en-têtes / pieds de page du template les textes
-        déclarés dans `document.header_footer.replacements`.
+        Remplace les textes repères des en-têtes et pieds de page.
+
+        Les règles viennent de `document.header_footer.replacements`.
         """
         rules = (self.config.document.get("header_footer") or {}).get("replacements") or []
         if not rules:
@@ -152,14 +162,15 @@ class DocumentBuilder:
         self, section: dict[str, Any], context: dict[str, Any], parent: str = ""
     ) -> None:
         """
-        Écrit une section du plan.
+        Écrit une section du plan, ses blocs et ses sous-sections.
 
-        `parent` est l'identifiant de la partie qui la contient : il sert à
-        repérer une sous-partie que le plan n'identifie pas autrement (ni
-        `bookmark:`, ni `id:`), et se transmet à ses propres filles.
-
-        Une partie déclarée `seed:` fait exception : son contenu — sous-parties
-        comprises — n'est pas repéré du tout, et lui revient en bloc.
+        Args:
+            section: la section du plan.
+            context: les données qu'elle parcourt.
+            parent: identifiant de la partie qui la contient, qui sert à
+                repérer une sous-partie sans `id:` ni `bookmark:`. Une partie
+                `seed:` fait exception : rien n'y est repéré, elle revient en
+                bloc à l'utilisateur.
         """
         if section.get("generate") is False or section.get("source") == "template":
             return
@@ -185,6 +196,7 @@ class DocumentBuilder:
                 self._write_section(child, context, element_id)
 
     def _write_title(self, section: dict[str, Any], context: dict[str, Any]) -> None:
+        """Titre de la section, son signet et sa mention technique."""
         title = render(section.get("title"), context)
         if not title:
             return
@@ -207,6 +219,7 @@ class DocumentBuilder:
             run.style = style
 
     def _needs_page_break(self, section: dict[str, Any]) -> bool:
+        """La section doit-elle commencer sur une nouvelle page ?"""
         if "page_break_before" in section:
             return bool(section["page_break_before"])
         return bool(self.config.rendering.get("page_break_before_heading_1")) and (
@@ -217,6 +230,7 @@ class DocumentBuilder:
     def _write_block(
         self, block: dict[str, Any], context: dict[str, Any], parent: str = ""
     ) -> None:
+        """Écrit un bloc du plan, selon son `type:`."""
         if not evaluate(block.get("when"), context):
             return
 
@@ -236,6 +250,7 @@ class DocumentBuilder:
             writer(block, context)
 
     def _write_paragraph(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+        """Texte du plan, proposé à la réécriture s'il est `editable:`."""
         text = render(block.get("text"), context)
         if block.get("editable") and self.text_provider is not None:
             text = self.text_provider(block, text)
@@ -250,8 +265,8 @@ class DocumentBuilder:
         """
         Zone à rédiger après génération.
 
-        Elle n'est écrite qu'à la première génération : ensuite, ce que
-        l'utilisateur y a mis est repris tel quel par la fusion.
+        Elle n'est écrite qu'une fois : ensuite, ce que l'utilisateur y a mis
+        est repris tel quel par la fusion.
         """
         options = self.config.rendering["user_fill"]
 
@@ -275,9 +290,8 @@ class DocumentBuilder:
         """
         Amorce d'une zone à rédiger.
 
-        Le bloc du plan dit ce qu'on attend à cet endroit (`hint:`) : autant
-        l'écrire, plutôt qu'un « [À compléter] » qui ne guide personne. Même
-        mise en forme dans les deux cas — c'est la même invitation à écrire.
+        Quand le bloc dit ce qu'on attend à cet endroit (`hint:`), autant
+        l'écrire plutôt qu'un « [À compléter] » qui ne guide personne.
         """
         hint = render(block.get("hint"), context)
         if hint:
@@ -327,8 +341,9 @@ class DocumentBuilder:
 
     def _value_list(self, expression: Any, context: dict[str, Any]) -> list[Any]:
         """
-        Résout `value_list` en conservant les objets `DocLink`, qui portent
-        leur propre cible de lien (« Utilisée dans » d'une mesure).
+        Résout `value_list:` en gardant les `DocLink` tels quels.
+
+        Ils portent leur propre cible — le « Utilisée dans » d'une mesure.
         """
         if isinstance(expression, str) and "{{" in expression:
             items = resolve_items(expression, context)
@@ -340,6 +355,7 @@ class DocumentBuilder:
         return [item for item in items if isinstance(item, DocLink) or render(item, context)]
 
     def _write_table(self, block: dict[str, Any], context: dict[str, Any]) -> None:
+        """Tableau construit sur la collection que `over:` désigne."""
         columns = block.get("columns") or []
         rows = resolve_items(block.get("over"), context)
         if not columns or not rows:
@@ -392,6 +408,7 @@ class DocumentBuilder:
         context: dict[str, Any],
         vertical_align: str,
     ) -> None:
+        """Ligne d'en-tête du tableau, répétée en haut de chaque page."""
         labels = block.get("header_labels") or [column.get("id", "") for column in columns]
         row = table.add_row()
         if block.get("repeat_header", True):
@@ -409,6 +426,7 @@ class DocumentBuilder:
             paragraph.add_run(render(label, context))
 
     def _fill_cell(self, cell, column: dict[str, Any], context: dict[str, Any]) -> None:
+        """Contenu d'une cellule : son texte, et le lien qu'il porte."""
         text = render(column.get("value"), context)
         paragraph = cell.paragraphs[0]
 
@@ -493,7 +511,7 @@ class DocumentBuilder:
                 paragraph.add_run().add_break()
 
     def _links_allowed(self, node: dict[str, Any], style_name: str) -> bool:
-        """Détermine si la détection automatique s'applique à ce contenu."""
+        """La détection automatique des mesures s'applique-t-elle ici ?"""
         if not self.links.enabled or not self.links.auto.get("enabled", True):
             return False
         if node.get("links") is False or node.get("auto_links") is False:
@@ -504,6 +522,7 @@ class DocumentBuilder:
 
 
 def _header_footer_parts(section) -> dict[str, tuple]:
+    """En-têtes et pieds de page d'une section, y compris première et paire."""
     return {
         "header": (section.header, section.first_page_header, section.even_page_header),
         "footer": (section.footer, section.first_page_footer, section.even_page_footer),
@@ -511,6 +530,7 @@ def _header_footer_parts(section) -> dict[str, tuple]:
 
 
 def _apply_column_widths(table, columns: list[dict[str, Any]]) -> None:
+    """Reporte sur chaque cellule la largeur déclarée par sa colonne."""
     for index, column in enumerate(columns):
         width = column_width(column)
         if width is not None:

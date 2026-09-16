@@ -1,10 +1,9 @@
 """
-Emplacements de captures : le repère, la légende et les pastilles.
+Emplacements d'images : le repère, la légende et les pastilles.
 
-Le script ne colle pas les images — personne ne sait les produire depuis un
-fichier .pbip. Il réserve leur place, la décrit, la numérote, et pose sous elle
-les repères qu'il ne restera qu'à faire glisser sur la capture une fois
-celle-ci collée.
+Le script ne colle pas les images. Il réserve leur place, la décrit, la
+numérote, et pose sous elle les repères qu'il ne restera qu'à faire glisser sur
+la capture une fois celle-ci collée.
 
 Trois choses distinctes, que le plan règle dans `rendering.image_placeholder` :
 
@@ -29,9 +28,10 @@ _MARKERS = "rendering.image_placeholder.markers"
 
 
 class FigureWriter:
-    """Écrit les emplacements de capture, et tient leur numérotation."""
+    """Écrit les emplacements d'images, et tient leur numérotation."""
 
     def __init__(self, body: Body, styles: StyleResolver, options: dict[str, Any], last_shape: int):
+        """Reprend la numérotation des formes au-dessus de celles du template."""
         self.body = body
         self.styles = styles
         self.options = options
@@ -41,7 +41,7 @@ class FigureWriter:
         self._shape_id = last_shape
 
     def write(self, block: dict[str, Any], context: dict[str, Any]) -> None:
-        """Réserve l'emplacement d'une capture, avec sa description."""
+        """Réserve l'emplacement d'une image, avec sa description."""
         description = render(block.get("description"), context)
         mode = numbering_mode(self.options.get("numbering"))
 
@@ -67,12 +67,11 @@ class FigureWriter:
 
     def _write_caption(self, description: str, figure: str, mode: str) -> None:
         """
-        Légende numérotée de la capture.
+        Légende numérotée de l'image.
 
-        Le numéro est un champ Word (`SEQ`), pas un texte : supprimer une
-        capture renumérote les suivantes à l'ouverture du document, sans
-        reprise à la main. `numbering: fixed` le fige dans le texte, pour un
-        document destiné à un lecteur qui ne recalcule pas les champs.
+        Le numéro est un champ Word (`SEQ`), pas un texte : en supprimer une
+        renumérote les suivantes à l'ouverture. `numbering: fixed` le fige,
+        pour un lecteur qui ne recalcule pas les champs.
         """
         template = str(self.options.get("caption_format", "{description}"))
         key = "rendering.image_placeholder.caption_format"
@@ -91,12 +90,11 @@ class FigureWriter:
 
     def _write_markers(self, block: dict[str, Any], context: dict[str, Any]) -> None:
         """
-        Repères numérotés à faire glisser sur la capture.
+        Repères numérotés à faire glisser sur l'image.
 
-        Les numéros sont ceux du tableau qui suit la capture — le plan désigne
-        la même liste. Ils sont posés en rangée sous l'emplacement, et n'ont
-        plus qu'à être déplacés un à un sur l'image : ce sont des formes
-        flottantes, elles ne bousculent rien en route.
+        Ce sont les numéros du tableau qui suit — le plan désigne la même
+        liste. Posés en rangée sous l'emplacement, ils n'ont plus qu'à être
+        déplacés un à un : formes flottantes, ils ne bousculent rien en route.
         """
         plan = block.get("markers")
         if not plan:

@@ -31,9 +31,7 @@ analysis = Analysis(
     ["main.py"],
     pathex=["."],
     datas=DATA,
-    # Tout est atteint depuis `main.py`, que PyInstaller suit. Les deux outils
-    # de capture sont facultatifs : ils ne sont embarqués que s'ils sont
-    # installés.
+    # Tout est atteint depuis `main.py`, que PyInstaller suit.
     hiddenimports=[],
     excludes=EXCLUDES,
     noarchive=False,

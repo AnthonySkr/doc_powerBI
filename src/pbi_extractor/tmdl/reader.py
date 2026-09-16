@@ -66,6 +66,7 @@ def table_name(content: str) -> str:
 
 
 def indent_of(line: str) -> int:
+    """Nombre d'espaces en tête de ligne."""
     return len(line) - len(line.lstrip())
 
 
@@ -104,7 +105,9 @@ def block_header(first_line: str, keyword: str) -> tuple[str | None, str | None,
     Les apostrophes internes d'un nom quoté sont doublées en TMDL
     (`measure 'Chiffre d''affaires'`).
 
-    Retourne (nom, expression inline ou None, ouverture d'un bloc ```).
+    Returns:
+        Le nom, l'expression écrite sur la même ligne (ou None), et si la
+        ligne ouvre un bloc délimité par ```.
     """
     match = re.match(_HEADER.format(keyword=keyword), first_line)
     if not match:

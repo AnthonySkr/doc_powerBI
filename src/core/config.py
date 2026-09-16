@@ -18,18 +18,15 @@ from src.core.expressions import resolve_options
 
 __all__ = [
     "DEFAULTS",
-    "DEFAULT_CAPTURES_DIR",
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_OUTPUT_DIR",
     "DocConfig",
     "load_config",
 ]
 
-# Retenus faute de mieux : le plan cherché à côté de l'exécutable, et les deux
-# dossiers créés à côté du `.pbip`.
+# Le plan cherché à côté de l'exécutable, et le dossier créé à côté du `.pbip`.
 DEFAULT_CONFIG_PATH = "config.yaml"
 DEFAULT_OUTPUT_DIR = "doc"
-DEFAULT_CAPTURES_DIR = "assets"
 
 
 DEFAULTS: dict[str, Any] = {
@@ -178,38 +175,27 @@ DEFAULTS: dict[str, Any] = {
             "intro": "",
         },
     },
-    # Captures d'écran des visuels (`--captures`). Le document ne les prend pas
-    # lui-même : il les trouve dans `directory` si elles y sont, et réserve
-    # leur place sinon.
-    "capture": {
-        "directory": DEFAULT_CAPTURES_DIR,
-        # Fenêtre de Power BI Desktop, et ce qui entoure son canevas — ruban,
-        # volets de droite, barre d'onglets. Ces marges dépendent de la version
-        # et de l'écran : `--calibrate` écrit de quoi les régler à coup sûr.
-        "window": {
-            "title": "Power BI Desktop",
-            "inset_left": 0,
-            "inset_top": 130,
-            "inset_right": 340,
-            "inset_bottom": 60,
-        },
-        # Temps laissé au rendu après un changement de page, en secondes.
-        "settle_seconds": 1.5,
-        # Changer de page à la main plutôt que par automatisation : plus lent,
-        # mais jamais pris en défaut.
-        "manual_pages": False,
-    },
     "inputs": [],
     "sections": [],
 }
 
 
 class DocConfig:
-    """Accès typé aux différentes parties du fichier de configuration."""
+    """
+    Accès typé aux grandes parties du plan.
+
+    Les clés absentes du fichier de l'utilisateur sont complétées par
+    `DEFAULTS` : chaque propriété ci-dessous est donc toujours servie.
+
+    Attributes:
+        raw: le plan complet, défauts compris.
+        path: le fichier dont il vient, ou None s'il n'en vient d'aucun.
+    """
 
     def __init__(
         self, raw: dict[str, Any] | None = None, path: str | Path | None = DEFAULT_CONFIG_PATH
     ):
+        """Complète le plan de ses valeurs par défaut."""
         self.raw = _merge_defaults(raw or {}, DEFAULTS)
         # `None` quand le plan ne vient d'aucun fichier : `Path("")` vaudrait
         # `.`, et ferait passer le dossier courant pour celui du plan.
@@ -218,54 +204,56 @@ class DocConfig:
     # ── Sections principales ──────────────────────────────────────
     @property
     def document(self) -> dict[str, Any]:
+        """Template, dossier et nom de sortie, page de garde, en-tête."""
         return self.raw["document"]
 
     @property
     def styles(self) -> dict[str, str]:
+        """Clés de style du plan → noms des styles du template."""
         return self.raw["styles"]
 
     @property
     def rendering(self) -> dict[str, Any]:
+        """Mise en forme commune : sauts de page, images, liens, sommaire."""
         return self.raw["rendering"]
 
     @property
     def data(self) -> dict[str, Any]:
+        """Ce que le plan retient du rapport : pages, visuels, tables, mesures."""
         return self.raw["data"]
 
     @property
     def merge(self) -> dict[str, Any]:
+        """Régénération au-dessus d'une documentation existante."""
         return self.raw["merge"]
 
     @property
-    def capture(self) -> dict[str, Any]:
-        return self.raw["capture"]
-
-    @property
     def inputs(self) -> list[dict[str, Any]]:
+        """Les questions posées au lancement."""
         return self.raw["inputs"]
 
     @property
     def sections(self) -> list[dict[str, Any]]:
+        """Le plan du document, section par section."""
         return self.raw["sections"]
 
     # ── Helpers ───────────────────────────────────────────────────
     def resolve_data(self, context: dict[str, Any]) -> DocConfig:
         """
-        Retourne la configuration dont les filtres `data:` sont résolus.
+        Copie du plan dont les `{{ ... }}` de `data:` sont substitués.
 
-        Ils peuvent ainsi dépendre des réponses au lancement — écarter les
-        visuels que l'utilisateur a désignés, par exemple. Le reste de la
-        configuration est inchangé.
+        Les filtres peuvent ainsi dépendre des réponses au lancement — écarter
+        les visuels que l'utilisateur a désignés. Le reste est inchangé.
         """
         raw = {**self.raw, "data": resolve_options(self.data, context)}
         return DocConfig(raw, self.path)
 
     def find_section(self, section_id: str) -> dict[str, Any] | None:
-        """Retourne une section du plan par son id (recherche récursive)."""
+        """Section du plan portant cet `id`, sous-sections comprises."""
         return _find_section(self.sections, section_id)
 
     def section_options(self, section_id: str) -> dict[str, Any]:
-        """Retourne le bloc `options` d'une section, ou {} s'il n'existe pas."""
+        """Bloc `options:` d'une section, ou {} s'il n'en porte pas."""
         section = self.find_section(section_id) or {}
         return section.get("options") or {}
 
@@ -304,6 +292,7 @@ def _merge_defaults(value: dict[str, Any], defaults: dict[str, Any]) -> dict[str
 
 
 def _find_section(sections: list[dict[str, Any]], section_id: str) -> dict[str, Any] | None:
+    """Première section de l'arbre portant cet `id`, ou None."""
     for section in sections:
         if section.get("id") == section_id:
             return section

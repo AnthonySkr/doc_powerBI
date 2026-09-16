@@ -1,9 +1,9 @@
 """
-Les structures de données qui circulent entre les trois modules.
+Les structures de données qui circulent entre les modules.
 
 Ce sont ces objets que le plan YAML manipule : `{{ measure.name }}`,
-`over: page.visuals`, `{{ table.transformation_steps }}`... Tout attribut
-ajouté ici devient donc utilisable dans la configuration.
+`over: page.visuals`, `{{ table.transformation_steps }}`… Tout attribut ajouté
+ici devient donc utilisable dans la configuration.
 """
 
 from dataclasses import dataclass, field
@@ -18,6 +18,7 @@ class DocLink:
     target: str
 
     def __str__(self) -> str:
+        """Le texte seul : c'est lui qu'un `{{ ... }}` écrit."""
         return self.text
 
 
@@ -37,17 +38,19 @@ class DaxMeasure:
     description: str = ""
     format_string: str = ""
     is_hidden: bool = False
-    # Renseignés par `apps.extract.dependencies` :
+    # Renseignés par `src.pbi_extractor.dependencies` :
     dependent_measures: set[str] = field(default_factory=set)
     used_columns: set[str] = field(default_factory=set)
     used_by_measures: set[str] = field(default_factory=set)
-    # Renseigné par `apps.document.references` : visuels affichant la mesure.
+    # Renseigné par `src.report_generator.references` : visuels l'affichant.
     usages: list[DocLink] = field(default_factory=list)
 
     def __hash__(self) -> int:
+        """Le nom d'une mesure l'identifie dans le modèle."""
         return hash(self.name)
 
     def __eq__(self, other: object) -> bool:
+        """Deux mesures de même nom sont la même mesure."""
         return isinstance(other, DaxMeasure) and self.name == other.name
 
 
@@ -61,6 +64,7 @@ class TransformationStep:
     raw_expression: str = ""
 
     def __str__(self) -> str:
+        """`nom = expression`, tel que le document l'écrit."""
         return f"{self.name} = {self.expression}"
 
 
@@ -72,6 +76,7 @@ class CalculatedColumn:
     expression: str
 
     def __str__(self) -> str:
+        """`nom = expression`, tel que le document l'écrit."""
         return f"{self.name} = {self.expression}"
 
 
@@ -145,6 +150,7 @@ class VisualFilter:
     measure_name: str = ""
 
     def to_string(self) -> str:
+        """Le filtre en une ligne : champ, type et valeurs."""
         if self.filter_type == "Comparison":
             return f"{self.field_name} ({self.operator} {', '.join(self.values)})"
         return f"{self.field_name} ({self.filter_type}: {', '.join(self.values)})"
@@ -178,8 +184,7 @@ class Visual:
     filters: list[VisualFilter] = field(default_factory=list)
     has_measures: bool = False
     # Place du visuel dans le canevas de la page, telle que le rapport la
-    # déclare. C'est elle qui permet de recadrer une capture d'écran sur ce
-    # seul visuel (voir `apps.capture`).
+    # déclare : c'est elle qui donne l'ordre de lecture à l'écran.
     pos_x: float = 0.0
     pos_y: float = 0.0
     width: float = 0.0
@@ -189,7 +194,7 @@ class Visual:
     name: str = ""
     # `parentGroupName` : nom du groupe Power BI qui contient le visuel.
     parent_group_name: str = ""
-    # Renseigné par `generators.references` : lignes du tableau des références.
+    # Renseigné par `src.report_generator.references` : le tableau du visuel.
     references: list[VisualReference] = field(default_factory=list)
 
     @property
@@ -197,8 +202,8 @@ class Visual:
         """
         Description stable des champs affichés par le visuel.
 
-        Sert d'empreinte à la régénération : si elle change, la documentation
-        rédigée pour ce visuel porte peut-être sur une version périmée.
+        Empreinte de la régénération : si elle change, la rédaction reprise
+        porte peut-être sur une version périmée.
         """
         return " ".join(
             sorted(f"{element.role}:{element.model_name}" for element in self.elements)
@@ -211,9 +216,9 @@ class VisualGroupMember:
     """
     Ligne de la légende d'un groupe.
 
-    La légende fait le lien entre la capture du groupe et son contenu : elle
-    liste les visuels documentés du groupe. Ceux que `data.visuals` écarte
-    (habillage, boutons, visuels présentés ailleurs) n'y figurent pas.
+    La légende numérote les visuels documentés du groupe : le lecteur relie
+    ainsi chaque numéro reporté sur l'image au visuel détaillé plus bas. Ceux
+    que `data.visuals` écarte n'y figurent pas.
     """
 
     number: str
@@ -232,10 +237,10 @@ class VisualGroup:
     """
     Groupe de visuels d'une page (`visualGroup` d'un `visual.json`).
 
-    Un groupe est documenté comme un tout : une capture, une légende de son
-    contenu, puis le détail de chacun de ses visuels documentés. Les
-    sous-groupes éventuels sont rattachés à leur groupe racine : la structure
-    du document reste page → groupe → visuel.
+    Un groupe est documenté comme un tout : un emplacement d'image, la légende
+    de son contenu, puis le détail de chacun de ses visuels. Les sous-groupes
+    rejoignent leur groupe racine — la structure du document reste
+    page → groupe → visuel.
     """
 
     id: str
@@ -245,7 +250,7 @@ class VisualGroup:
     parent_group_name: str = ""  # groupe parent, pour les groupes imbriqués
     pos_x: float = 0.0
     pos_y: float = 0.0
-    # Renseignés par `apps.document.filters` :
+    # Renseignés par `src.core.selection.organize_page` :
     visuals: list[Visual] = field(default_factory=list)  # visuels du groupe
     members: list[VisualGroupMember] = field(default_factory=list)  # légende du groupe
     subgroups: list[VisualGroup] = field(default_factory=list)  # sous-groupes directs
@@ -255,8 +260,8 @@ class VisualGroup:
         """
         Description stable du contenu du groupe.
 
-        Sert d'empreinte à la régénération : si un visuel entre ou sort du
-        groupe, la rédaction reprise porte peut-être sur une version périmée.
+        Empreinte de la régénération : si un visuel entre ou sort du groupe,
+        la rédaction reprise porte peut-être sur une version périmée.
         """
         return " ".join(sorted(f"{m.title}:{m.visual_type}" for m in self.members))
 
@@ -276,8 +281,8 @@ class ReportPage:
     canvas_height: float = 720.0
     filters: list[VisualFilter] = field(default_factory=list)
     visuals: list[Visual] = field(default_factory=list)
-    # Conteneurs de groupe lus par le parseur, puis organisés par
-    # `generators.filters` : groupes racines documentés de la page.
+    # Conteneurs lus par le parseur, puis organisés par
+    # `src.core.selection.organize_page` : groupes racines documentés.
     groups: list[VisualGroup] = field(default_factory=list)
     # Visuels documentés n'appartenant à aucun groupe.
     ungrouped_visuals: list[Visual] = field(default_factory=list)
@@ -295,8 +300,8 @@ class PowerBIReport:
     # Filtres posés sur le rapport entier (`report.json`), au-dessus des
     # filtres de page et de visuel.
     filters: list[VisualFilter] = field(default_factory=list)
-    # Renseigné par `apps.document.context` : mesures du modèle qu'aucun visuel ni
-    # aucun filtre n'emploie, et que le document ne documente donc pas.
+    # Renseigné par `src.report_generator.context` : mesures du modèle
+    # qu'aucun visuel ni aucun filtre n'emploie, et qui ne sont pas documentées.
     undocumented_measures: list[str] = field(default_factory=list)
 
     @property
@@ -315,9 +320,8 @@ class PowerBIReport:
         """
         Mesures employées comme filtre — de rapport, de page ou de visuel.
 
-        Filtrer sur une mesure est une façon de s'en servir, au même titre que
-        l'afficher : sans ce relevé, une mesure qui ne sert qu'à filtrer
-        passerait pour inutilisée.
+        Filtrer sur une mesure est une façon de s'en servir : sans ce relevé,
+        une mesure qui ne sert qu'à filtrer passerait pour inutilisée.
         """
         applied = list(self.filters)
         for page in self.pages:
@@ -342,21 +346,18 @@ class PowerBiMetadata:
     """
     Tout ce que l'on sait du rapport, d'un bout à l'autre de la génération.
 
-    L'extraction le produit, la capture y ajoute l'inventaire de ses images, le
-    document s'en sert : aucun des trois n'a à retourner à la source.
+    L'extraction le produit, l'écriture du document le lit : ni l'une ni
+    l'autre n'a à retourner à la source.
+
+    Attributes:
+        report: le rapport lu, pages et modèle sémantique compris.
+        source: chemin du fichier `.pbip` dont il a été tiré.
     """
 
     report: PowerBIReport
     source: Path = Path()
-    # {page: {prise: chemin}}, relatifs au dossier du projet — un projet
-    # déplacé ne perd pas ses images.
-    captures: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def project_dir(self) -> Path:
-        """Dossier du projet, où vivent les images et les réponses mémorisées."""
+        """Dossier du projet, où vivent les réponses mémorisées."""
         return self.source.parent
-
-    def capture_of(self, page: str, shot: str) -> str:
-        """Chemin de la capture d'une prise, ou chaîne vide s'il n'y en a pas."""
-        return (self.captures.get(page) or {}).get(shot, "")

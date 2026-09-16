@@ -1,12 +1,11 @@
 """
-Récupération de ce que l'utilisateur a écrit *à l'intérieur* d'un contenu du
-script.
+Récupération de ce qui a été écrit *dans* un contenu du script.
 
-Le script est propriétaire des données qu'il produit — il les réécrit à chaque
-génération — mais pas de ce qu'on a pu glisser au milieu : une description sous
-le tableau d'un groupe, une note après une valeur, une capture collée dans la
-ligne laissée vide. Ces contenus-là se trouvent entre `pbi::gen` et
-`pbi::endgen`, là où la fusion réécrit tout.
+Le script réécrit à chaque génération les données qu'il produit, mais pas ce
+qu'on a glissé au milieu : une description sous le tableau d'un groupe, une
+note après une valeur, une image collée dans la ligne laissée vide. Ces
+contenus-là se trouvent entre `pbi::gen` et `pbi::endgen`, là où tout est
+réécrit.
 
 Pour les distinguer, le marqueur de fin retient l'empreinte de chaque
 paragraphe et tableau écrits par le script (voir `merge.markers`). À la
@@ -25,16 +24,14 @@ relecture, on compare :
 Un paragraphe vide n'est pas une donnée : ce qu'on y écrit ne remplace rien et
 appartient donc à l'utilisateur.
 
-L'empreinte ne survit pas à tout : en enregistrant, Word recoupe les runs, perd
-une espace de bord, réécrit un lien interne sous forme de champ. Une donnée
-intacte passe alors pour remaniée. La fusion tranche donc en dernier ressort
-sur le contenu du bloc neuf, qu'elle a sous la main : ce que le script
-s'apprête à réécrire à l'identique n'a pas été retouché (voir
-`merge.smart._rewritten`).
+L'empreinte ne survit pas à tout : en enregistrant, Word recoupe les runs,
+perd une espace, réécrit un lien en champ, et une donnée intacte passe pour
+remaniée. La fusion tranche donc en dernier ressort sur le bloc neuf : ce que
+le script s'apprête à réécrire à l'identique n'a pas été retouché (voir
+`merge.smart`).
 
-Chaque contenu récupéré revient avec sa place — le rang qu'il occupait parmi
-les contenus du script — pour être reposé au même endroit : les données
-techniques restent où elles sont, le reste retrouve son voisinage.
+Chaque contenu récupéré revient avec sa place — son rang parmi les contenus du
+script — pour être reposé dans son voisinage.
 """
 
 from docx.oxml.ns import qn
@@ -59,15 +56,12 @@ def scan(segment: Segment) -> tuple[list[tuple[int, object]], list[tuple[int, ob
     """
     Départage le contenu d'un segment du script, en un seul parcours.
 
-    Retourne d'une part ce qui a été écrit **en plus**, d'autre part les données
-    du script qu'on a **retouchées** à la main — le script les réécrit, elles
-    sont à lui, mais la version retouchée part en annexe plutôt qu'à la
-    corbeille (voir `merge.orphans`). Une correction faite dans une cellule d'un
-    tableau du script passe par là.
-
-    Chaque contenu vient avec son rang parmi les données du script : c'est ce
-    qui permet de le reposer au bon endroit, ou de le rapprocher de la donnée
-    qu'il remplaçait.
+    Returns:
+        Ce qui a été écrit **en plus**, puis les données du script
+        **retouchées** à la main. Le script réécrit ces dernières — elles sont
+        à lui — mais la version retouchée part en annexe plutôt qu'à la
+        corbeille. Chaque contenu vient avec son rang parmi les données du
+        script, de quoi le reposer à sa place.
     """
     nodes = segment.content_nodes()
     if segment.digests is None:
@@ -105,12 +99,11 @@ def scan(segment: Segment) -> tuple[list[tuple[int, object]], list[tuple[int, ob
 
 def _previous_version(nodes: list) -> list[tuple[int, object]]:
     """
-    Segment d'un document produit par une version antérieure : sans empreintes,
-    on ne sait pas ce que le script avait écrit.
+    Segment d'un document produit par une version antérieure.
 
-    On récupère alors la seule chose dont on soit sûr : ce qui suit le dernier
-    tableau du segment. Le script n'y laisse qu'un paragraphe vide — tout ce
-    qu'on y trouve d'écrit vient donc de l'utilisateur.
+    Sans empreintes, on ne sait pas ce que le script avait écrit. On récupère
+    donc la seule chose sûre : ce qui suit le dernier tableau du segment, où
+    le script ne laisse qu'un paragraphe vide.
     """
     tables = [rank for rank, node in enumerate(nodes) if node.tag == _TABLE]
     if not tables:
@@ -124,10 +117,10 @@ def _previous_version(nodes: list) -> list[tuple[int, object]]:
 
 def _common(found: list[str], written: list[str]) -> dict[int, int]:
     """
-    Appariement des contenus relus avec ceux que le script avait écrits.
+    Apparie les contenus relus avec ceux que le script avait écrits.
 
-    Plus longue suite commune : elle conserve l'ordre, ce qui permet ensuite de
-    situer les contenus en plus (un ajout ne décale pas ce qui suit).
+    Plus longue suite commune : elle garde l'ordre, ce qui permet de situer
+    les contenus en plus — un ajout ne décale pas ce qui suit.
     """
     lengths = [[0] * (len(written) + 1) for _ in range(len(found) + 1)]
     for i in reversed(range(len(found))):

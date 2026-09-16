@@ -3,8 +3,8 @@ Questions élémentaires posées au terminal.
 
 Ce module ne sait rien du plan du document : il pose une question d'un type
 donné — oui/non, texte, texte long, choix, choix multiple — et retourne la
-réponse. C'est `cli.prompts` qui décide lesquelles poser, et `shared.console`
-qui sait les dessiner.
+réponse. `src.core.prompts` décide lesquelles poser, `src.core.console` les
+dessine.
 
 Une réponse vide vaut toujours acceptation de la valeur proposée : c'est le
 geste le plus courant, et il ne doit rien défaire.
@@ -49,9 +49,9 @@ def choice(label: str, options: list[Any], default: Any) -> Any:
 
 def multi_choice(label: str, options: list[Any], default: list[Any]) -> list[Any]:
     """
-    Sélection multiple : l'utilisateur entre les numéros qui l'intéressent.
+    Sélection multiple, par numéros séparés d'une virgule.
 
-    Sans option à proposer, la question n'est pas posée — il n'y a rien à
+    Sans option à proposer, la question n'est pas posée : il n'y a rien à
     choisir dans ce rapport.
     """
     if not options:
@@ -102,6 +102,7 @@ def as_list(value: Any) -> list[Any]:
 
 
 def _list_options(label: str, options: list[Any], retained: list[Any]) -> None:
+    """Affiche l'intitulé, puis les options numérotées."""
     console.question(label)
     for index, option in enumerate(options, start=1):
         console.option(index, option, retained=option in retained)

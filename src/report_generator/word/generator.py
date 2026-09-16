@@ -26,17 +26,15 @@ def generate_word_documentation(
     """
     Écrit le document Word et retourne le bilan des changements.
 
-    Si une documentation existe déjà à `output_path`, elle est lue puis
-    comparée au rapport actuel : les textes rédigés par l'utilisateur sont
-    repris dans le document neuf. L'ancien fichier n'est jamais modifié — il
-    est archivé avant d'être remplacé.
+    Une documentation déjà présente à `output_path` est lue, comparée au
+    rapport actuel, et ce que l'utilisateur y avait rédigé passe dans le
+    document neuf. L'ancien fichier est archivé, jamais modifié.
 
     Args:
-        config: configuration chargée depuis config.yaml
-        context: données exposées au plan (report, model, inputs, styles)
-        output_path: chemin du .docx généré
-        text_provider: callback optionnel permettant à l'utilisateur de
-            modifier les textes des blocs `editable`
+        config: le plan chargé.
+        context: les données qu'il parcourt (report, model, inputs, styles).
+        output_path: chemin du `.docx` à écrire.
+        text_provider: de quoi faire relire les blocs `editable:`, ou None.
     """
     merge_options = config.merge
     previous = read_previous(output_path) if merge_options.get("enabled", True) else None
@@ -87,11 +85,11 @@ def generate_word_documentation(
 
 def _template_path(config: DocConfig, context: dict[str, Any]) -> Path:
     """
-    Localise le template Word désigné par la configuration.
+    Localise le template Word désigné par le plan.
 
-    Le nom déclaré est relatif : il est cherché à côté de la configuration qui
-    le nomme, puis à côté de l'exécutable. Le dossier courant ne suffit pas —
-    un exécutable ouvert par glisser-déposer en hérite d'un quelconque.
+    Le nom déclaré est relatif : il est cherché à côté du plan qui le nomme,
+    puis à côté de l'exécutable. Le dossier courant ne suffit pas — un exe
+    ouvert par glisser-déposer en hérite d'un quelconque.
     """
     name = render(config.document.get("template"), context)
     if not name:
@@ -113,8 +111,8 @@ def _archive(output_path: str, options: dict[str, Any]) -> str:
     """
     Déplace la documentation existante dans un sous-dossier horodaté.
 
-    Le document précédent n'est donc jamais écrasé : en cas de fusion
-    inattendue, la version d'origine reste récupérable telle quelle.
+    Le document précédent n'est jamais écrasé : en cas de fusion inattendue,
+    la version d'origine reste récupérable telle quelle.
     """
     if not options.get("backup", True):
         return ""
@@ -145,8 +143,8 @@ def _restore(archived: str, output_path: str) -> None:
     Remet la version précédente en place lorsque l'écriture a échoué.
 
     Un enregistrement interrompu laisse un fichier incomplet : il est écrasé,
-    sans quoi la version précédente resterait dans `.versions` et l'utilisateur
-    se retrouverait devant un document illisible.
+    sans quoi l'utilisateur se retrouverait devant un document illisible et sa
+    version précédente rangée dans `.versions`.
     """
     if not archived or not os.path.isfile(archived):
         return

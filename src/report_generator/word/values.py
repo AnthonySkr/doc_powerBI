@@ -1,13 +1,12 @@
 """
 Lecture des valeurs déclarées dans le plan.
 
-Le YAML est livré en clair à côté de l'exécutable, et se modifie à la main :
-un gabarit `{...}` mal orthographié, un nombre écrit en toutes lettres ou un
-mode inconnu sont des fautes de frappe ordinaires. Chacune doit dire laquelle
-et où, plutôt que de remonter en `KeyError` devant quelqu'un qui ne fait pas
-de Python.
+Le YAML est livré en clair et se modifie à la main : un gabarit `{...}` mal
+orthographié ou un nombre écrit en toutes lettres sont des fautes ordinaires.
+Chacune doit dire laquelle et où, plutôt que de remonter en `KeyError` devant
+quelqu'un qui ne fait pas de Python.
 
-C'est le seul rôle de ce module : traduire ce que le plan déclare en valeur
+C'est tout le rôle de ce module : traduire ce que le plan déclare en valeur
 utilisable, ou en message lisible.
 """
 
@@ -21,10 +20,12 @@ NUMBERING_MODES = ("auto", "fixed", "none")
 
 def format_template(template: Any, key: str, **values: str) -> str:
     """
-    Applique un gabarit `{...}` déclaré dans la configuration.
+    Applique un gabarit `{...}` déclaré dans le plan.
 
-    `key` est le chemin du gabarit dans le YAML : c'est lui que cite le message
-    d'erreur, avec la liste des champs réellement disponibles.
+    Args:
+        template: le gabarit tel qu'il est écrit dans le YAML.
+        key: son chemin dans le plan, cité par le message d'erreur.
+        **values: les champs que le gabarit peut citer.
     """
     try:
         return str(template).format(**values)
@@ -49,9 +50,9 @@ def numbering_mode(value: Any) -> str:
     """
     Mode de numérotation des figures : `auto`, `fixed` ou `none`.
 
-    `auto` confie le numéro à un champ Word, qui le tient à jour lui-même —
-    c'est le comportement voulu dans la quasi-totalité des cas. Les anciens
-    plans écrivaient un booléen : `true` vaut `auto`, `false` vaut `none`.
+    `auto` confie le numéro à un champ Word, qui le tient à jour lui-même.
+    Les anciens plans écrivaient un booléen : `true` vaut `auto`, `false`
+    vaut `none`.
     """
     if isinstance(value, bool) or value is None:
         return "auto" if value is not False else "none"

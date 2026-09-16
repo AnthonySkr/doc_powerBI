@@ -2,10 +2,10 @@
 Ce qui a été écrit *dans* les cellules d'un tableau du script.
 
 Un tableau produit par le script est à lui : il le réécrit à chaque génération,
-lignes et valeurs comprises. Mais on annote volontiers un tableau de l'intérieur
-— une précision sous le libellé d'une ligne, une remarque dans la colonne d'à
-côté. Le tableau étant réécrit d'un bloc, ces ajouts disparaissaient de leur
-cellule (ils partent en annexe, voir `merge.orphans`).
+lignes et valeurs comprises. Mais on l'annote volontiers de l'intérieur — une
+précision sous le libellé d'une ligne, une remarque dans la colonne d'à côté —
+et le tableau étant réécrit d'un bloc, ces ajouts quittaient leur cellule pour
+l'annexe.
 
 Ce module les y ramène, sous une règle sans ambiguïté :
 
@@ -37,10 +37,9 @@ def reconcile(old_table, fresh_table, copy) -> bool:
     """
     Reporte dans le tableau neuf les contenus ajoutés dans ses cellules.
 
-    Tout ou rien : les cellules d'accueil sont d'abord toutes résolues, et rien
-    n'est écrit si l'une d'elles manque. Sans cela un tableau à moitié
-    rapproché aurait vu ses annotations à deux endroits — dans sa cellule *et*
-    en annexe, où le tableau entier serait parti.
+    Tout ou rien : les cellules d'accueil sont toutes résolues d'abord, et rien
+    n'est écrit si l'une manque. Sans cela, un tableau à moitié rapproché
+    aurait ses annotations à deux endroits — sa cellule *et* l'annexe.
     """
     if old_table.tag != _TABLE or fresh_table.tag != _TABLE:
         return False

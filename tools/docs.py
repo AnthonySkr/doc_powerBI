@@ -4,16 +4,13 @@ La documentation du code, servie ou construite.
     python tools/docs.py                  tout le projet, servi et rechargé à chaud
     python tools/docs.py extractor        le seul module d'extraction
     python tools/docs.py --build          le site statique, dans docs/site/
-    python tools/docs.py capturer --build
 
 Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
 
   - **la liste des modules**. Un paquet qui déclare `__all__` cache ses
-    sous-modules à `pdoc` : `src/pbi_extractor/__init__.py` expose quatre noms, et
-    `tmdl/`, `report/` ou `pbip.py` disparaîtraient du site. Les modules sont
-    donc énumérés ici, en parcourant l'arborescence ;
-  - **le périmètre**. Les paquets de tests, s'il s'en trouve sous un module,
-    sont écartés du site ;
+    sous-modules à `pdoc` : `tmdl/`, `report/` ou `pbip.py` disparaîtraient du
+    site. Ils sont donc énumérés ici, en parcourant l'arborescence ;
+  - **le périmètre** : les paquets de tests sont écartés ;
   - **le découpage par module**, pour ouvrir la documentation d'un seul.
 
 `pdoc` est en option (`pip install -e ".[dev]"`) : il ne sert qu'au
@@ -35,12 +32,11 @@ sys.path.insert(0, ROOT)
 PARTS = {
     "main": ["main"],
     "extractor": ["src.pbi_extractor"],
-    "capturer": ["src.gui_automator"],
     "writer": ["src.report_generator"],
     "core": ["src.core"],
 }
 
-# Tout le projet : le chef d'orchestre, les trois modules, et leur socle.
+# Tout le projet : le chef d'orchestre, les deux modules, et leur socle.
 EVERYTHING = [
     "main",
     *(root for roots in PARTS.values() for root in roots if root != "main"),
@@ -93,11 +89,11 @@ def _modules(root: str) -> list[str]:
 
     Le parcours passe par le disque plutôt que par l'import : un paquet qui
     déclare `__all__` ne laisse pas voir ses sous-modules autrement, et ce sont
-    justement eux qui portent le détail.
+    eux qui portent le détail.
 
     Les paquets de tests sont refusés par leur nom précédé de `!` : `pdoc`
-    déroule lui-même les sous-modules d'un paquet, et les écarter de la liste ne
-    suffirait pas à les tenir hors du site.
+    déroule lui-même les sous-modules d'un paquet, et les omettre ne suffirait
+    pas à les tenir hors du site.
     """
     module = _import(root)
     if module is None:
@@ -127,11 +123,10 @@ def _reached_alone(name: str) -> bool:
     """
     Vrai si `pdoc` atteint ce module sans qu'on le lui nomme.
 
-    Il déroule les sous-modules d'un paquet — sauf si ce paquet déclare
-    `__all__`, auquel cas il s'en tient à ce qui y est nommé. La plupart des
-    paquets du projet en déclarent un, pour dire ce qu'ils exposent : leurs
-    sous-modules doivent donc être nommés un à un, à l'exception de ceux que
-    l'`__all__` cite déjà — les nommer deux fois ferait deux fois la même page.
+    Il déroule les sous-modules d'un paquet, sauf si celui-ci déclare
+    `__all__` — auquel cas il s'en tient à ce qui y est nommé. Les sous-modules
+    des paquets du projet doivent donc être nommés un à un, hormis ceux que
+    l'`__all__` cite déjà : les nommer deux fois ferait deux fois la page.
     """
     parent = _import(".".join(name.split(".")[:-1]))
     if parent is None:
@@ -151,6 +146,7 @@ def _import(name: str):
 
 
 def _parse_args(argv: list[str] | None) -> argparse.Namespace:
+    """Lit la ligne de commande de l'outil."""
     parser = argparse.ArgumentParser(
         prog="python tools/docs.py",
         description="Sert ou construit la documentation du code (pdoc).",

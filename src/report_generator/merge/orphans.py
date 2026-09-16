@@ -1,14 +1,12 @@
 """
 Annexe des contenus qui n'ont pas retrouvé leur place.
 
-Le principe de la fusion est de reposer chaque contenu rédigé là où il était.
-Il reste des cas où c'est impossible : l'élément a disparu du rapport, le bloc
-du plan n'existe plus, ou la donnée du script sur laquelle on avait écrit a été
-remaniée. Jusqu'ici ces contenus étaient simplement absents du document neuf —
-une perte silencieuse, que seule l'archive de `.versions/` rattrapait.
+La fusion repose chaque contenu rédigé là où il était. Il reste des cas où
+c'est impossible : l'élément a disparu du rapport, le bloc du plan n'existe
+plus, ou la donnée du script sur laquelle on avait écrit a été remaniée.
 
-Ils sont désormais rassemblés en fin de document, sous un titre, avec la
-provenance de chacun :
+Plutôt que de laisser ces contenus manquer en silence, ils sont rassemblés en
+fin de document, avec la provenance de chacun :
 
     Contenu non replacé
       Retiré du rapport — measure:Ancienne marge
@@ -57,6 +55,7 @@ class Group:
 
     @property
     def label(self) -> str:
+        """Intitulé du lot : la raison, et l'élément d'où il vient."""
         prefix = _REASONS.get(self.reason, self.reason)
         return f"{prefix} — {self.source}" if self.source else prefix
 
@@ -70,14 +69,17 @@ class Collector:
 
     @property
     def enabled(self) -> bool:
+        """L'annexe est-elle demandée par le plan ?"""
         return bool(self.settings.get("enabled", True))
 
     @property
     def title(self) -> str:
+        """Titre de l'annexe, tel que le plan le déclare."""
         return str(self.settings.get("title") or _DEFAULT_TITLE)
 
     @property
     def count(self) -> int:
+        """Nombre de contenus recueillis, tous lots confondus."""
         return sum(len(group.nodes) for group in self.groups)
 
     def add(self, reason: str, source: str, nodes: list) -> None:
@@ -90,6 +92,7 @@ class Collector:
 
 
 def collector(merge_options: dict[str, Any]) -> Collector:
+    """Un collecteur réglé par la section `merge.orphans` du plan."""
     return Collector(settings=merge_options.get("orphans") or {})
 
 
@@ -98,12 +101,9 @@ def collect_preamble(collector: Collector, blocks: list[Block], fresh: list[Bloc
     Ce qui a été écrit avant la première partie documentée.
 
     Cette zone vient du template — page de garde, sommaire — et est régénérée
-    telle quelle. Ce qu'on y avait ajouté n'a donc pas de place où revenir :
-    c'est reconnu en comparant au préambule du document neuf, et recueilli.
-
-    La table des matières en est écartée : Word la recalcule à chaque
-    ouverture, si bien qu'elle ne ressemble jamais à celle que le script avait
-    posée. La recueillir en ferait un doublon à chaque génération.
+    telle quelle : ce qu'on y avait ajouté n'a pas de place où revenir. Le
+    sommaire en est écarté, Word le recalculant à chaque ouverture : le
+    recueillir en ferait un doublon à chaque génération.
     """
     old_head = next((block for block in blocks if not block.element_id), None)
     new_head = next((block for block in fresh if not block.element_id), None)
@@ -127,6 +127,7 @@ def collect_removed(collector: Collector, old: dict[str, Block], written: set[st
 
 
 def _nodes(block: Block) -> list:
+    """Tous les éléments d'un bloc, marqueurs compris."""
     return [node for segment in block.segments for node in segment.nodes]
 
 
@@ -134,9 +135,8 @@ def carried(old: dict[str, Block]) -> list:
     """
     Contenu de l'annexe du document précédent, sans son titre.
 
-    Le titre et le texte d'explication sont réécrits à chaque fois : seuls les
-    lots déjà rassemblés sont repris, pour qu'une annexe non vidée ne perde
-    rien de ce qu'elle avait recueilli.
+    Titre et explication sont réécrits à chaque fois : seuls les lots déjà
+    rassemblés sont repris, pour qu'une annexe non vidée ne perde rien.
     """
     block = old.get(ELEMENT_ID)
     return block.free_after().get(_HEADING_BLOCK, []) if block is not None else []
@@ -146,9 +146,8 @@ def render(document, transplanter, styles, collector: Collector, previous: list)
     """
     Écrit l'annexe et retourne ses éléments, prêts à rejoindre le corps.
 
-    Retourne une liste vide quand il n'y a rien à recueillir : l'annexe ne
-    s'écrit que si elle a quelque chose à dire, et disparaît une fois vidée —
-    y compris lorsque ce qu'elle avait recueilli se réduit à des lignes vides.
+    La liste est vide quand il n'y a rien à recueillir : l'annexe disparaît
+    une fois vidée, y compris s'il n'y reste que des lignes blanches.
     """
     previous = [node for node in previous if markers.has_content(node)]
     if not collector.enabled or (not collector.groups and not previous):
@@ -175,9 +174,9 @@ def user_content(block: Block) -> list:
     """
     Ce qui, dans un bloc, appartient à l'utilisateur.
 
-    Les contenus du script sont écartés — ils seront réécrits ailleurs ou plus
-    du tout — ainsi que les amorces auxquelles personne n'a touché : archiver
-    un « [À compléter] » resté vide n'apprendrait rien.
+    Les contenus du script sont écartés — ils seront réécrits ailleurs, ou
+    plus du tout — ainsi que les amorces intactes : archiver un
+    « [À compléter] » resté vide n'apprendrait rien.
     """
     nodes: list = []
     for segment in block.segments:
@@ -205,5 +204,6 @@ def report(collector: Collector) -> None:
 
 
 def _paragraph(document, styles, style_key: str, text: str):
+    """Un paragraphe de l'annexe, dans le style demandé."""
     paragraph = document.add_paragraph(text, style=styles.paragraph(style_key))
     return paragraph._p
