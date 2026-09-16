@@ -11,7 +11,7 @@ tiennent des deux : tant que personne n'y a touché, elles suivent le plan ; dè
 qu'on y écrit, c'est la version du document qui l'emporte.
 
     previous = merge.read_previous(chemin)
-    ...                                     (génération, voir generators.word)
+    ...                                     (écriture, voir `word.generator`)
     merge.apply_merge(document, previous, options, log)
 
 Le repérage passe par des marqueurs invisibles (`merge.markers`) : une ancre

@@ -175,6 +175,7 @@ class _Counter:
     """Une suite de numéros, distribués un à un."""
 
     def __init__(self, start: int = 1):
+        """Ouvre une suite au numéro donné."""
         self.value = start
 
     def next(self) -> int:
@@ -193,6 +194,7 @@ class _Numbering:
     """
 
     def __init__(self, options: dict[str, Any] | None, default_scope: str):
+        """Lit `start:`, `scope:` et `format:` du bloc `numbering:` du plan."""
         options = options or {}
         self.start = int(options.get("start", 1))
         self.scope = options.get("scope", default_scope)

@@ -48,6 +48,7 @@ class DocumentBuilder:
         text_provider: TextProvider | None = None,
         previous: PreviousDocument | None = None,
     ):
+        """Prépare les écrivains que le parcours du plan mettra à contribution."""
         self.doc = doc
         # Toute écriture de contenu passe par là (voir `body.Body`).
         self.body = Body(doc)

@@ -56,6 +56,7 @@ class Segment:
 
     @property
     def identified(self) -> bool:
+        """Le segment porte-t-il un identifiant de bloc du plan ?"""
         return self.kind in IDENTIFIED
 
     @property
@@ -63,9 +64,8 @@ class Segment:
         """
         Le contenu est-il exactement celui que le script y avait mis ?
 
-        Sans empreintes — document produit par une version antérieure — on ne
-        peut pas savoir : dans le doute, ce qui s'y trouve appartient à
-        l'utilisateur.
+        Sans empreintes — document d'une version antérieure — on ne peut pas
+        savoir : dans le doute, ce qui s'y trouve appartient à l'utilisateur.
         """
         if self.digests is None:
             return False
@@ -91,6 +91,7 @@ class Block:
         return [s.block_id for s in self.segments if s.identified]
 
     def free_nodes(self) -> list:
+        """Tous les éléments libres du bloc, dans l'ordre du document."""
         return [node for segment in self.segments if segment.kind == FREE for node in segment.nodes]
 
     def identified_segments(self) -> dict[str, Segment]:
@@ -103,12 +104,12 @@ class Block:
 
     def free_after(self) -> dict[str, list]:
         """
-        Contenu libre de l'utilisateur, rangé sous le segment identifié qui le
-        précède — `""` pour ce qui ouvre le bloc (le titre, notamment).
+        Contenu libre, rangé sous le segment identifié qui le précède.
 
-        C'est ce repérage relatif qui permet de replacer la rédaction quand le
-        plan a changé : elle suit le bloc auquel elle se rapporte, pas un rang
-        absolu qui aurait glissé.
+        La clé `""` porte ce qui ouvre le bloc — le titre, notamment. Ce
+        repérage relatif est ce qui permet de replacer la rédaction quand le
+        plan a changé : elle suit le bloc auquel elle se rapporte, et non un
+        rang absolu qui aurait glissé.
         """
         placed: dict[str, list] = {}
         key = ""

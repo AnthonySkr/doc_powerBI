@@ -195,6 +195,7 @@ class DocConfig:
     def __init__(
         self, raw: dict[str, Any] | None = None, path: str | Path | None = DEFAULT_CONFIG_PATH
     ):
+        """Complète le plan de ses valeurs par défaut."""
         self.raw = _merge_defaults(raw or {}, DEFAULTS)
         # `None` quand le plan ne vient d'aucun fichier : `Path("")` vaudrait
         # `.`, et ferait passer le dossier courant pour celui du plan.

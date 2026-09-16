@@ -41,6 +41,7 @@ class MeasureLinker:
     first_occurrence_only: bool = False
 
     def __post_init__(self) -> None:
+        """Compile, une fois pour toutes, le motif qui cherche les noms."""
         names = {name for name in self.targets if self._eligible(name)}
         names.update(name for name in self.known_names if self._eligible(name))
 

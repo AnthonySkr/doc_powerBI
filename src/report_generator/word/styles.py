@@ -24,6 +24,7 @@ class StyleResolver:
     """
 
     def __init__(self, doc, config: DocConfig, context: dict[str, Any]):
+        """Relève les styles que le template porte réellement."""
         self.config = config
         self.context = context
 

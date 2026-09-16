@@ -24,6 +24,7 @@ class ConsoleWindow:
     """
 
     def __init__(self):
+        """Ne retient la fenêtre que depuis un exécutable."""
         self.pause = paths.is_frozen()
 
     def install_crash_handler(self) -> None:

@@ -41,6 +41,7 @@ class MergeWriter:
     """
 
     def __init__(self, body, config: DocConfig, previous: PreviousDocument | None):
+        """Ouvre le bilan sur ce que le document précédent contenait."""
         self.body = body
         self.previous = previous or PreviousDocument()
         self.options = config.merge
