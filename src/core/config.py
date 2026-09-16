@@ -181,7 +181,16 @@ DEFAULTS: dict[str, Any] = {
 
 
 class DocConfig:
-    """Accès typé aux différentes parties du fichier de configuration."""
+    """
+    Accès typé aux grandes parties du plan.
+
+    Les clés absentes du fichier de l'utilisateur sont complétées par
+    `DEFAULTS` : chaque propriété ci-dessous est donc toujours servie.
+
+    Attributes:
+        raw: le plan complet, défauts compris.
+        path: le fichier dont il vient, ou None s'il n'en vient d'aucun.
+    """
 
     def __init__(
         self, raw: dict[str, Any] | None = None, path: str | Path | None = DEFAULT_CONFIG_PATH
@@ -194,50 +203,56 @@ class DocConfig:
     # ── Sections principales ──────────────────────────────────────
     @property
     def document(self) -> dict[str, Any]:
+        """Template, dossier et nom de sortie, page de garde, en-tête."""
         return self.raw["document"]
 
     @property
     def styles(self) -> dict[str, str]:
+        """Clés de style du plan → noms des styles du template."""
         return self.raw["styles"]
 
     @property
     def rendering(self) -> dict[str, Any]:
+        """Mise en forme commune : sauts de page, images, liens, sommaire."""
         return self.raw["rendering"]
 
     @property
     def data(self) -> dict[str, Any]:
+        """Ce que le plan retient du rapport : pages, visuels, tables, mesures."""
         return self.raw["data"]
 
     @property
     def merge(self) -> dict[str, Any]:
+        """Régénération au-dessus d'une documentation existante."""
         return self.raw["merge"]
 
     @property
     def inputs(self) -> list[dict[str, Any]]:
+        """Les questions posées au lancement."""
         return self.raw["inputs"]
 
     @property
     def sections(self) -> list[dict[str, Any]]:
+        """Le plan du document, section par section."""
         return self.raw["sections"]
 
     # ── Helpers ───────────────────────────────────────────────────
     def resolve_data(self, context: dict[str, Any]) -> DocConfig:
         """
-        Retourne la configuration dont les filtres `data:` sont résolus.
+        Copie du plan dont les `{{ ... }}` de `data:` sont substitués.
 
-        Ils peuvent ainsi dépendre des réponses au lancement — écarter les
-        visuels que l'utilisateur a désignés, par exemple. Le reste de la
-        configuration est inchangé.
+        Les filtres peuvent ainsi dépendre des réponses au lancement — écarter
+        les visuels que l'utilisateur a désignés. Le reste est inchangé.
         """
         raw = {**self.raw, "data": resolve_options(self.data, context)}
         return DocConfig(raw, self.path)
 
     def find_section(self, section_id: str) -> dict[str, Any] | None:
-        """Retourne une section du plan par son id (recherche récursive)."""
+        """Section du plan portant cet `id`, sous-sections comprises."""
         return _find_section(self.sections, section_id)
 
     def section_options(self, section_id: str) -> dict[str, Any]:
-        """Retourne le bloc `options` d'une section, ou {} s'il n'existe pas."""
+        """Bloc `options:` d'une section, ou {} s'il n'en porte pas."""
         section = self.find_section(section_id) or {}
         return section.get("options") or {}
 
@@ -276,6 +291,7 @@ def _merge_defaults(value: dict[str, Any], defaults: dict[str, Any]) -> dict[str
 
 
 def _find_section(sections: list[dict[str, Any]], section_id: str) -> dict[str, Any] | None:
+    """Première section de l'arbre portant cet `id`, ou None."""
     for section in sections:
         if section.get("id") == section_id:
             return section

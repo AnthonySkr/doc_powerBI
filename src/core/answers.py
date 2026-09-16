@@ -1,18 +1,15 @@
 """
 Mémoire des réponses données au lancement.
 
-Les questions de `inputs:` se reposent à chaque génération. Certaines n'ont
-pas de conséquence — le titre de l'en-tête. Une autre en a une lourde : les
-visuels qu'on écarte de la documentation. Oublier d'en re-cocher un le fait
-réapparaître, en cocher un de plus fait disparaître la partie correspondante,
-et la rédaction qui allait avec part en annexe.
+Les questions de `inputs:` se reposent à chaque génération, et l'une d'elles
+pèse lourd : les visuels écartés de la documentation. En oublier un le fait
+réapparaître, en cocher un de plus renvoie la rédaction correspondante en
+annexe — ce n'est pas une liste à confier à la mémoire de l'utilisateur.
 
-Les réponses sont donc conservées à côté du projet, et proposées par défaut à
-la génération suivante : on valide en pressant Entrée. En mode `--no-input`, ce
-sont elles qui servent, plutôt que les valeurs figées du YAML.
-
-Le fichier est en clair et se modifie à la main ; le supprimer revient à
-repartir des valeurs du plan.
+Les réponses sont donc conservées à côté du projet et reproposées ensuite : un
+Entrée les reconduit. En `--no-input`, ce sont elles qui servent, plutôt que
+les valeurs figées du plan. Le fichier est en clair et se modifie à la main ;
+le supprimer repart du plan.
 """
 
 from pathlib import Path
@@ -35,7 +32,7 @@ _HEADER = (
 
 
 def path(config: DocConfig, context: dict[str, Any], directory: str | Path) -> Path | None:
-    """Emplacement du fichier des réponses, ou None si la mémoire est désactivée."""
+    """Fichier des réponses dans ce dossier, ou None si la mémoire est coupée."""
     document = config.document
     if not document.get("remember_answers", True):
         return None

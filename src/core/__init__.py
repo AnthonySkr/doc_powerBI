@@ -1,5 +1,5 @@
 """
-Le socle commun aux trois modules de la génération.
+Le socle commun aux deux modules de la génération.
 
     models.py       les structures de données qui circulent, `PowerBiMetadata`
     config.py       le plan (`config.yaml`), ses défauts, son accès
@@ -12,8 +12,8 @@ Le socle commun aux trois modules de la génération.
     paths.py        la localisation des fichiers livrés (exécutable compris)
     window.py       la fenêtre console de l'exécutable : attente et plantages
 
-`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
-jamais les uns des autres.
+`core` ne dépend ni de l'extraction ni de l'écriture ; les deux dépendent de
+lui, et jamais l'une de l'autre.
 
 La version du projet est déclarée ici, et nulle part ailleurs : un exécutable
 n'embarque pas les métadonnées de son paquet, et serait sans cela le seul à ne
