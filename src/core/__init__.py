@@ -11,13 +11,16 @@ Le socle commun aux deux modules de la génération.
     answers.py      la mémoire des réponses d'une génération à l'autre
     paths.py        la localisation des fichiers livrés (exécutable compris)
     window.py       la fenêtre console de l'exécutable : attente et plantages
+    version.py      la version du projet, lue sur le dernier tag du dépôt
 
 `core` ne dépend ni de l'extraction ni de l'écriture ; les deux dépendent de
 lui, et jamais l'une de l'autre.
 
-La version du projet est déclarée ici, et nulle part ailleurs : un exécutable
-n'embarque pas les métadonnées de son paquet, et serait sans cela le seul à ne
-pas savoir quelle version il est.
+La version du projet s'expose ici, et nulle part ailleurs — mais elle n'y est
+plus écrite : elle vient du dernier tag `v…` du dépôt (voir `src.core.version`).
 """
 
-__version__ = "0.7"
+from src.core.version import current
+
+__version__ = current()
+"""Version du projet, relevée sur le dernier tag `v…` du dépôt."""

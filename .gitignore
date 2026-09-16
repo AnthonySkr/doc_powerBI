@@ -7,5 +7,7 @@ __pycache__
 Galeries imbriquées.docx
 build
 dist
+# Version relevée à la construction, pour l'exécutable.
+VERSION
 .versions
 docs/site

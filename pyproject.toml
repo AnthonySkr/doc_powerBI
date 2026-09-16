@@ -103,9 +103,19 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Les tests décrivent des cas : `assert`, nombres en clair, signatures longues
-# et imports tardifs y sont normaux.
-"**/tests/*" = ["ARG005", "PLC0415", "PLR0913", "PLR0917", "PLR2004", "S101"]
+# Les tests décrivent des cas : `assert`, nombres en clair, signatures longues,
+# imports tardifs et commandes lancées sur un dépôt jetable y sont normaux.
+# Le motif descend dans les sous-dossiers : `tests/core/`, `tests/document/`…
+"tests/**" = [
+    "ARG005",
+    "PLC0415",
+    "PLR0913",
+    "PLR0917",
+    "PLR2004",
+    "S101",
+    "S603",
+    "S607",
+]
 # Outil de construction : sa sortie console *est* son interface.
 "tools/*" = ["T201"]
 

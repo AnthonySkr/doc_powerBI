@@ -9,9 +9,21 @@ L'exécutable embarque une copie de `config.yaml` et du template, qui
 sert de secours. Ce sont les fichiers livrés **à côté** de l'exe qui font foi :
 c'est ainsi que l'utilisateur adapte le plan du document sans reconstruire
 (voir `src/core/paths.py`).
+
+Il embarque aussi sa version : elle vient du dernier tag du dépôt, que l'exe
+n'a plus sous la main une fois distribué (voir `src/core/version.py`).
 """
 
+import sys
+
 from PyInstaller.utils.hooks import collect_data_files
+
+# Le dépôt doit être sur le chemin d'import : la recette est lue par
+# PyInstaller, pas par l'interpréteur du projet. `SPECPATH` est le dossier de
+# ce fichier, que PyInstaller dépose dans l'espace de noms de la recette.
+sys.path.insert(0, SPECPATH)
+
+from src.core.version import write_stamp  # noqa: E402
 
 NAME = "powerbi-doc"
 
@@ -19,6 +31,8 @@ NAME = "powerbi-doc"
 DATA = [
     ("config.yaml", "."),
     ("template-doc-pbib.docx", "."),
+    # La version, relevée maintenant : l'exe ne saurait pas la retrouver seul.
+    (str(write_stamp(SPECPATH)), "."),
     # python-docx ouvre ses propres gabarits XML : sans eux, l'exécutable
     # échoue à la première écriture de document.
     *collect_data_files("docx"),
