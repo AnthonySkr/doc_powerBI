@@ -54,9 +54,7 @@ class Options:
     interactive: bool = True
     pause: bool = True
     captures: bool = False
-    capture_options: capturer.CaptureOptions = field(
-        default_factory=capturer.CaptureOptions
-    )
+    capture_options: capturer.CaptureOptions = field(default_factory=capturer.CaptureOptions)
     show_capture_plan: bool = False
     calibrate: bool = False
 
@@ -105,9 +103,7 @@ def _extract(project: PbipProject, steps: Steps) -> PowerBiMetadata:
         raise PipelineError(str(e)) from e
 
 
-def _capture(
-    metadata: PowerBiMetadata, config: DocConfig, options: Options, steps: Steps
-) -> None:
+def _capture(metadata: PowerBiMetadata, config: DocConfig, options: Options, steps: Steps) -> None:
     """
     Étape facultative : photographier les visuels dans Power BI Desktop.
 
@@ -121,9 +117,7 @@ def _capture(
         console.warn(f"Captures abandonnées ({e}) — le document réservera leur place.")
 
 
-def _inspect_captures(
-    metadata: PowerBiMetadata, config: DocConfig, options: Options
-) -> None:
+def _inspect_captures(metadata: PowerBiMetadata, config: DocConfig, options: Options) -> None:
     """`--capture-plan` et `--calibrate` : ils n'écrivent aucun document."""
     directory = capturer.captures_dir(metadata, config)
     try:
@@ -265,12 +259,8 @@ def parse_args(argv: list[str] | None = None) -> Options:
         action="store_true",
         help="Capturer tout le rapport, sans suivre ce que le plan retient",
     )
-    captures.add_argument(
-        "--page", default="", help="Ne capturer que les pages nommées ainsi"
-    )
-    captures.add_argument(
-        "--shot", default="", help="Ne capturer que les prises nommées ainsi"
-    )
+    captures.add_argument("--page", default="", help="Ne capturer que les pages nommées ainsi")
+    captures.add_argument("--shot", default="", help="Ne capturer que les prises nommées ainsi")
     args = parser.parse_args(argv)
 
     return Options(
