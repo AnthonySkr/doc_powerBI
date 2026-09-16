@@ -187,7 +187,11 @@ DEFAULTS: dict[str, Any] = {
         # volets de droite, barre d'onglets. Ces marges dépendent de la version
         # et de l'écran : `--calibrate` écrit de quoi les régler à coup sûr.
         "window": {
-            "title": "Power BI Desktop",
+            # La fenêtre se reconnaît à son processus (PBIDesktop.exe), pas à
+            # son titre : selon la version, celui-ci ne porte que le nom du
+            # rapport. Ce fragment ne sert donc qu'à désigner un rapport parmi
+            # plusieurs ouverts en même temps ; vide, le premier trouvé.
+            "title": "",
             "inset_left": 0,
             "inset_top": 130,
             "inset_right": 340,

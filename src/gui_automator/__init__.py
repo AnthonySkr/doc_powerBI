@@ -10,13 +10,14 @@ emplacements réservés.
     geometry.py   du repère du rapport à celui de l'écran — du calcul pur
     plan.py       ce qu'il y a à capturer, déduit du rapport, sans rien ouvrir
     library.py    où vivent les images, et sous quel nom
+    finder.py     laquelle des fenêtres du bureau est le rapport (Windows)
     recorder.py   le contrat que remplit un preneur de captures
     fake.py       un preneur qui n'ouvre rien : des rectangles unis
     desktop.py    le vrai : Power BI Desktop, via pywinauto et mss (Windows)
 
-Seul `desktop.py` a besoin de Windows et de Power BI. Tout le reste — y compris
-une séance complète, avec `fake` — tourne partout, et c'est là que se vérifie
-l'essentiel : le cadrage.
+Seuls `desktop.py` et `finder.py` ont besoin de Windows et de Power BI. Tout
+le reste — y compris une séance complète, avec `fake` — tourne partout, et
+c'est là que se vérifie l'essentiel : le cadrage, et le choix de la fenêtre.
 """
 
 from src.gui_automator.capturer import (
