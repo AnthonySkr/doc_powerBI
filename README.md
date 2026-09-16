@@ -625,10 +625,38 @@ canevas est une surface dessinée d'un bloc, dont aucune API ne sait extraire
 **photographier l'écran et de recadrer d'après le rapport** — qui déclare la
 place de chaque visuel dans un canevas logique de 1280 × 720.
 
-    pywinauto   trouver la fenêtre, l'amener devant, changer de page
+    pywinauto   piloter la fenêtre : l'amener devant, changer de page
     mss         photographier une région de l'écran, et la rendre en PNG
 
 Les deux sont en option : `pip install -e ".[capture]"`.
+
+### Reconnaître la fenêtre
+
+La fenêtre du rapport se reconnaît au **processus** qui la porte —
+`PBIDesktop.exe`, ou `PBIDesktopStore.exe` pour la version du Microsoft Store —
+et non à son titre. C'est volontaire : le titre change d'une version à l'autre,
+et les versions récentes n'y écrivent plus que le nom du rapport.
+
+    Ventes 2024 - Power BI Desktop      les versions anciennes
+    Ventes 2024 - Power BI              certaines versions intermédiaires
+    Ventes 2024                         les versions récentes — le rapport seul
+
+`capture.window.title` reste lisible, mais il n'est plus un critère : il ne
+sert qu'à désigner **un rapport parmi plusieurs ouverts en même temps**. Laissé
+vide — sa valeur par défaut —, la fenêtre de Power BI trouvée est retenue ;
+s'il y en a plusieurs, la plus grande, c'est-à-dire le rapport plutôt que
+l'écran de démarrage.
+
+```yaml
+capture:
+  window:
+    title: "Ventes 2024"   # facultatif : seulement si plusieurs rapports sont ouverts
+```
+
+Quand rien n'est trouvé, le message d'erreur énumère les fenêtres vues et
+l'exécutable de chacune : de quoi voir tout de suite si Power BI était ouvert,
+et sous quel nom. Une fenêtre réduite dans la barre des tâches est dépliée
+avant la capture — sinon les images seraient celles du bureau.
 
 ### Tester module par module
 
@@ -707,6 +735,7 @@ src/
       geometry.py             du repère du rapport à celui de l'écran
       plan.py                 ce qu'il y a à capturer, sans rien ouvrir
       library.py              où vivent les images, et sous quel nom
+      finder.py               quelle fenêtre du bureau est le rapport
       recorder.py             le contrat d'un preneur de captures
       fake.py                 un preneur qui n'ouvre rien : rectangles unis
       desktop.py              le vrai : Power BI Desktop (pywinauto + mss)

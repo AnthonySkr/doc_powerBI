@@ -12,8 +12,12 @@ place de chaque visuel au pixel logique près (voir `geometry`).
 
 D'où deux outils, chacun sur un seul travail :
 
-    pywinauto   trouver la fenêtre, l'amener devant, changer de page
+    pywinauto   piloter la fenêtre : l'amener devant, changer de page
     mss         photographier une région de l'écran, et la rendre en PNG
+
+Laquelle de toutes les fenêtres du bureau est le rapport, c'est `finder` qui
+le dit — par le processus qui la porte, et non par son titre, que Power BI
+écrit différemment selon les versions.
 
 Les deux sont en option (`pip install -e ".[capture]"`) : un poste qui ne
 documente pas de captures n'a pas à les installer, et le document reste
@@ -41,6 +45,7 @@ vérifient avec `python -m gui_automator --calibrate`, qui écrit ce qu'il croit
 from dataclasses import dataclass, field
 
 from src.core import console
+from src.gui_automator import finder
 from src.gui_automator.geometry import Rect
 from src.gui_automator.plan import PagePlan
 from src.gui_automator.recorder import CaptureError
@@ -73,9 +78,11 @@ class Insets:
 class DesktopOptions:
     """Réglages du pilotage, tels que `capture:` les déclare dans le plan."""
 
-    # Fragment cherché dans le titre de la fenêtre. Power BI Desktop intitule
-    # la sienne « <rapport> - Power BI Desktop ».
-    window_title: str = "Power BI Desktop"
+    # Fragment cherché dans le titre de la fenêtre — facultatif, et vide par
+    # défaut : la fenêtre se reconnaît à son processus (voir `finder`), pas à
+    # son titre, qui selon la version ne porte que le nom du rapport. Ce
+    # fragment ne sert qu'à désigner un rapport parmi plusieurs ouverts.
+    window_title: str = ""
     insets: Insets = field(default_factory=Insets)
     # Temps laissé au rendu après un changement de page, en secondes. Un
     # visuel capturé trop tôt montre son squelette de chargement.
@@ -90,7 +97,7 @@ class DesktopOptions:
         """Réglages déclarés dans la section `capture:` du plan."""
         window = capture.get("window") or {}
         return cls(
-            window_title=str(window.get("title") or cls.window_title),
+            window_title=str(window.get("title") or ""),
             insets=Insets(
                 left=int(window.get("inset_left", Insets.left)),
                 top=int(window.get("inset_top", Insets.top)),
@@ -116,19 +123,15 @@ class DesktopRecorder:
         pywinauto, mss = _import_tools()
         _claim_real_pixels()
 
-        try:
-            desktop = pywinauto.Desktop(backend="uia")
-            self._window = desktop.window(title_re=f".*{self.options.window_title}.*")
-            self._window.wait("exists ready", timeout=10)
-        except Exception as e:
-            raise CaptureError(
-                f"Fenêtre Power BI Desktop introuvable ({e}). "
-                "Ouvrez le rapport dans Power BI Desktop, puis relancez."
-            ) from e
+        found = finder.locate(self.options.window_title)
+        console.done(f"fenêtre trouvée : {found.describe()}")
 
-        self._window.set_focus()
+        self._window = _attach(pywinauto, found)
+        _bring_to_front(self._window, found)
+        # Une fenêtre qui vient d'être dépliée s'anime : `--calibrate`
+        # photographie tout de suite, et la surprendrait en mouvement.
+        _settle(self.options.settle_seconds)
         self._screen = mss.mss()
-        console.done(f"fenêtre trouvée : {self._window.window_text()}")
 
     def stop(self) -> None:
         """Referme la capture d'écran. Power BI reste ouvert : il l'était déjà."""
@@ -208,6 +211,40 @@ class DesktopRecorder:
         if self._window is None:
             raise CaptureError("Capture non démarrée : appelez `start()` d'abord.")
         return self._window
+
+
+def _attach(pywinauto, found: finder.WindowInfo):
+    """
+    Prend la main sur la fenêtre trouvée, par son identifiant système.
+
+    Par l'identifiant plutôt que par le titre : le titre a déjà servi, il peut
+    changer entre-temps — Power BI y ajoute une étoile dès la moindre
+    modification — et deux rapports peuvent porter le même.
+    """
+    try:
+        window = pywinauto.Desktop(backend="uia").window(handle=found.handle)
+        window.wait("exists ready", timeout=10)
+    except Exception as e:
+        raise CaptureError(
+            f"Fenêtre {found.describe()} trouvée, mais impossible à piloter ({e}). "
+            "Vérifiez que Power BI Desktop répond, puis relancez."
+        ) from e
+    return window
+
+
+def _bring_to_front(window, found: finder.WindowInfo) -> None:
+    """
+    Déplie la fenêtre et l'amène devant : on photographie l'écran, pas elle.
+
+    Une mise au premier plan refusée — Windows la refuse parfois à un
+    processus qui n'a pas la main — n'arrête pas la séance : elle se signale,
+    et l'utilisateur voit tout de suite, sur les images, ce qui s'est passé.
+    """
+    finder.restore(found.handle)
+    try:
+        window.set_focus()
+    except Exception as e:  # noqa: BLE001 — l'échec est sans gravité, il se dit
+        console.warn(f"Fenêtre non mise au premier plan ({e}) — capture telle quelle")
 
 
 def _ask_for_page(page: PagePlan) -> None:
