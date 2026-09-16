@@ -28,8 +28,8 @@ from src.report_generator.word.merging import MergeWriter
 from src.report_generator.word.styles import StyleResolver
 from src.report_generator.word.values import column_width, format_template, number
 
-# Callback proposant à l'utilisateur de réécrire le texte d'un bloc `editable`.
 TextProvider = Callable[[dict[str, Any], str], str]
+"""Propose à l'utilisateur de réécrire le texte d'un bloc `editable:`."""
 
 
 class DocumentBuilder:

@@ -16,17 +16,11 @@ import yaml
 from src.core import paths
 from src.core.expressions import resolve_options
 
-__all__ = [
-    "DEFAULTS",
-    "DEFAULT_CONFIG_PATH",
-    "DEFAULT_OUTPUT_DIR",
-    "DocConfig",
-    "load_config",
-]
-
-# Le plan cherché à côté de l'exécutable, et le dossier créé à côté du `.pbip`.
 DEFAULT_CONFIG_PATH = "config.yaml"
+"""Le plan, cherché à côté de l'exécutable."""
+
 DEFAULT_OUTPUT_DIR = "doc"
+"""Le dossier de sortie, créé à côté du `.pbip`."""
 
 
 DEFAULTS: dict[str, Any] = {
@@ -178,6 +172,12 @@ DEFAULTS: dict[str, Any] = {
     "inputs": [],
     "sections": [],
 }
+"""
+Le plan entier, dans ses valeurs par défaut.
+
+Toute clé absente du fichier de l'utilisateur est reprise d'ici : son fichier
+n'a besoin de porter que ce qu'il change.
+"""
 
 
 class DocConfig:
@@ -187,9 +187,8 @@ class DocConfig:
     Les clés absentes du fichier de l'utilisateur sont complétées par
     `DEFAULTS` : chaque propriété ci-dessous est donc toujours servie.
 
-    Attributes:
-        raw: le plan complet, défauts compris.
-        path: le fichier dont il vient, ou None s'il n'en vient d'aucun.
+    `raw` porte le plan complet, défauts compris, et `path` le fichier dont il
+    vient — None quand il ne vient d'aucun.
     """
 
     def __init__(

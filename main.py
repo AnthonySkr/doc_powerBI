@@ -7,6 +7,19 @@ Le chef d'orchestre : il enchaîne les étapes.
 
 Un seul objet circule d'un bout à l'autre, le `PowerBiMetadata` : rien ne
 transite par le disque entre deux étapes.
+
+## Le déroulé
+
+`main` tient la fenêtre et le code de sortie, `parse_args` lit la ligne de
+commande, et `generate` enchaîne les trois étapes :
+
+1. `_extract` — le `.pbip` devient un `PowerBiMetadata` ;
+2. `_ask` — les questions du plan, et la mémoire des réponses ;
+3. `_document` — les métadonnées deviennent un `.docx`.
+
+Le reste sert ces trois-là : `_config` et `_project` ouvrent ce qu'on leur
+donne, `_announce` le rappelle à l'écran, `_rewriter` propose la relecture des
+textes du plan.
 """
 
 import argparse
@@ -28,6 +41,7 @@ from src.report_generator import (
 )
 
 STEPS = 3
+"""Lecture du rapport, questions, écriture du document."""
 
 
 class PipelineError(Exception):
@@ -36,20 +50,19 @@ class PipelineError(Exception):
 
 @dataclass(frozen=True)
 class Options:
-    """
-    Ce que la ligne de commande demande.
-
-    Attributes:
-        pbip_path: chemin du fichier `.pbip` à documenter.
-        config_path: chemin du plan YAML.
-        interactive: poser les questions du plan, plutôt que prendre ses défauts.
-        pause: attendre une touche avant de fermer la fenêtre.
-    """
+    """Ce que la ligne de commande demande."""
 
     pbip_path: str
+    """Chemin du fichier `.pbip` à documenter."""
+
     config_path: str = DEFAULT_CONFIG_PATH
+    """Chemin du plan YAML."""
+
     interactive: bool = True
+    """Poser les questions du plan, plutôt que prendre ses défauts."""
+
     pause: bool = True
+    """Attendre une touche avant de fermer la fenêtre."""
 
 
 # ─────────────────────────────────────────────────────────────
@@ -86,9 +99,7 @@ def _extract(project: PbipProject) -> PowerBiMetadata:
         raise PipelineError(str(e)) from e
 
 
-def _ask(
-    metadata: PowerBiMetadata, config: DocConfig, interactive: bool
-) -> dict[str, Any]:
+def _ask(metadata: PowerBiMetadata, config: DocConfig, interactive: bool) -> dict[str, Any]:
     """
     Deuxième étape : les réponses aux questions du plan.
 

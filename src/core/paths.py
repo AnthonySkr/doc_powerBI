@@ -9,8 +9,6 @@ le plan du document sans rien reconstruire.
 import sys
 from pathlib import Path
 
-__all__ = ["app_dir", "bundled_dir", "candidates", "find", "is_frozen"]
-
 
 def is_frozen() -> bool:
     """Vrai lorsque le programme tourne depuis un exécutable PyInstaller."""

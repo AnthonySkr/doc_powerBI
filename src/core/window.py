@@ -17,10 +17,8 @@ class ConsoleWindow:
     """
     Décide si la fenêtre doit être retenue, et la retient le cas échéant.
 
-    Attributes:
-        pause: retenir la fenêtre. Vrai depuis un exécutable ; le point
-            d'entrée le rabat sur `False` sur `--no-pause`, ce qu'il ne sait
-            qu'après lecture des arguments.
+    `pause` vaut vrai depuis un exécutable. Le point d'entrée le rabat sur
+    `False` sur `--no-pause`, ce qu'il ne sait qu'après lecture des arguments.
     """
 
     def __init__(self):

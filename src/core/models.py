@@ -348,14 +348,13 @@ class PowerBiMetadata:
 
     L'extraction le produit, l'écriture du document le lit : ni l'une ni
     l'autre n'a à retourner à la source.
-
-    Attributes:
-        report: le rapport lu, pages et modèle sémantique compris.
-        source: chemin du fichier `.pbip` dont il a été tiré.
     """
 
     report: PowerBIReport
+    """Le rapport lu, pages et modèle sémantique compris."""
+
     source: Path = Path()
+    """Chemin du fichier `.pbip` dont il a été tiré."""
 
     @property
     def project_dir(self) -> Path:

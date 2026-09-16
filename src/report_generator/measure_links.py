@@ -14,31 +14,33 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import Any
 
-# Un segment de texte : `bookmark` vaut None pour un texte sans lien.
 Segment = tuple[str, str | None]
+"""Un segment de texte : le signet vaut None pour un texte sans lien."""
 
 
 @dataclass
 class MeasureLinker:
-    """
-    Repère les noms de mesures dans un texte.
-
-    Attributes:
-        targets: nom de mesure → signet de sa définition.
-        known_names: tous les noms du modèle, documentés ou non. Les mentions
-            des autres sont comptées dans `unlinked` pour être signalées,
-            faute de définition à viser.
-        case_sensitive: False = la casse est ignorée, comme dans Power BI.
-        min_length: en deçà, un nom est trop court pour être cherché : il se
-            lierait à des fragments de phrase.
-        first_occurrence_only: ne lier que la première mention d'un texte.
-    """
+    """Repère les noms de mesures dans un texte."""
 
     targets: dict[str, str] = field(default_factory=dict)
+    """Nom de mesure → signet de sa définition."""
+
     known_names: Iterable[str] = field(default_factory=tuple)
+    """
+    Tous les noms du modèle, documentés ou non.
+
+    Les mentions de ceux qui ne le sont pas sont comptées dans `unlinked` pour
+    être signalées, faute de définition à viser.
+    """
+
     case_sensitive: bool = False
+    """False = la casse est ignorée, comme dans Power BI."""
+
     min_length: int = 2
+    """En deçà, un nom est trop court : il se lierait à des bouts de phrase."""
+
     first_occurrence_only: bool = False
+    """Ne lier que la première mention d'un même texte."""
 
     def __post_init__(self) -> None:
         """Compile, une fois pour toutes, le motif qui cherche les noms."""

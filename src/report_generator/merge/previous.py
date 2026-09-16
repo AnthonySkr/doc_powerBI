@@ -18,28 +18,31 @@ from src.report_generator.merge import blocks as block_parser
 from src.report_generator.merge import markers
 from src.report_generator.merge.blocks import Block
 
-# États d'un élément vis-à-vis du document précédent.
 NEW = "new"
+"""L'élément ne figurait pas dans le document précédent."""
+
 CHANGED = "changed"
+"""Sa technique a bougé : la rédaction reprise porte peut-être à faux."""
+
 UNCHANGED = "unchanged"
+"""Rien n'a bougé depuis la génération précédente."""
 
 
 @dataclass
 class PreviousDocument:
-    """
-    Le document précédent, tel qu'il servira à la fusion.
-
-    Attributes:
-        path: son chemin, vide s'il n'y en avait pas.
-        document: le `.docx` ouvert, gardé pour ses parties liées.
-        blocks: son corps découpé en blocs ancrés.
-        fingerprints: identifiant d'élément → empreinte relevée sur son ancre.
-    """
+    """Le document précédent, tel qu'il servira à la fusion."""
 
     path: str = ""
+    """Son chemin, vide s'il n'y en avait pas."""
+
     document: object | None = None
+    """Le `.docx` ouvert, gardé pour ses parties liées."""
+
     blocks: list[Block] = field(default_factory=list)
+    """Son corps découpé en blocs ancrés."""
+
     fingerprints: dict[str, str] = field(default_factory=dict)
+    """Identifiant d'élément → empreinte relevée sur son ancre."""
 
     @property
     def exists(self) -> bool:

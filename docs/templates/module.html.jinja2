@@ -7,6 +7,30 @@
 
 {% block title %}{{ module.modulename }} — Documentation du code{% endblock %}
 
+{# Ce que la page montre.
+
+   pdoc cache par défaut tout nom commençant par `_`, et c'est la bonne règle
+   pour une bibliothèque : le site y publie un contrat, et le reste peut bouger
+   sans préavis. Ce projet n'est pas une bibliothèque — personne n'importe
+   `main._extract` — et son site s'adresse à qui vient reprendre le code. Un
+   `generate` qui « enchaîne les trois étapes » sans qu'aucune des trois ne
+   paraisse ne lui apprend rien.
+
+   Les fonctions et les classes privées sont donc publiées. Les constantes
+   privées, non : ce sont des détails d'écriture — une centaine de `_TABLE =
+   qn("w:tbl")` — qui noieraient ce qu'on vient lire. `@private` reste maître
+   du cas particulier. #}
+{% macro is_public(doc) %}
+    {% if "@private" in doc.docstring %}
+        {# caché sur demande, quoi qu'il en soit #}
+    {% elif doc.name.startswith("_") and not doc.name.startswith("__")
+            and doc.kind in ("function", "class") and doc.docstring %}
+        true
+    {% else %}
+        {{ default_is_public(doc) }}
+    {% endif %}
+{% endmacro %}
+
 {% block module_list_link %}
     {% set parentmodule = ".".join(module.modulename.split(".")[:-1]) %}
     {% if parentmodule and parentmodule in all_modules %}

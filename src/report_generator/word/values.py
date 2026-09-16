@@ -14,8 +14,8 @@ from typing import Any
 
 from src.report_generator.word.errors import DocumentError
 
-# Modes de numérotation des figures, du plus courant au plus rare.
 NUMBERING_MODES = ("auto", "fixed", "none")
+"""Modes de numérotation des figures, du plus courant au plus rare."""
 
 
 def format_template(template: Any, key: str, **values: str) -> str:

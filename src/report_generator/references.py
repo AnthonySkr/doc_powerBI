@@ -23,9 +23,12 @@ from src.core.models import (
     VisualReference,
 )
 
-# Section du plan portant les options de numérotation et de libellés. Le
-# générateur n'a pas d'autre attache à un identifiant de section.
 VISUALS_SECTION_ID = "visuels"
+"""
+Section du plan portant les options de numérotation et de libellés.
+
+C'est la seule attache du générateur à un identifiant de section.
+"""
 
 _KIND_BY_CATEGORY = {
     "Mesure": "mesure",

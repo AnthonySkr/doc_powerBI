@@ -18,6 +18,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 WIDTH = 66
+"""Largeur du dessin, en caractères."""
 
 
 @dataclass
