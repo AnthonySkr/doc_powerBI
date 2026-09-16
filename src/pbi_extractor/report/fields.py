@@ -23,10 +23,11 @@ _CATEGORIES = {
 # le déclinant selon les versions (`referenceLabels`, `referenceLabel`...).
 _REFERENCE_LABELS = "referencelabel"
 
-# Rôles donnés aux champs d'une étiquette de référence. Une étiquette porte une
-# valeur, et peut porter un détail sous cette valeur.
 REFERENCE_LABEL_VALUE = "ReferenceLabelValue"
+"""Rôle de la valeur que porte une étiquette de référence."""
+
 REFERENCE_LABEL_DETAIL = "ReferenceLabelDetail"
+"""Rôle du détail affiché sous cette valeur."""
 
 
 # ─────────────────────────────────────────────────────────────

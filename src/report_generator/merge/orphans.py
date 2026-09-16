@@ -24,10 +24,13 @@ from src.core import console
 from src.report_generator.merge import markers, salvage
 from src.report_generator.merge.blocks import FREE, SEED, Block
 
-# Identifiant de l'ancre de l'annexe, et du bloc qui porte son titre. Le
-# préfixe la déclare interne à la fusion : elle ne décrit rien du rapport, et
-# `PreviousDocument.removed` ne la compte donc pas comme un élément disparu.
 ELEMENT_ID = f"{markers.INTERNAL_PREFIX}orphans"
+"""
+Ancre de l'annexe.
+
+Son préfixe la déclare interne à la fusion : elle ne décrit rien du rapport, et
+`PreviousDocument.removed` ne la compte pas parmi les éléments disparus.
+"""
 _HEADING_BLOCK = "orphans:heading"
 
 _DEFAULT_TITLE = "Contenu non replacé"

@@ -16,13 +16,11 @@ from pathlib import Path
 
 from src.core import paths
 
-__all__ = ["UNKNOWN", "VERSION_FILE", "current", "write_stamp"]
-
-# Fichier écrit à la construction, embarqué dans l'exécutable.
 VERSION_FILE = "VERSION"
+"""Fichier écrit à la construction, embarqué dans l'exécutable."""
 
-# Faute de tag comme de fichier : une version valide, et visiblement pas vraie.
 UNKNOWN = "0.0"
+"""Faute de tag comme de fichier : une version valide, et visiblement pas vraie."""
 
 # Les tags de version, et eux seuls : `v0.6`, `v0.3.1`.
 _TAG_PATTERN = "v[0-9]*"

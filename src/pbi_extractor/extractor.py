@@ -21,8 +21,6 @@ from src.pbi_extractor.pbip import PbipProject
 from src.pbi_extractor.report import parse_report
 from src.pbi_extractor.tmdl import load_semantic_model
 
-__all__ = ["ExtractError", "extract", "open_project"]
-
 
 class ExtractError(Exception):
     """Le projet `.pbip` est introuvable ou incomplet."""

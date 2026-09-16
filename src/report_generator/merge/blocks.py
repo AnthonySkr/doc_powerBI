@@ -26,11 +26,16 @@ from docx.oxml.ns import qn
 from src.report_generator.merge import markers
 
 OWNED = "owned"
-SEED = "seed"
-FREE = "free"
+"""Contenu produit par le script, réécrit à chaque génération."""
 
-# Natures de segment portant un identifiant de bloc du plan.
+SEED = "seed"
+"""Amorce : écrite une fois, puis laissée à l'utilisateur."""
+
+FREE = "free"
+"""Tout le reste : écrit par l'utilisateur, sans identité propre."""
+
 IDENTIFIED = (OWNED, SEED)
+"""Les natures de segment qui portent un identifiant de bloc du plan."""
 
 # Nature de segment correspondant à chaque marqueur d'ouverture.
 _KINDS = {markers.GENERATED: OWNED, markers.SEED: SEED}

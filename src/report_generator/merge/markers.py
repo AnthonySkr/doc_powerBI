@@ -48,20 +48,36 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 PREFIX = "pbi::"
+"""En tête de tout marqueur : c'est à lui qu'on en reconnaît un."""
 
 ELEMENT = "elem"
+"""Ancre un élément documenté, et porte son empreinte."""
+
 GENERATED = "gen"
+"""Ouvre un contenu du script, réécrit à chaque génération."""
+
 GENERATED_END = "endgen"
+"""Le ferme, et porte l'empreinte de chaque contenu écrit."""
+
 SEED = "seed"
+"""Ouvre une amorce : écrite une fois, puis laissée à l'utilisateur."""
+
 SEED_END = "endseed"
+"""La ferme, et porte l'empreinte de ce qu'elle contenait."""
 
-# Encadrements : marqueur d'ouverture -> marqueur de fermeture.
 ENCLOSURES = {GENERATED: GENERATED_END, SEED: SEED_END}
-CLOSINGS = frozenset(ENCLOSURES.values())
+"""Encadrements : marqueur d'ouverture → marqueur de fermeture."""
 
-# Les ancres que la fusion pose pour elle-même — et non pour le plan — portent
-# ce préfixe : elles ne décrivent rien du rapport documenté.
+CLOSINGS = frozenset(ENCLOSURES.values())
+"""Les marqueurs qui ferment un encadrement."""
+
 INTERNAL_PREFIX = "merge:"
+"""
+Préfixe des ancres que la fusion pose pour elle-même.
+
+Elles ne décrivent rien du rapport documenté, et ne comptent donc pas parmi
+les éléments qu'il aurait perdus.
+"""
 
 # Séparateur des champs. Les identifiants d'éléments contiennent des « : »
 # (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
@@ -166,9 +182,13 @@ def fingerprint(text: str) -> str:
     return digest.hexdigest()[:_FINGERPRINT_LENGTH]
 
 
-# Empreinte d'un contenu sans texte ni image : la place laissée libre par le
-# script en fin de bloc. Ce qu'on y écrit ne remplace rien.
 EMPTY = fingerprint("")
+"""
+Empreinte d'un contenu sans texte ni image.
+
+C'est la place que le script laisse libre en fin de bloc : ce qu'on y écrit ne
+remplace rien, et appartient donc à l'utilisateur.
+"""
 
 
 def digest(node) -> str:

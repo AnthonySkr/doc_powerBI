@@ -3,8 +3,6 @@
 from dataclasses import dataclass
 from pathlib import Path
 
-__all__ = ["PbipProject"]
-
 # Un fichier `Rapport.pbip` est accompagné des dossiers `Rapport.SemanticModel`
 # (ou `Rapport.Dataset` pour les projets antérieurs) et `Rapport.Report`.
 _SEMANTIC_SUFFIXES = (".SemanticModel", ".Dataset")
@@ -13,22 +11,22 @@ _REPORT_SUFFIX = ".Report"
 
 @dataclass(frozen=True)
 class PbipProject:
-    """
-    Les dossiers d'un projet `.pbip`, une fois localisés.
-
-    Attributes:
-        path: le fichier `.pbip` lui-même.
-        name: son nom sans extension, que portent aussi les deux dossiers.
-        directory: le dossier qui contient le tout.
-        semantic_model_dir: `<nom>.SemanticModel`, ou None s'il manque.
-        report_dir: `<nom>.Report`, ou None s'il manque.
-    """
+    """Les dossiers d'un projet `.pbip`, une fois localisés."""
 
     path: Path
+    """Le fichier `.pbip` lui-même."""
+
     name: str
+    """Son nom sans extension, que portent aussi les deux dossiers."""
+
     directory: Path
+    """Le dossier qui contient le tout."""
+
     semantic_model_dir: Path | None
+    """`<nom>.SemanticModel`, ou None s'il manque."""
+
     report_dir: Path | None
+    """`<nom>.Report`, ou None s'il manque."""
 
     @classmethod
     def at(cls, pbip_path: str | Path) -> PbipProject:

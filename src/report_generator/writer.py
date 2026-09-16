@@ -29,21 +29,23 @@ __all__ = [
 
 @dataclass
 class DocumentResult:
-    """
-    Ce que l'écriture a produit.
-
-    Attributes:
-        path: le `.docx` écrit.
-        summary: le bilan en une ligne.
-        details: ce qui a été ajouté, modifié ou retiré.
-        undocumented: mesures du modèle que le document ne dit pas — l'écart
-            est nommé en fin d'exécution plutôt que subi.
-    """
+    """Ce que l'écriture a produit."""
 
     path: Path
+    """Le `.docx` écrit."""
+
     summary: str
+    """Le bilan en une ligne."""
+
     details: list[str]
+    """Ce qui a été ajouté, modifié ou retiré."""
+
     undocumented: list[str]
+    """
+    Mesures du modèle que le document ne dit pas.
+
+    L'écart est nommé en fin d'exécution, plutôt que subi.
+    """
 
 
 def output_directory(metadata: PowerBiMetadata, config: DocConfig, inputs: dict[str, Any]) -> str:

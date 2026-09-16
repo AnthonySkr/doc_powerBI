@@ -21,8 +21,6 @@ from src.core import console
 from src.core.config import DocConfig
 from src.core.expressions import render
 
-__all__ = ["path", "read", "write"]
-
 _DEFAULT_NAME = "reponses_{{ report.name }}.yaml"
 
 _HEADER = (

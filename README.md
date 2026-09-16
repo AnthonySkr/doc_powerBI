@@ -622,6 +622,37 @@ Un paquet se replie, et s'ouvre de lui-même sur le chemin de la page affichée 
 de quoi s'y retrouver à quarante-quatre modules, là où la liste à plat de pdoc
 les nommait tous `src.report_generator.merge.…`.
 
+#### Ce que les pages montrent
+
+**Les fonctions internes sont documentées, pas seulement l'interface.** pdoc
+cache par défaut tout nom commençant par `_` : c'est la bonne règle pour une
+bibliothèque, dont le site publie un contrat. Ce projet n'en est pas une —
+personne n'importe `main._extract` — et son site s'adresse à qui vient reprendre
+le code. Un `generate` qui « enchaîne les trois étapes » sans qu'aucune des
+trois ne paraisse n'apprend rien.
+
+Trois conséquences pour qui écrit du code ici :
+
+| | |
+| --- | --- |
+| Une fonction ou une classe privée | est publiée si elle a une docstring. `@private` dans la docstring l'en retire |
+| Une **constante** privée | reste cachée : les cent `_TABLE = qn("w:tbl")` du projet noieraient le reste |
+| Une constante **publique** | se documente par une docstring **sous** l'affectation — pdoc ne lit pas le commentaire au-dessus |
+
+```python
+STEPS = 3
+"""Lecture du rapport, questions, écriture du document."""
+```
+
+`__all__` ne vit plus que sur les `__init__.py`, où il déclare ce qu'un paquet
+ré-exporte. Sur un module feuille il ne redisait que ce que le préfixe `_` dit
+déjà — et il privait sa page pdoc de ses fonctions internes, pdoc écartant ces
+membres avant même d'arriver au gabarit.
+
+Enfin, **un nom entre backticks devient un lien** vers le membre correspondant :
+c'est de quoi ouvrir un module sur le déroulé de son code, comme le fait
+`main.py`.
+
 Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
 à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
 recherche, et le rappel du module auquel elle appartient.

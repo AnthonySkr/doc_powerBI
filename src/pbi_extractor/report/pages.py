@@ -8,8 +8,8 @@ from src.core import console
 from src.core.models import ReportPage, Visual, VisualGroup
 from src.pbi_extractor.report.fields import parse_elements, parse_filters, parse_reference_labels
 
-# Titre de repli d'un groupe dont le `displayName` est vide.
 UNTITLED_GROUP = "Groupe sans nom"
+"""Titre de repli d'un groupe dont le `displayName` est vide."""
 
 
 def load_page_order(pages_dir: str) -> dict[str, int]:

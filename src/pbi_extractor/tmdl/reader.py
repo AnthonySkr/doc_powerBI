@@ -10,8 +10,6 @@ import re
 
 from src.core import console
 
-# Mots-clés ouvrant un bloc TMDL. Ils servent de bornes : un bloc `measure`
-# s'arrête au prochain mot-clé de même niveau d'indentation.
 BLOCK_KEYWORDS = frozenset(
     {
         "column",
@@ -24,6 +22,12 @@ BLOCK_KEYWORDS = frozenset(
         "role",
     }
 )
+"""
+Mots-clés ouvrant un bloc TMDL.
+
+Ils servent de bornes : un bloc `measure` s'arrête au prochain mot-clé de même
+niveau d'indentation.
+"""
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 

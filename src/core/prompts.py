@@ -21,21 +21,11 @@ from src.core.expressions import evaluate, render, resolve_items
 from src.core.models import PowerBIReport
 from src.core.selection import documentable_titles
 
-__all__ = [
-    "Answer",
-    "TextProvider",
-    "ask_inputs",
-    "base_context",
-    "collect",
-    "default_inputs",
-    "make_text_provider",
-]
-
-# Répond à une question : (bloc du plan, contexte, valeur proposée) -> réponse.
 Answer = Callable[[dict[str, Any], dict[str, Any], Any], Any]
+"""Répond à une question : (bloc du plan, contexte, valeur proposée) → réponse."""
 
-# Réécrit un texte du plan : (bloc du plan, texte du plan) -> texte retenu.
 TextProvider = Callable[[dict[str, Any], str], str]
+"""Réécrit un texte du plan : (bloc du plan, texte du plan) → texte retenu."""
 
 
 def base_context(report: PowerBIReport, config: DocConfig) -> dict[str, Any]:
