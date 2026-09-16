@@ -1,17 +1,18 @@
 """
 La documentation du code, servie ou construite.
 
-    python tools/docs.py                  tout le projet, servi et rechargé à chaud
-    python tools/docs.py extractor        le seul module d'extraction
-    python tools/docs.py --build          le site statique, dans docs/site/
+    python tools/docs.py           tout le projet, servi et rechargé à chaud
+    python tools/docs.py --build   le site statique, dans docs/site/
+
+Le site couvre toujours le projet entier : une page qui renvoie vers un module
+absent ne vaut pas la commande qui l'aurait évitée.
 
 Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
 
   - **la liste des modules**. Un paquet qui déclare `__all__` cache ses
     sous-modules à `pdoc` : `tmdl/`, `report/` ou `pbip.py` disparaîtraient du
     site. Ils sont donc énumérés ici, en parcourant l'arborescence ;
-  - **le périmètre** : les paquets de tests sont écartés ;
-  - **le découpage par module**, pour ouvrir la documentation d'un seul.
+  - **le périmètre** : les paquets de tests sont écartés.
 
 `pdoc` est en option (`pip install -e ".[dev]"`) : il ne sert qu'au
 développement, et rien du programme livré n'en dépend.
@@ -28,19 +29,10 @@ from importlib import import_module
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-# Ce que chaque nom court désigne. L'ordre est celui de la génération.
-PARTS = {
-    "main": ["main"],
-    "extractor": ["src.pbi_extractor"],
-    "writer": ["src.report_generator"],
-    "core": ["src.core"],
-}
-
-# Tout le projet : le chef d'orchestre, les deux modules, et leur socle.
-EVERYTHING = [
-    "main",
-    *(root for roots in PARTS.values() for root in roots if root != "main"),
-]
+# Le projet entier : le chef d'orchestre, les deux modules, et leur socle.
+# `src` n'y figure pas : il ne porte rien, et coifferait l'arborescence du site
+# d'un niveau qui n'apprend rien.
+ROOTS = ["main", "src.pbi_extractor", "src.report_generator", "src.core"]
 
 DEFAULT_OUTPUT = os.path.join(ROOT, "docs", "site")
 TEMPLATES = os.path.join(ROOT, "docs", "templates")
@@ -49,14 +41,13 @@ TEMPLATES = os.path.join(ROOT, "docs", "templates")
 def main(argv: list[str] | None = None) -> int:
     """Point d'entrée du script. Retourne le code de sortie."""
     args = _parse_args(argv)
-    roots = PARTS[args.part] if args.part else EVERYTHING
-    names = [name for root in roots for name in _modules(root)]
+    names = [name for root in ROOTS for name in _modules(root)]
     if not names:
-        print(f"Aucun module à documenter pour « {args.part or 'tout le projet'} ».")
+        print("Aucun module à documenter.")
         return 1
 
     command = [sys.executable, "-m", "pdoc", *names, *_options(args)]
-    print(f"{len(names)} module(s) — {args.part or 'tout le projet'}")
+    print(f"{len(names)} module(s)")
 
     try:
         # Commande entièrement construite ici : l'interpréteur courant, `pdoc`,
@@ -150,12 +141,6 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
         prog="python tools/docs.py",
         description="Sert ou construit la documentation du code (pdoc).",
-    )
-    parser.add_argument(
-        "part",
-        nargs="?",
-        choices=sorted(PARTS),
-        help="N'ouvrir qu'une partie du projet (défaut : tout)",
     )
     parser.add_argument(
         "--build",

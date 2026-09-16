@@ -35,8 +35,16 @@ class Harness(unittest.TestCase):
         directory = tempfile.TemporaryDirectory()
         self.addCleanup(directory.cleanup)
         self.directory = directory.name
+        self.stamp_path = Path(self.directory) / VERSION_FILE
 
-        for target, value in (("app_dir", Path(self.directory)), ("is_frozen", False)):
+        # `paths.find` est détourné dès le départ, et pas seulement quand un
+        # test dépose un fichier : sans cela, un `VERSION` laissé au pied du
+        # dépôt par une construction ferait passer les cas sans repli.
+        for target, value in (
+            ("app_dir", Path(self.directory)),
+            ("is_frozen", False),
+            ("find", self.stamp_path),
+        ):
             patch = mock.patch.object(version_module.paths, target, return_value=value)
             patch.start()
             self.addCleanup(patch.stop)
@@ -52,11 +60,7 @@ class Harness(unittest.TestCase):
 
     def stamp(self, text: str) -> None:
         """Dépose un fichier `VERSION`, comme le ferait la construction."""
-        path = Path(self.directory) / VERSION_FILE
-        path.write_text(text, encoding="utf-8")
-        patch = mock.patch.object(version_module.paths, "find", return_value=path)
-        patch.start()
-        self.addCleanup(patch.stop)
+        self.stamp_path.write_text(text, encoding="utf-8")
 
 
 class TagDuDepotTest(Harness):
