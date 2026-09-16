@@ -1,9 +1,9 @@
 """
 L'écriture du document, à partir des métadonnées et de rien d'autre.
 
-Ce qui vient d'avant — le rapport lu, les captures prises — est déjà dans le
-`PowerBiMetadata` ; ce qui vient de l'utilisateur — les réponses, la réécriture
-des textes — est passé en argument.
+Ce qui vient d'avant — le rapport lu — est déjà dans le `PowerBiMetadata` ; ce
+qui vient de l'utilisateur — les réponses, la réécriture des textes — est passé
+en argument.
 """
 
 from dataclasses import dataclass
@@ -29,13 +29,20 @@ __all__ = [
 
 @dataclass
 class DocumentResult:
-    """Ce que l'écriture a produit."""
+    """
+    Ce que l'écriture a produit.
+
+    Attributes:
+        path: le `.docx` écrit.
+        summary: le bilan en une ligne.
+        details: ce qui a été ajouté, modifié ou retiré.
+        undocumented: mesures du modèle que le document ne dit pas — l'écart
+            est nommé en fin d'exécution plutôt que subi.
+    """
 
     path: Path
     summary: str
     details: list[str]
-    # Mesures que le document ne documente pas : l'écart est nommé en fin
-    # d'exécution plutôt que subi.
     undocumented: list[str]
 
 

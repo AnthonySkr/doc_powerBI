@@ -1,13 +1,12 @@
 """
 Détection des mentions de mesures dans les textes écrits dans le document.
 
-Le générateur écrit du texte provenant de sources variées : libellés du tableau
-des références d'un visuel, code DAX, description, liste des sources utilisées,
-paragraphes du plan. Chaque fois qu'un nom de mesure apparaît dans l'un de ces
-textes, il doit devenir un lien interne vers la définition de la mesure.
+Chaque fois qu'un nom de mesure apparaît dans un texte du document — libellé
+d'un tableau, code DAX, description, paragraphe du plan —, il doit devenir un
+lien interne vers la définition de cette mesure.
 
-Ce module ne connaît que le texte : il découpe une chaîne en segments
-« texte simple » / « texte à lier », le générateur Word se charge de l'écriture.
+Ce module ne connaît que le texte : il découpe une chaîne en segments à lier ou
+non, et l'écriture revient au générateur Word.
 """
 
 import re
@@ -24,18 +23,15 @@ class MeasureLinker:
     """
     Repère les noms de mesures dans un texte.
 
-    Args:
-        targets: nom de mesure -> nom de signet de sa définition
-        known_names: tous les noms de mesures du modèle, y compris ceux qui ne
-            sont pas documentés. Les mentions correspondantes sont comptées
-            (`unlinked`) afin de pouvoir les signaler, mais pas transformées
-            en lien puisqu'elles n'ont pas de définition dans le document.
-        case_sensitive: False = « Chiffre d'affaires » et « CHIFFRE D'AFFAIRES »
-            désignent la même mesure (comportement de Power BI).
-        min_length: longueur minimale d'un nom pris en compte. Évite qu'une
-            mesure au nom très court ne se lie à un fragment de phrase.
-        first_occurrence_only: True = seule la première mention d'une mesure
-            est transformée en lien dans un même texte.
+    Attributes:
+        targets: nom de mesure → signet de sa définition.
+        known_names: tous les noms du modèle, documentés ou non. Les mentions
+            des autres sont comptées dans `unlinked` pour être signalées,
+            faute de définition à viser.
+        case_sensitive: False = la casse est ignorée, comme dans Power BI.
+        min_length: en deçà, un nom est trop court pour être cherché : il se
+            lierait à des fragments de phrase.
+        first_occurrence_only: ne lier que la première mention d'un texte.
     """
 
     targets: dict[str, str] = field(default_factory=dict)
@@ -57,11 +53,12 @@ class MeasureLinker:
     # ── API ───────────────────────────────────────────────────────
     def split(self, text: str, skip_bookmark: str | None = None) -> list[Segment]:
         """
-        Découpe `text` en segments. Les mentions de mesures reçoivent le nom du
-        signet à viser, le reste du texte est retourné tel quel.
+        Découpe un texte en segments, à lier ou non.
 
-        `skip_bookmark` permet de ne pas créer de lien d'une mesure vers
-        elle-même (mention de la mesure dans sa propre définition).
+        Args:
+            text: le texte à parcourir.
+            skip_bookmark: signet à ne jamais viser — c'est ainsi qu'une mesure
+                ne se lie pas à elle-même depuis sa propre définition.
         """
         if not text or self._pattern is None:
             return [(text, None)] if text else []
@@ -97,13 +94,16 @@ class MeasureLinker:
         return segments or [(text, None)]
 
     def has_targets(self) -> bool:
+        """Y a-t-il seulement une mesure vers laquelle lier ?"""
         return bool(self.targets) and self._pattern is not None
 
     # ── Interne ───────────────────────────────────────────────────
     def _eligible(self, name: Any) -> bool:
+        """Le nom est-il assez long pour être cherché dans un texte ?"""
         return isinstance(name, str) and len(name.strip()) >= max(1, self.min_length)
 
     def _key(self, name: str) -> str:
+        """Forme de comparaison d'un nom."""
         return name if self.case_sensitive else name.casefold()
 
 
@@ -111,10 +111,10 @@ def _build_pattern(names: Iterable[str], case_sensitive: bool) -> re.Pattern | N
     """
     Construit l'expression régulière repérant les noms de mesures.
 
-    Les noms les plus longs sont testés en premier pour qu'une mesure
-    « CA net » ne soit pas reconnue comme la mesure « CA ». Les frontières de
-    mot ne sont posées que du côté où le nom commence (ou finit) par un
-    caractère de mot : « % Marge » ou « CA (N-1) » restent ainsi détectables.
+    Les noms les plus longs passent en premier : « CA net » ne doit pas être
+    reconnu comme « CA ». Les frontières de mot ne sont posées que là où le nom
+    commence — ou finit — par un caractère de mot, pour que « % Marge » et
+    « CA (N-1) » restent détectables.
     """
     alternatives = [_alternative(name) for name in sorted(set(names), key=lambda n: (-len(n), n))]
     alternatives = [alt for alt in alternatives if alt]
@@ -126,6 +126,7 @@ def _build_pattern(names: Iterable[str], case_sensitive: bool) -> re.Pattern | N
 
 
 def _alternative(name: str) -> str:
+    """Un nom de mesure en alternative d'expression régulière."""
     cleaned = (name or "").strip()
     if not cleaned:
         return ""
@@ -136,6 +137,7 @@ def _alternative(name: str) -> str:
 
 
 def _is_word_char(char: str) -> bool:
+    """Le caractère compte-t-il comme un caractère de mot ?"""
     return bool(re.match(r"\w", char, flags=re.UNICODE))
 
 
@@ -150,12 +152,14 @@ def collect_measures(source: Any) -> list[Any]:
     seen: set[int] = set()
 
     def add(item: Any) -> None:
+        """Retient une mesure, une seule fois."""
         if item is None or id(item) in seen:
             return
         seen.add(id(item))
         measures.append(item)
 
     def walk(value: Any) -> None:
+        """Descend dans une collection jusqu'aux mesures qu'elle porte."""
         if value is None:
             return
         if isinstance(value, dict):
