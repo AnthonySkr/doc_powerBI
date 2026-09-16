@@ -114,7 +114,11 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "data": {
-        "pages": {"exclude_hidden": True, "exclude_names": [], "sort_by": "report_order"},
+        "pages": {
+            "exclude_hidden": True,
+            "exclude_names": [],
+            "sort_by": "report_order",
+        },
         "visuals": {
             "exclude_types": [],
             "exclude_titles": [],
@@ -123,9 +127,7 @@ DEFAULTS: dict[str, Any] = {
             "groups": {
                 "enabled": True,
                 "keep_empty": False,
-                # Un groupe d'un seul visuel ne mérite pas sa propre partie :
-                # son titre et sa légende d'une ligne redisent ce que le visuel
-                # dit déjà, au prix d'un niveau de plan de plus.
+                # Un groupe d'un seul visuel ne mérite pas sa propre partie
                 "keep_single": False,
                 "exclude_titles": [],
                 "sort_by": "position",
@@ -156,13 +158,11 @@ DEFAULTS: dict[str, Any] = {
         "keep_user_text": True,
         "backup": True,
         "backup_dir": ".versions",
-        # Aucune mise en forme dans le document : ce qui a été ajouté ou
-        # modifié est nommé dans le résumé de fin d'exécution.
         "highlight_changed": "none",
         "highlight_new": "none",
         # Annexe recueillant, en fin de document, ce qui n'a pas pu être
         # replacé : élément disparu du rapport, bloc retiré du plan, donnée du
-        # script retouchée à la main. Rien n'est jeté en silence.
+        # script retouchée à la main.
         "orphans": {
             "enabled": True,
             "title": "Contenu non replacé",
@@ -192,7 +192,9 @@ class DocConfig:
     """
 
     def __init__(
-        self, raw: dict[str, Any] | None = None, path: str | Path | None = DEFAULT_CONFIG_PATH
+        self,
+        raw: dict[str, Any] | None = None,
+        path: str | Path | None = DEFAULT_CONFIG_PATH,
     ):
         """Complète le plan de ses valeurs par défaut."""
         self.raw = _merge_defaults(raw or {}, DEFAULTS)
@@ -273,7 +275,9 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> DocConfig:
         raise ValueError(f"Configuration illisible : {e}") from e
 
     if raw is not None and not isinstance(raw, dict):
-        raise ValueError(f"Configuration invalide dans '{found}' : un dictionnaire est attendu.")
+        raise ValueError(
+            f"Configuration invalide dans '{found}' : un dictionnaire est attendu."
+        )
 
     return DocConfig(raw or {}, found)
 
@@ -290,7 +294,9 @@ def _merge_defaults(value: dict[str, Any], defaults: dict[str, Any]) -> dict[str
     return merged
 
 
-def _find_section(sections: list[dict[str, Any]], section_id: str) -> dict[str, Any] | None:
+def _find_section(
+    sections: list[dict[str, Any]], section_id: str
+) -> dict[str, Any] | None:
     """Première section de l'arbre portant cet `id`, ou None."""
     for section in sections:
         if section.get("id") == section_id:

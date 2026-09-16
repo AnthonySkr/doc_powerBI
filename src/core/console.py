@@ -2,13 +2,7 @@
 Affichage console du script.
 
 Tous les messages passent par ici : le reste du code n'appelle jamais `print`
-ni `input`, ce qui laisse un seul endroit où changer la présentation.
-
-Deux précautions, prises une fois pour toutes à l'import, rendent la sortie
-lisible aussi bien dans un terminal moderne que dans une vieille console `cmd`
-ou dans un fichier : les couleurs ne sont écrites que sur un vrai terminal (et
-jamais si `NO_COLOR` est renseigné), et les caractères de dessin se réduisent à
-l'ASCII quand l'encodage ne sait pas les porter.
+ni `input`.
 """
 
 import os
@@ -73,7 +67,7 @@ def _supports_color() -> bool:
 
 
 def _supports_unicode() -> bool:
-    """La console sait-elle écrire les caractères de dessin employés ici ?"""
+    """La console sait-elle écrire les caractères de dessin ?"""
     encoding = getattr(sys.stdout, "encoding", "") or ""
     try:
         "─│╭╮╰╯✓✗•›»".encode(encoding)
@@ -126,7 +120,7 @@ _STYLES = {
 
 
 def paint(text: str, style: str) -> str:
-    """Applique une couleur, ou retourne le texte tel quel si elles sont hors jeu."""
+    """Applique une couleur, ou retourne le texte tel quel si elles sont inaplicables."""
     if not _COLOR or not text:
         return text
     return f"{_STYLES[style]}{text}{_STYLES['reset']}"
@@ -158,10 +152,12 @@ def _write(line: str = "") -> None:
     if not _output.enabled:
         return
     try:
-        print(line)  # noqa: T201 — l'un des deux seuls `print` du projet
+        print(line)  # noqa: T201
     except UnicodeEncodeError:
         encoding = getattr(sys.stdout, "encoding", "") or "ascii"
-        print(line.encode(encoding, "replace").decode(encoding, "replace"))  # noqa: T201
+        print(  # noqa: T201
+            line.encode(encoding, "replace").decode(encoding, "replace")
+        )
 
 
 def blank() -> None:
@@ -186,7 +182,11 @@ def title(text: str, subtitle: str = "") -> None:
     body = f"{label}{' ' * max(padding, 1)}{subtitle}  "
 
     _write(paint(top, "frame"))
-    _write(paint(side, "frame") + paint(body[:inner].ljust(inner), "bold") + paint(side, "frame"))
+    _write(
+        paint(side, "frame")
+        + paint(body[:inner].ljust(inner), "bold")
+        + paint(side, "frame")
+    )
     _write(paint(bottom, "frame"))
 
 
@@ -198,7 +198,9 @@ def banner(text: str, ok: bool = True) -> None:
 
     _write(paint(glyph("tl") + glyph("h") * inner + glyph("tr"), "frame"))
     _write(
-        paint(glyph("v"), "frame") + paint(body, "ok" if ok else "ko") + paint(glyph("v"), "frame")
+        paint(glyph("v"), "frame")
+        + paint(body, "ok" if ok else "ko")
+        + paint(glyph("v"), "frame")
     )
     _write(paint(glyph("bl") + glyph("h") * inner + glyph("br"), "frame"))
 

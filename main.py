@@ -91,7 +91,7 @@ def generate(options: Options) -> Path:
 
 
 def _extract(project: PbipProject) -> PowerBiMetadata:
-    """Première étape : le `.pbip` devient un `PowerBiMetadata`."""
+    """Première **étape** : le `.pbip` devient un `PowerBiMetadata`."""
     console.step("Lecture du rapport", 1, STEPS)
     try:
         return extract(project)
@@ -99,13 +99,14 @@ def _extract(project: PbipProject) -> PowerBiMetadata:
         raise PipelineError(str(e)) from e
 
 
-def _ask(metadata: PowerBiMetadata, config: DocConfig, interactive: bool) -> dict[str, Any]:
+def _ask(
+    metadata: PowerBiMetadata, config: DocConfig, interactive: bool
+) -> dict[str, Any]:
     """
-    Deuxième étape : les réponses aux questions du plan.
+    Deuxième **étape** : les réponses aux questions du plan.
 
     Celles de la génération précédente sont reproposées, puis réécrites. Elles
-    vivent à côté du `.pbip`, et non dans le dossier de sortie — que l'une
-    d'elles désigne.
+    restent à côté du `.pbip`, et non dans le dossier de sortie.
     """
     console.step("Renseignements", 2, STEPS)
     context = prompts.base_context(metadata.report, config)
@@ -126,7 +127,7 @@ def _document(
     output_dir: Path,
     rewrite: prompts.TextProvider | None,
 ) -> None:
-    """Dernière étape : les métadonnées deviennent un `.docx`."""
+    """Troisième **étape** : les métadonnées deviennent un `.docx`."""
     try:
         result = write_document(metadata, config, inputs, output_dir, rewrite)
     except DocumentError as e:

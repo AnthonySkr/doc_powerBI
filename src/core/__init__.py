@@ -16,8 +16,8 @@ Le socle commun aux deux modules de la génération.
 `core` ne dépend ni de l'extraction ni de l'écriture ; les deux dépendent de
 lui, et jamais l'une de l'autre.
 
-La version du projet s'expose ici, et nulle part ailleurs — mais elle n'y est
-plus écrite : elle vient du dernier tag `v…` du dépôt (voir `src.core.version`).
+La version du projet s'expose ici, et nulle part ailleurs — et vient du dernier tag `v…`
+du dépôt git (voir `src.core.version`).
 """
 
 from src.core.version import current
