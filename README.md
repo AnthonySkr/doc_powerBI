@@ -28,9 +28,32 @@ Options :
 | --- | --- |
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config_doc_pbi.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
+| `--no-pause` | Ne pas attendre de touche à la fin (exécution automatisée) |
+| `--mode-emploi` | Afficher `tools/README.md` mis en page dans le terminal, et rien d'autre |
 
 Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
 demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
+
+### Menu d'accueil
+
+Lancé sans rapport à documenter — un double-clic sur l'exécutable —, le script
+ouvre un menu :
+
+```
+  Que souhaitez-vous faire ?
+      1. Générer la documentation d'un rapport
+      2. Lire le mode d'emploi
+```
+
+Le second choix affiche `tools/README.md` mis en page dans le terminal —
+titres, tableaux alignés, listes, balises Markdown ôtées — page par page
+(Entrée pour la suite, `Q` pour revenir au menu). C'est le mode d'emploi
+distribué qui est lu, jamais une copie : `src/cli/guide.py` le met en page,
+`src/cli/menu.py` pose le choix.
+
+Le menu ne s'interpose pas quand le rapport est déjà connu : un `.pbip` passé
+en argument — ce que fait un glisser-déposer sur l'exécutable — va droit à la
+génération, et `--no-input` ne pose aucune question, pas même celle-ci.
 
 ## Ce que fait le script
 
@@ -490,7 +513,9 @@ powerbi-doc-1.0.0-windows.zip
     ├── powerbi-doc.exe          l'application, autonome
     ├── config_doc_pbi.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
-    └── LISEZMOI.md              mode d'emploi
+    └── README.md                mode d'emploi (copie de `tools/README.md`,
+                                 sa version inscrite), que l'application sait
+                                 aussi afficher elle-même
 ```
 
 Il n'y a plus qu'à transmettre le `.zip`. L'utilisateur le décompresse et
@@ -500,7 +525,9 @@ double-clique sur l'exe — ou y glisse-dépose son fichier `.pbip`.
 
 Le plan est dans le YAML, pas dans le code. Les deux fichiers sont donc 
 livrés **en clair à côté de l'exe**, pas seulement enfermés dedans. 
-L'utilisateur les édite et relance — sans rien reconstruire.
+L'utilisateur les édite et relance — sans rien reconstruire. Le mode d'emploi
+suit la même règle : c'est le `README.md` livré que le menu d'accueil affiche,
+de sorte qu'une correction apportée au dossier se lit aussi dans l'application.
 
 L'exécutable en embarque tout de même une copie, utilisée si les fichiers
 livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
@@ -536,6 +563,8 @@ src/
 
   cli/
       arguments.py            options de la ligne de commande
+      menu.py                 menu d'accueil : générer, ou lire le mode d'emploi
+      guide.py                mise en page de `tools/README.md` pour la console
       prompts.py              questions déclarées dans `inputs:`
       answers.py              mémoire des réponses d'une génération à l'autre
 

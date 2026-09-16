@@ -4,6 +4,7 @@ import sys
 import traceback
 
 from src import __version__, console, paths
+from src.cli import guide
 from src.cli.arguments import parse_args
 from src.pipeline import PipelineError, run
 
@@ -16,6 +17,10 @@ def main(argv: list[str] | None = None) -> int:
     console.title("Documentation Power BI", f"v{__version__}")
     try:
         options = parse_args(argv)
+        if options.readme:
+            # `--mode-emploi` : lire les consignes, sans rien générer.
+            guide.show()
+            return _finish(0, options)
         output_dir = run(options)
     except PipelineError as e:
         console.blank()

@@ -54,16 +54,17 @@ apparaître à l'écran.
 Power BI, renommez le groupe dans le volet **Sélection** (double-clic sur son
 nom). Sans cela il apparaît comme « Groupe sans nom ».
 
-### 4. Les trois fichiers de ce dossier restent ensemble
+### 4. Les fichiers de ce dossier restent ensemble
 
 | Fichier | À quoi il sert |
 | --- | --- |
 | `powerbi-doc.exe` | L'application |
 | `config_doc_pbi.yaml` | Le plan du document : titres, ordre des parties, questions posées |
 | `template-doc-pbib.docx` | L'apparence : styles, page de garde, en-tête et pied de page |
+| `README.md` | Ce mode d'emploi, que l'application sait aussi afficher elle-même |
 
-Copiez le dossier entier où vous voulez, mais ne séparez pas les trois
-fichiers : l'application cherche les deux autres à côté d'elle.
+Copiez le dossier entier où vous voulez, mais ne les séparez pas :
+l'application cherche les autres à côté d'elle.
 
 ---
 
@@ -82,6 +83,23 @@ fichiers : l'application cherche les deux autres à côté d'elle.
 
 La fenêtre reste ouverte à la fin : lisez le compte rendu, puis Entrée pour la
 fermer.
+
+### Relire ces consignes sans quitter l'application
+
+Ouvert par un double-clic, `powerbi-doc.exe` commence par proposer un choix :
+
+```
+  Que souhaitez-vous faire ?
+      1. Générer la documentation d'un rapport
+      2. Lire le mode d'emploi
+```
+
+Le choix **2** affiche ce mode d'emploi dans la fenêtre, mis en page et
+page par page : Entrée pour la suite, `Q` pour revenir au menu. Vous pouvez
+alors enchaîner sur la génération sans relancer l'application.
+
+Ce menu ne s'affiche pas quand le rapport est déjà connu : un `.pbip` glissé
+sur l'exécutable va droit à la génération.
 
 ---
 

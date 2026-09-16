@@ -5,10 +5,10 @@ Recette PyInstaller — construit l'exécutable distribué aux utilisateurs.
     task build          construit dist/powerbi-doc(.exe)
     task package        y ajoute la configuration et le template, et zippe
 
-L'exécutable embarque une copie de `config_doc_pbi.yaml` et du template, qui
-sert de secours. Ce sont les fichiers livrés **à côté** de l'exe qui font foi :
-c'est ainsi que l'utilisateur adapte le plan du document sans reconstruire
-(voir `src/paths.py`).
+L'exécutable embarque une copie de `config_doc_pbi.yaml`, du template et du
+mode d'emploi, qui sert de secours. Ce sont les fichiers livrés **à côté** de
+l'exe qui font foi : c'est ainsi que l'utilisateur adapte le plan du document
+sans reconstruire (voir `src/paths.py`).
 """
 
 from PyInstaller.utils.hooks import collect_data_files
@@ -19,6 +19,9 @@ NAME = "powerbi-doc"
 DATA = [
     ("config_doc_pbi.yaml", "."),
     ("template-doc-pbib.docx", "."),
+    # Le mode d'emploi, que l'application sait lire dans le terminal : embarqué
+    # pour rester consultable même si le `README.md` livré a été supprimé.
+    ("tools/README.md", "."),
     # python-docx ouvre ses propres gabarits XML : sans eux, l'exécutable
     # échoue à la première écriture de document.
     *collect_data_files("docx"),
