@@ -70,9 +70,8 @@ l'application cherche les autres à côté d'elle.
 
 ## Lancer l'outil
 
-1. **Glissez votre fichier `.pbip` sur `powerbi-doc.exe`.**
-   C'est la façon la plus sûre : aucun chemin à saisir.
-   *À défaut :* double-cliquez sur `powerbi-doc.exe`, puis déposez le `.pbip`
+1. **Ouvrez le programme `powerbi-doc.exe`.**
+   Double-cliquez sur `powerbi-doc.exe`, puis déposez le `.pbip`
    dans la fenêtre qui s'ouvre (ou collez son chemin) et appuyez sur Entrée.
 
 2. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
@@ -83,23 +82,6 @@ l'application cherche les autres à côté d'elle.
 
 La fenêtre reste ouverte à la fin : lisez le compte rendu, puis Entrée pour la
 fermer.
-
-### Relire ces consignes sans quitter l'application
-
-Ouvert par un double-clic, `powerbi-doc.exe` commence par proposer un choix :
-
-```
-  Que souhaitez-vous faire ?
-      1. Générer la documentation d'un rapport
-      2. Lire le mode d'emploi
-```
-
-Le choix **2** affiche ce mode d'emploi dans la fenêtre, mis en page et
-page par page : Entrée pour la suite, `Q` pour revenir au menu. Vous pouvez
-alors enchaîner sur la génération sans relancer l'application.
-
-Ce menu ne s'affiche pas quand le rapport est déjà connu : un `.pbip` glissé
-sur l'exécutable va droit à la génération.
 
 ---
 
