@@ -20,4 +20,4 @@ n'embarque pas les métadonnées de son paquet, et serait sans cela le seul à n
 pas savoir quelle version il est.
 """
 
-__version__ = "2.0.0"
+__version__ = "0.7"

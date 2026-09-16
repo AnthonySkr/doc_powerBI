@@ -34,7 +34,7 @@ class ConsoleWindow:
         """Affiche une erreur imprévue en entier, puis retient la fenêtre."""
         console.blank()
         console.banner("Erreur inattendue", ok=False)
-        console.error("Détail ci-dessous — joignez-le à votre demande d'aide :")
+        console.error("Détail ci-dessous :")
         traceback.print_exception(kind, error, trace)
         self.wait()
 

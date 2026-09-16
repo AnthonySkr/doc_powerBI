@@ -41,14 +41,13 @@ PARTS = {
 }
 
 # Tout le projet : le chef d'orchestre, les trois modules, et leur socle.
-EVERYTHING = ["main", *(root for roots in PARTS.values() for root in roots if root != "main")]
+EVERYTHING = [
+    "main",
+    *(root for roots in PARTS.values() for root in roots if root != "main"),
+]
 
 DEFAULT_OUTPUT = os.path.join(ROOT, "docs", "site")
 TEMPLATES = os.path.join(ROOT, "docs", "templates")
-
-# Dépôt du projet : alimente le bouton « Edit on GitHub » de chaque page.
-# La branche est celle que lit un lecteur de passage, pas celle du moment.
-EDIT_URL = "https://github.com/AnthonySkr/doc_powerBI/blob/main/"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -82,8 +81,6 @@ def _options(args: argparse.Namespace) -> list[str]:
         "google",
         "--template-directory",
         TEMPLATES,
-        "--edit-url",
-        EDIT_URL,
     ]
     if args.build:
         return [*common, "--output-directory", args.output]
@@ -165,7 +162,9 @@ def _parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="N'ouvrir qu'une partie du projet (défaut : tout)",
     )
     parser.add_argument(
-        "--build", action="store_true", help="Écrire le site statique au lieu de le servir"
+        "--build",
+        action="store_true",
+        help="Écrire le site statique au lieu de le servir",
     )
     parser.add_argument(
         "-o",

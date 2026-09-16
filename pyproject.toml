@@ -9,16 +9,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# Outils de développement : `pip install -e ".[dev]"`
 dev = [
     "taskipy>=1.14.1",
     "ruff>=0.16.0",
     "pyinstaller>=6.10",
-    # Documentation du code, engendrée depuis les docstrings : `task docs`.
     "pdoc>=16.0",
 ]
-# Captures d'écran des visuels : `pip install -e ".[capture]"`. En option — le
-# document reste complet sans elles, avec ses emplacements réservés.
 capture = [
     "pywinauto>=0.6.9 ; sys_platform == 'win32'",
     "mss>=9.0",
@@ -27,20 +23,16 @@ capture = [
 [project.scripts]
 powerbi-doc = "main:main"
 
-# Commandes rapides
 [tool.taskipy.tasks]
 install = "pip install -e \".[dev]\""
 run = "python main.py"
 
-# Mise au point des captures, sans écrire de document :
 #   task capture-plan -- rapport.pbip     ce qui serait capturé
 #   task calibrate -- rapport.pbip        régler le cadrage de la fenêtre
 capture-plan = "python main.py --no-pause --capture-plan"
 calibrate = "python main.py --no-pause --calibrate"
 
-# Documentation du code, engendrée depuis les docstrings et les annotations.
 #   task docs                 tout le projet, servi et rechargé à chaud
-#   task docs -- extract      la seule application « extract »
 #   task docs-build           le site statique, dans docs/site/
 docs = "python tools/docs.py"
 docs-build = "python tools/docs.py --build"
@@ -59,16 +51,12 @@ package = "task format-check && task lint && task test && task build && python t
 clean = "python -c \"import shutil; from pathlib import Path; [shutil.rmtree(p, ignore_errors=True) for p in Path('.').rglob('__pycache__')]; [p.unlink(missing_ok=True) for p in Path('.').rglob('*.pyc')]; [shutil.rmtree(d, ignore_errors=True) for d in ['.pytest_cache', '.ruff_cache', 'build', 'dist']]; print('OK - Nettoyage terminé')\""
 help = "task --list"
 
-# `main.py` est un module seul, à la racine : il ne se découvre pas avec les
-# paquets, et c'est lui que `powerbi-doc` lance.
 [tool.setuptools]
 py-modules = ["main"]
 
-# Les trois modules de la génération, et le socle qu'ils partagent.
 [tool.setuptools.packages.find]
 include = ["src*"]
 
-# La version est déclarée dans `src/core/__init__.py`, seul endroit où elle vit.
 [tool.setuptools.dynamic]
 version = { attr = "src.core.__version__" }
 

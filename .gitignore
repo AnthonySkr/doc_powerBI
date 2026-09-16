@@ -8,9 +8,6 @@ Galeries imbriquées.docx
 build
 dist
 .versions
-# Captures d'écran : elles se reprennent d'une commande, et vivent à côté du
-# rapport qu'elles montrent.
 assets/*
 !assets/README.md
-# Site de documentation : il se reconstruit d'une commande.
 docs/site
