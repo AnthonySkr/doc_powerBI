@@ -20,6 +20,15 @@ main.landing .lead {
     line-height: 1.6;
 }
 
+main.landing input[type=search] {
+    width: 100%;
+    font-size: 1.1rem;
+    padding: 0.5rem 0.75rem;
+    margin: 0 0 1.75rem;
+    border: 1px solid rgba(127, 127, 127, 0.4);
+    border-radius: 6px;
+}
+
 main.landing pre.chain {
     background: var(--pdoc-background, #f6f8fa);
     border: 1px solid rgba(127, 127, 127, 0.25);
@@ -78,10 +87,46 @@ main.landing .hint {
     opacity: 0.85;
 }
 
-/* ── Navigation ──────────────────────────────────────────── */
+/* ── Navigation : l'arborescence des modules ─────────────── */
 
-nav.pdoc ul.apps a {
+nav.pdoc ul.arbre,
+nav.pdoc ul.arbre ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+/* Un cran d'indentation par niveau, et le trait qui le rattache au parent. */
+nav.pdoc ul.arbre ul {
+    margin-left: 0.4rem;
+    padding-left: 0.7rem;
+    border-left: 1px solid rgba(127, 127, 127, 0.3);
+}
+
+nav.pdoc ul.arbre li {
+    margin: 0.1rem 0;
+    line-height: 1.5;
+}
+
+nav.pdoc ul.arbre a {
+    display: inline-block;
+    padding: 0 0.15rem;
+}
+
+/* Un paquet se distingue des modules qu'il contient. */
+nav.pdoc ul.arbre summary {
+    cursor: pointer;
+    list-style-position: outside;
+}
+
+nav.pdoc ul.arbre summary > a {
     font-weight: 600;
+}
+
+/* La page ouverte, repérable d'un coup d'œil dans l'arbre. */
+nav.pdoc ul.arbre a.ici {
+    font-weight: 700;
+    color: var(--accent-app);
 }
 
 nav.pdoc footer .belongs {

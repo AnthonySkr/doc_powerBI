@@ -486,8 +486,8 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-2.0.0-windows.zip
-└── powerbi-doc-2.0.0-windows/
+powerbi-doc-0.6-windows.zip
+└── powerbi-doc-0.6-windows/
     ├── powerbi-doc.exe          l'application, autonome
     ├── config.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
@@ -510,6 +510,26 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 1. le chemin donné (absolu, ou relatif au dossier courant) ;
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
+
+### La version vient du dernier tag
+
+Rien à corriger dans le code pour numéroter une livraison : **`git tag v0.8`
+suffit**. La version affichée au lancement, et celle du nom du `.zip`, sont
+relevées sur le dernier tag `v…` du dépôt.
+
+C'est le dernier tag *du dépôt*, et non le dernier tag atteignable depuis la
+branche courante : les versions sont posées sur `main`, qu'une branche de
+travail ne voit pas. Le tri est celui des versions — `v0.10` passe après
+`v0.9`.
+
+Un exécutable, lui, n'emporte pas le dépôt avec lui : `task build` relève la
+version et l'embarque dans un fichier `VERSION`, que le programme lit à défaut
+de git. Une fois gelé, il ne consulte jamais git — un exe déposé dans le dépôt
+de quelqu'un d'autre en prendrait la version. Tout cela vit dans
+`src/core/version.py`.
+
+Sans tag ni fichier — un dépôt fraîchement cloné en surface, par exemple — la
+version vaut `0.0`, qui ne se fait pas passer pour une vraie.
 
 ### Étapes séparées
 
@@ -580,10 +600,27 @@ Les docstrings et les annotations du code sont servies comme un site, par
 
 ```bash
 task docs                    # tout le projet, sur http://127.0.0.1:8080
-task docs -- extractor       # le seul module d'extraction
-task docs -- writer          # … ou writer, core, main
 task docs-build              # le site statique, dans docs/site/
 ```
+
+Le site couvre toujours le projet entier : une page qui renverrait vers un
+module absent ne vaudrait pas la commande qui l'aurait évitée.
+
+La barre de gauche range les modules **en arbre**, chacun sous son seul nom :
+
+```
+core                  report_generator
+    config                context
+    console               merge
+    models                    markers
+    …                         smart
+                          word
+                              builder
+```
+
+Un paquet se replie, et s'ouvre de lui-même sur le chemin de la page affichée —
+de quoi s'y retrouver à quarante-quatre modules, là où la liste à plat de pdoc
+les nommait tous `src.report_generator.merge.…`.
 
 Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
 à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
@@ -593,7 +630,7 @@ Ces pages ne peuvent pas se périmer sans que le code change — c'est tout
 l'intérêt par rapport à une documentation écrite à côté.
 
 `tools/docs.py` s'occupe d'énumérer les modules (un paquet qui déclare `__all__`
-cache ses sous-modules à pdoc) et de découper par module.
+cache ses sous-modules à pdoc) ; `docs/templates/` porte l'accueil et l'arbre.
 
 ## Structure du projet
 
@@ -618,6 +655,7 @@ src/
       answers.py              mémoire des réponses d'une génération à l'autre
       paths.py                localisation des fichiers livrés (exe compris)
       window.py               fenêtre de l'exécutable : attente et plantages
+      version.py              la version, lue sur le dernier tag du dépôt
 
   pbi_extractor/              le .pbip ──► PowerBiMetadata
       extractor.py            le point d'entrée : les trois sources croisées
@@ -668,7 +706,7 @@ tests/                        core/, extract/, document/, et le parcours
                               complet sur le plan livré
 tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
-docs/templates/               habillage du site de documentation
+docs/templates/               accueil et arborescence du site pdoc
 powerbi-doc.spec              recette de construction de l'exécutable
 ```
 
@@ -686,6 +724,8 @@ powerbi-doc.spec              recette de construction de l'exécutable
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `src/pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
+| publier une nouvelle version | `git tag v0.8` — rien d'autre |
+| changer l'accueil ou l'arbre du site pdoc | `docs/templates/` |
 
 ## Notes
 

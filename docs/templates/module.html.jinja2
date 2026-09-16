@@ -1,5 +1,9 @@
 {# Page d'un module : celle de pdoc, avec de quoi savoir où l'on est. #}
 {% extends "default/module.html.jinja2" %}
+{% import "nav-tree.html.jinja2" as navigation with context %}
+
+{# Ce qui remonte au dossier du site depuis la page courante. #}
+{% set racine = "../" * module.modulename.count(".") %}
 
 {% block title %}{{ module.modulename }} — Documentation du code{% endblock %}
 
@@ -8,24 +12,33 @@
     {% if parentmodule and parentmodule in all_modules %}
         <a class="pdoc-button module-list-button" href="../{{ parentmodule.split(".")[-1] }}.html">
             {% include "resources/box-arrow-in-left.svg" %}
-            &nbsp;{{ parentmodule }}
+            &nbsp;{{ parentmodule.split(".")[-1] }}
         </a>
     {% endif %}
-    <a class="pdoc-button module-list-button" href="{{ "../" * module.modulename.count(".") }}index.html">
+    <a class="pdoc-button module-list-button" href="{{ racine }}index.html">
         {% include "resources/box-arrow-in-left.svg" %}
         &nbsp;Accueil
     </a>
 {% endblock %}
 
+{# L'arborescence se place au-dessus du sommaire du module : c'est de la
+   navigation, elle n'a pas à attendre après la liste des fonctions. Elle
+   s'ouvre sur le chemin de la page, et le reste reste replié. #}
+{% block search_box %}
+    {{ super() }}
+    <h2>Les modules</h2>
+    {{ navigation.arbre(courant=module.modulename, racine=racine) | safe }}
+{% endblock %}
+
 {% block nav_footer %}
     <footer>
-        {% if module.modulename.startswith("src.apps.") %}
-            <div class="belongs">Application <strong>{{ module.modulename.split(".")[2] }}</strong></div>
-        {% elif module.modulename.startswith("src.shared") %}
-            <div class="belongs">Noyau commun <strong>shared</strong></div>
-        {% elif module.modulename.startswith("src.cli") %}
-            <div class="belongs">Interface <strong>cli</strong></div>
-        {% elif module.modulename == "src.pipeline" %}
+        {% if module.modulename.startswith("src.pbi_extractor") %}
+            <div class="belongs">Module <strong>pbi_extractor</strong> — la lecture du rapport</div>
+        {% elif module.modulename.startswith("src.report_generator") %}
+            <div class="belongs">Module <strong>report_generator</strong> — l'écriture du document</div>
+        {% elif module.modulename.startswith("src.core") %}
+            <div class="belongs">Socle commun <strong>core</strong></div>
+        {% elif module.modulename == "main" %}
             <div class="belongs">Le <strong>chef d'orchestre</strong></div>
         {% endif %}
     </footer>
