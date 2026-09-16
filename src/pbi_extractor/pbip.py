@@ -13,7 +13,16 @@ _REPORT_SUFFIX = ".Report"
 
 @dataclass(frozen=True)
 class PbipProject:
-    """Les dossiers d'un projet .pbip, une fois localisés."""
+    """
+    Les dossiers d'un projet `.pbip`, une fois localisés.
+
+    Attributes:
+        path: le fichier `.pbip` lui-même.
+        name: son nom sans extension, que portent aussi les deux dossiers.
+        directory: le dossier qui contient le tout.
+        semantic_model_dir: `<nom>.SemanticModel`, ou None s'il manque.
+        report_dir: `<nom>.Report`, ou None s'il manque.
+    """
 
     path: Path
     name: str
@@ -44,13 +53,14 @@ class PbipProject:
         return None
 
     def output_dir(self, sub_directory: str | Path) -> Path:
-        """Dossier de sortie, créé au besoin, à côté du fichier .pbip."""
+        """Dossier de sortie, créé au besoin, à côté du fichier `.pbip`."""
         path = self.directory / sub_directory
         path.mkdir(parents=True, exist_ok=True)
         return path
 
 
 def _first_dir(directory: Path, name: str, suffixes: tuple[str, ...]) -> Path | None:
+    """Premier dossier `<name><suffixe>` qui existe, ou None."""
     for suffix in suffixes:
         candidate = directory / f"{name}{suffix}"
         if candidate.is_dir():

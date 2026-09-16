@@ -46,6 +46,7 @@ def parse_elements(query: dict) -> list[VisualElement]:
 
 
 def _parse_projection(projection: dict, role: str) -> VisualElement | None:
+    """Une projection du `queryState` en `VisualElement`, ou None sans champ."""
     query_ref = projection.get("queryRef", "")
     if not query_ref:
         return None
@@ -121,15 +122,13 @@ def parse_reference_labels(visual_node: dict) -> list[VisualElement]:
     """
     Champs des étiquettes de référence d'une carte.
 
-    Une carte affiche une valeur principale — celle-là passe par `queryState` —
-    et peut porter des étiquettes de référence, chacune avec sa valeur et,
-    au-dessous, un détail. Ces champs-là sont déclarés dans l'objet de mise en
-    forme, pas dans la requête du visuel : sans cette lecture, une mesure qui
-    n'apparaît que là passerait pour inutilisée.
+    Ces champs-là sont déclarés dans l'objet de mise en forme, et non dans la
+    requête du visuel : sans cette lecture, une mesure qui n'apparaît que là
+    passerait pour inutilisée.
 
-    Les noms de propriétés ayant changé d'une version de Power BI à l'autre
-    (`valueSource`, `valueText`...), toute propriété portant un champ est
-    retenue, et c'est son nom qui range le champ en valeur ou en détail.
+    Les noms de propriétés ayant changé d'une version de Power BI à l'autre,
+    toute propriété portant un champ est retenue, et c'est son nom qui la
+    range en valeur ou en détail.
     """
     elements: list[VisualElement] = []
 

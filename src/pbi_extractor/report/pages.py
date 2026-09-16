@@ -55,8 +55,8 @@ def parse_container(visual_json_path: str, folder_name: str) -> Visual | VisualG
     Parse un `visual.json`.
 
     Le fichier décrit soit un visuel (`visual`), soit un conteneur de groupe
-    (`visualGroup`) — les deux clés s'excluent. Les visuels sont tous lus : le
-    tri revient à `data.visuals`.
+    (`visualGroup`) — les deux clés s'excluent. Tous sont lus : le tri revient
+    à `data.visuals`.
     """
     data = read_json(visual_json_path)
     if data is None:
@@ -116,9 +116,8 @@ def _length(value: Any, default: float) -> float:
     """
     Longueur déclarée par le rapport, ou `default` si elle ne l'est pas.
 
-    Ces valeurs sont écrites par Power BI, mais un `visual.json` retouché à la
-    main peut en porter une aberrante : une longueur illisible vaut absente,
-    ce n'est pas de quoi arrêter la lecture du rapport.
+    Un `visual.json` retouché à la main peut en porter une aberrante : une
+    longueur illisible vaut absente, et n'arrête pas la lecture du rapport.
     """
     if value is None:
         return default
