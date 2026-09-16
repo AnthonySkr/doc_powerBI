@@ -1,7 +1,6 @@
 {# Page d'accueil du site : la chaîne, puis l'arborescence des modules.
 
-   Le site est engendré par `tools/docs.py`, et couvre toujours le projet
-   entier. Ce qui est ajouté ici, c'est de quoi savoir par où entrer.
+   Le site est engendré par `tools/docs.py`. Ce qui est ajouté ici, c'est de quoi savoir par où entrer.
 
    Tous les modules descendant de `src`, pdoc renverrait par défaut vers la page
    de `src` sans s'arrêter ici. `root_module_name` à faux lui fait rendre cette
@@ -13,7 +12,7 @@
 {# Les parties du projet, dans l'ordre de la chaîne. #}
 {% set parts = [
     ("main", "main",
-     "Le chef d'orchestre&nbsp;: il enchaîne les étapes, il ne travaille pas.",
+     "Le chef d'orchestre&nbsp;: il enchaîne les étapes,.",
      "python main.py rapport.pbip"),
     ("src.pbi_extractor", "pbi_extractor",
      "Lit le projet <code>.pbip</code> — modèle sémantique, rapport, dépendances entre
@@ -23,7 +22,7 @@
       rédigé dans la version précédente.", ""),
     ("src.core", "core",
      "Le socle commun&nbsp;: modèles, plan YAML, console, chemins, questions. Les deux
-      modules en dépendent&nbsp;; aucun ne dépend de l'autre.", ""),
+      modules en dépendent.", ""),
 ] %}
 {% set shown = parts | selectattr("0", "in", all_modules) | list %}
 
@@ -36,7 +35,7 @@
 
 {% block content %}
     <main class="pdoc landing">
-        <h1>Documentation du code</h1>
+        <h1>Documentation du code du Générateur de documentation Power BI</h1>
 
         {# Le champ que `search.html.jinja2` met en service. Sans lui, l'accueil
            serait la seule page du site où l'on ne peut pas chercher. #}
@@ -72,14 +71,6 @@
                 écrire, à relire, à supprimer ni à tenir à jour.
             </p>
         {% endif %}
-
-        <h2>Où sont les tests</h2>
-        <p>
-            Rassemblés sous <code>tests/</code> à la racine, rangés comme le code&nbsp;:
-            <code>core/</code>, <code>extract/</code>, <code>document/</code>, et le parcours
-            complet sur le plan livré. Ils ne figurent pas sur ce site&nbsp;: leurs pages
-            noieraient celles qui décrivent le programme.
-        </p>
 
         <p class="hint">
             Ces pages sont engendrées par <code>tools/docs.py</code> à partir des docstrings et

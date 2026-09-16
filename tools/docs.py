@@ -4,18 +4,8 @@ La documentation du code, servie ou construite.
     python tools/docs.py           tout le projet, servi et rechargé à chaud
     python tools/docs.py --build   le site statique, dans docs/site/
 
-Le site couvre toujours le projet entier : une page qui renvoie vers un module
-absent ne vaut pas la commande qui l'aurait évitée.
-
-Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
-
-  - **la liste des modules**. Un paquet qui déclare `__all__` cache ses
-    sous-modules à `pdoc` : `tmdl/`, `report/` ou `pbip.py` disparaîtraient du
-    site. Ils sont donc énumérés ici, en parcourant l'arborescence ;
-  - **le périmètre** : les paquets de tests sont écartés.
-
 `pdoc` est en option (`pip install -e ".[dev]"`) : il ne sert qu'au
-développement, et rien du programme livré n'en dépend.
+développement.
 """
 
 import argparse
@@ -29,9 +19,6 @@ from importlib import import_module
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-# Le projet entier : le chef d'orchestre, les deux modules, et leur socle.
-# `src` n'y figure pas : il ne porte rien, et coifferait l'arborescence du site
-# d'un niveau qui n'apprend rien.
 ROOTS = ["main", "src.pbi_extractor", "src.report_generator", "src.core"]
 
 DEFAULT_OUTPUT = os.path.join(ROOT, "docs", "site")
@@ -39,7 +26,7 @@ TEMPLATES = os.path.join(ROOT, "docs", "templates")
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Point d'entrée du script. Retourne le code de sortie."""
+    """Point d'entrée du script"""
     args = _parse_args(argv)
     names = [name for root in ROOTS for name in _modules(root)]
     if not names:
@@ -50,9 +37,6 @@ def main(argv: list[str] | None = None) -> int:
     print(f"{len(names)} module(s)")
 
     try:
-        # Commande entièrement construite ici : l'interpréteur courant, `pdoc`,
-        # et des noms de modules relevés sur le disque. Rien ne vient de
-        # l'extérieur, et aucun shell n'est entre les deux.
         return subprocess.call(command, cwd=ROOT)  # noqa: S603
     except FileNotFoundError:
         print('pdoc n\'est pas installé. Lancez `pip install -e ".[dev]"`.')
@@ -75,17 +59,7 @@ def _options(args: argparse.Namespace) -> list[str]:
 
 
 def _modules(root: str) -> list[str]:
-    """
-    Modules à documenter sous `root`, dans l'ordre alphabétique.
-
-    Le parcours passe par le disque plutôt que par l'import : un paquet qui
-    déclare `__all__` ne laisse pas voir ses sous-modules autrement, et ce sont
-    eux qui portent le détail.
-
-    Les paquets de tests sont refusés par leur nom précédé de `!` : `pdoc`
-    déroule lui-même les sous-modules d'un paquet, et les omettre ne suffirait
-    pas à les tenir hors du site.
-    """
+    """Modules à documenter sous `root`, dans l'ordre alphabétique."""
     module = _import(root)
     if module is None:
         return []

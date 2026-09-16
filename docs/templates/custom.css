@@ -12,7 +12,7 @@
 /* ── Page d'accueil ──────────────────────────────────────── */
 
 main.landing {
-    max-width: 60rem;
+    max-width: 100rem;
 }
 
 main.landing .lead {

@@ -1,7 +1,7 @@
 """
 Génération de la documentation Word d'un rapport Power BI (`.pbip`).
 
-Le chef d'orchestre : il enchaîne les étapes, il ne travaille pas.
+Le chef d'orchestre : il enchaîne les étapes.
 
     .pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
 
@@ -20,10 +20,14 @@ from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
 from src.core.models import PowerBiMetadata
 from src.core.window import ConsoleWindow
 from src.pbi_extractor import ExtractError, PbipProject, extract, open_project
-from src.report_generator import DocumentError, output_directory, report_result, write_document
+from src.report_generator import (
+    DocumentError,
+    output_directory,
+    report_result,
+    write_document,
+)
 
 STEPS = 3
-"""Lecture du rapport, questions, écriture du document."""
 
 
 class PipelineError(Exception):
@@ -82,7 +86,9 @@ def _extract(project: PbipProject) -> PowerBiMetadata:
         raise PipelineError(str(e)) from e
 
 
-def _ask(metadata: PowerBiMetadata, config: DocConfig, interactive: bool) -> dict[str, Any]:
+def _ask(
+    metadata: PowerBiMetadata, config: DocConfig, interactive: bool
+) -> dict[str, Any]:
     """
     Deuxième étape : les réponses aux questions du plan.
 
