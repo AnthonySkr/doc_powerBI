@@ -36,6 +36,7 @@ class LinkIndex:
     """Pose les signets, écrit les liens et vérifie qu'aucun ne pointe dans le vide."""
 
     def __init__(self, config: DocConfig, context: dict[str, Any], style_ids: dict[str, str]):
+        """Relève les mesures documentées, qui sont les cibles possibles."""
         self.options = config.rendering["links"]
         self.auto = self.options.get("auto") or {}
         self.enabled = bool(self.options.get("enabled", True))
@@ -56,12 +57,12 @@ class LinkIndex:
 
     def is_reachable(self, bookmark: str) -> bool:
         """
-        Un lien explicite n'est écrit que si sa cible est une mesure documentée.
+        La cible existe-t-elle, ou le lien pointerait-il dans le vide ?
 
-        Sans ce contrôle, une mesure absente du modèle (visuel pointant vers un
-        autre jeu de données, mesure supprimée...) produirait dans Word un lien
-        « Le signet n'existe pas ». Quand la détection automatique est
-        désactivée, le plan reste maître de ses cibles.
+        Sans ce contrôle, une mesure absente du modèle — visuel pointant vers
+        un autre jeu de données, mesure supprimée — produirait dans Word un
+        « Le signet n'existe pas ». Détection automatique coupée, le plan
+        reste maître de ses cibles.
         """
         if not bookmark:
             return False
@@ -84,6 +85,7 @@ class LinkIndex:
         return self.linker.split(line, skip_bookmark=skip_bookmark)
 
     def add_bookmark(self, paragraph, raw_name: str) -> None:
+        """Pose un signet sur le paragraphe, une seule fois par nom."""
         name = self.bookmark_for(raw_name)
         if not name or name in self._bookmarks:
             return
@@ -107,6 +109,7 @@ class LinkIndex:
         paragraph._p.append(end)
 
     def add_hyperlink(self, paragraph, text: str, bookmark: str) -> None:
+        """Écrit un texte cliquable visant un signet du document."""
         if not bookmark:
             paragraph.add_run(text)
             return
@@ -129,10 +132,12 @@ class LinkIndex:
 
     def _run_properties(self):
         """
-        Mise en forme du lien. `w:rStyle` attend l'identifiant du style, pas son
-        nom : dans un template français « Hyperlink » a pour identifiant
-        « Lienhypertexte ». Si le style est absent, la mise en forme est
-        appliquée directement pour que le lien reste visible.
+        Mise en forme du lien.
+
+        `w:rStyle` attend l'identifiant du style, pas son nom : dans un
+        template français, « Hyperlink » s'appelle « Lienhypertexte ». Style
+        absent, la couleur et le soulignement sont posés directement, pour que
+        le lien reste visible.
         """
         properties = OxmlElement("w:rPr")
         style_id = self._style_ids.get(self.options.get("style", "Hyperlink"))
@@ -180,8 +185,9 @@ class LinkIndex:
     # ── Construction ──────────────────────────────────────────────
     def _build_linker(self, context: dict[str, Any]) -> MeasureLinker | None:
         """
-        Construit le répertoire « nom de mesure -> signet » à partir des mesures
-        effectivement documentées dans le document.
+        Construit le répertoire « nom de mesure → signet ».
+
+        Seules les mesures effectivement documentées y figurent.
         """
         if not self.auto.get("enabled", True):
             return None
@@ -213,16 +219,15 @@ class LinkIndex:
 
 def bookmark_name(name: str) -> str:
     """
-    Nom de signet valide pour Word : lettres non accentuées, chiffres et
-    underscores, 40 caractères maximum, ne commençant pas par un chiffre.
+    Nom de signet valide pour Word, et propre à ce nom-là.
 
-    Dès que le nettoyage perd de l'information (accents, espaces, ponctuation,
-    longueur), une empreinte du nom d'origine est ajoutée : sans elle
-    « Marge » et « Marge % » produiraient le même signet et les deux mesures
-    partageraient la même cible.
+    Word n'accepte que lettres non accentuées, chiffres et underscores, sur 40
+    caractères au plus, sans commencer par un chiffre. Dès que ce nettoyage
+    perd de l'information, une empreinte du nom d'origine est ajoutée : sans
+    elle, « Marge » et « Marge % » viseraient le même signet.
 
-    La fonction reste purement déterministe : la pose du signet et la
-    résolution des liens qui le visent aboutissent au même nom.
+    Le résultat est déterministe : poser le signet et résoudre les liens qui
+    le visent aboutissent au même nom.
     """
     raw = name or ""
     ascii_name = unicodedata.normalize("NFKD", raw).encode("ascii", "ignore").decode("ascii")

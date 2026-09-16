@@ -16,6 +16,13 @@ from src.core.expressions import render
 
 
 class StyleResolver:
+    """
+    Traduit une clé du plan en style réellement présent dans le template.
+
+    Un style absent n'arrête pas l'écriture : il est remplacé par le style de
+    repli, et signalé une seule fois.
+    """
+
     def __init__(self, doc, config: DocConfig, context: dict[str, Any]):
         self.config = config
         self.context = context
@@ -37,7 +44,7 @@ class StyleResolver:
         return fallback if fallback in self._available else "Normal"
 
     def character(self, key: str | None) -> str | None:
-        """Style de caractère existant, ou None (un style de paragraphe ne convient pas)."""
+        """Style de caractère existant, ou None — un style de paragraphe ne va pas."""
         name = self.name(key)
         if name in self._characters:
             return name
@@ -55,13 +62,14 @@ class StyleResolver:
         return None
 
     def name(self, key: str | None) -> str:
-        """Nom du style Word correspondant à une clé de configuration."""
+        """Nom du style Word que désigne une clé du plan."""
         if not key:
             return ""
         key = str(key)
         return render(key, self.context) if "{{" in key else self.config.styles.get(key, key)
 
     def _report(self, name: str, message: str) -> None:
+        """Signale un style manquant, une fois par style."""
         if name not in self._reported:
             self._reported.add(name)
             console.warn(message)
