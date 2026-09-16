@@ -342,21 +342,18 @@ class PowerBiMetadata:
     """
     Tout ce que l'on sait du rapport, d'un bout à l'autre de la génération.
 
-    L'extraction le produit, la capture y ajoute l'inventaire de ses images, le
-    document s'en sert : aucun des trois n'a à retourner à la source.
+    L'extraction le produit, l'écriture du document s'en sert : ni l'une ni
+    l'autre n'a à retourner à la source.
+
+    Attributes:
+        report: le rapport lu, pages et modèle sémantique compris.
+        source: chemin du fichier `.pbip` dont il a été tiré.
     """
 
     report: PowerBIReport
     source: Path = Path()
-    # {page: {prise: chemin}}, relatifs au dossier du projet — un projet
-    # déplacé ne perd pas ses images.
-    captures: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def project_dir(self) -> Path:
-        """Dossier du projet, où vivent les images et les réponses mémorisées."""
+        """Dossier du projet, où vivent les réponses mémorisées."""
         return self.source.parent
-
-    def capture_of(self, page: str, shot: str) -> str:
-        """Chemin de la capture d'une prise, ou chaîne vide s'il n'y en a pas."""
-        return (self.captures.get(page) or {}).get(shot, "")

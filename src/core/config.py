@@ -18,18 +18,15 @@ from src.core.expressions import resolve_options
 
 __all__ = [
     "DEFAULTS",
-    "DEFAULT_CAPTURES_DIR",
     "DEFAULT_CONFIG_PATH",
     "DEFAULT_OUTPUT_DIR",
     "DocConfig",
     "load_config",
 ]
 
-# Retenus faute de mieux : le plan cherché à côté de l'exécutable, et les deux
-# dossiers créés à côté du `.pbip`.
+# Le plan cherché à côté de l'exécutable, et le dossier créé à côté du `.pbip`.
 DEFAULT_CONFIG_PATH = "config.yaml"
 DEFAULT_OUTPUT_DIR = "doc"
-DEFAULT_CAPTURES_DIR = "assets"
 
 
 DEFAULTS: dict[str, Any] = {
@@ -178,27 +175,6 @@ DEFAULTS: dict[str, Any] = {
             "intro": "",
         },
     },
-    # Captures d'écran des visuels (`--captures`). Le document ne les prend pas
-    # lui-même : il les trouve dans `directory` si elles y sont, et réserve
-    # leur place sinon.
-    "capture": {
-        "directory": DEFAULT_CAPTURES_DIR,
-        # Fenêtre de Power BI Desktop, et ce qui entoure son canevas — ruban,
-        # volets de droite, barre d'onglets. Ces marges dépendent de la version
-        # et de l'écran : `--calibrate` écrit de quoi les régler à coup sûr.
-        "window": {
-            "title": "Power BI Desktop",
-            "inset_left": 0,
-            "inset_top": 130,
-            "inset_right": 340,
-            "inset_bottom": 60,
-        },
-        # Temps laissé au rendu après un changement de page, en secondes.
-        "settle_seconds": 1.5,
-        # Changer de page à la main plutôt que par automatisation : plus lent,
-        # mais jamais pris en défaut.
-        "manual_pages": False,
-    },
     "inputs": [],
     "sections": [],
 }
@@ -235,10 +211,6 @@ class DocConfig:
     @property
     def merge(self) -> dict[str, Any]:
         return self.raw["merge"]
-
-    @property
-    def capture(self) -> dict[str, Any]:
-        return self.raw["capture"]
 
     @property
     def inputs(self) -> list[dict[str, Any]]:

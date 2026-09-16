@@ -4,7 +4,6 @@ La documentation du code, servie ou construite.
     python tools/docs.py                  tout le projet, servi et rechargé à chaud
     python tools/docs.py extractor        le seul module d'extraction
     python tools/docs.py --build          le site statique, dans docs/site/
-    python tools/docs.py capturer --build
 
 Ce que ce script apporte à `pdoc`, qu'un appel direct ne donnerait pas :
 
@@ -35,12 +34,11 @@ sys.path.insert(0, ROOT)
 PARTS = {
     "main": ["main"],
     "extractor": ["src.pbi_extractor"],
-    "capturer": ["src.gui_automator"],
     "writer": ["src.report_generator"],
     "core": ["src.core"],
 }
 
-# Tout le projet : le chef d'orchestre, les trois modules, et leur socle.
+# Tout le projet : le chef d'orchestre, les deux modules, et leur socle.
 EVERYTHING = [
     "main",
     *(root for roots in PARTS.values() for root in roots if root != "main"),

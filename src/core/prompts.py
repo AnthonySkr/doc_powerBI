@@ -101,13 +101,11 @@ def ask_inputs(
     config: DocConfig,
     context: dict[str, Any],
     remembered: dict[str, Any] | None = None,
-    step: tuple[int, int] | tuple[()] = (),
 ) -> dict[str, Any]:
-    """Pose les questions déclarées dans le plan."""
+    """Pose à l'utilisateur les questions déclarées dans le plan."""
     if not config.inputs:
         return {}
 
-    console.step("Renseignements", *step)
     console.note("Entrée valide la valeur proposée entre crochets.")
     answers = collect(config, context, remembered, _ask)
     console.blank()
