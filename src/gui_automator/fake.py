@@ -15,9 +15,7 @@ Chaque prise reçoit une couleur tirée de son nom : deux captures voisines ne s
 ressemblent pas, et la même prise garde la sienne d'une exécution à l'autre.
 """
 
-import struct
-import zlib
-
+from src.gui_automator import png
 from src.gui_automator.geometry import Rect
 from src.gui_automator.plan import PagePlan
 
@@ -65,29 +63,8 @@ class FakeRecorder:
 
 
 def solid_png(width: int, height: int, color: tuple[int, int, int]) -> bytes:
-    """
-    Image PNG unie, écrite à la main.
-
-    Le projet ne dépend d'aucune bibliothèque d'images, et n'a pas à en dépendre
-    pour produire un rectangle de couleur : un PNG est un en-tête, des lignes
-    compressées et une fin de fichier.
-    """
-    width, height = max(width, 1), max(height, 1)
-    row = b"\x00" + bytes(color) * width
-    return b"".join(
-        [
-            b"\x89PNG\r\n\x1a\n",
-            _chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)),
-            _chunk(b"IDAT", zlib.compress(row * height, 6)),
-            _chunk(b"IEND", b""),
-        ]
-    )
-
-
-def _chunk(kind: bytes, payload: bytes) -> bytes:
-    """Un bloc PNG : longueur, type, contenu, et le CRC des deux derniers."""
-    body = kind + payload
-    return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body))
+    """Image PNG unie — l'écriture du fichier vit dans `png`."""
+    return png.solid(width, height, color)
 
 
 def _color(area: Rect) -> tuple[int, int, int]:

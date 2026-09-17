@@ -243,8 +243,14 @@ class VisualGroup:
     title: str  # `displayName` du groupe
     group_mode: str = ""  # ScaleMode | ScrollMode
     parent_group_name: str = ""  # groupe parent, pour les groupes imbriqués
+    # Place du groupe dans le canevas. Power BI déclare le cadre entier —
+    # origine et dimensions —, mais un rapport ancien ou retouché peut n'en
+    # donner que l'origine : `apps.capture` retombe alors sur l'étendue des
+    # visuels du groupe.
     pos_x: float = 0.0
     pos_y: float = 0.0
+    width: float = 0.0
+    height: float = 0.0
     # Renseignés par `apps.document.filters` :
     visuals: list[Visual] = field(default_factory=list)  # visuels du groupe
     members: list[VisualGroupMember] = field(default_factory=list)  # légende du groupe

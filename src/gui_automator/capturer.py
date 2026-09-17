@@ -13,6 +13,7 @@ from pathlib import Path
 from src.core import console, selection
 from src.core.config import DEFAULT_CAPTURES_DIR, DocConfig
 from src.core.models import PowerBiMetadata, ReportPage
+from src.gui_automator import canvas, png
 from src.gui_automator import plan as capture_plan
 from src.gui_automator.desktop import DesktopOptions, DesktopRecorder
 from src.gui_automator.fake import FakeRecorder
@@ -32,6 +33,11 @@ __all__ = [
     "run_session",
     "shot_plan",
 ]
+
+# Couleurs des repères du calibrage : le canevas en rouge, les visuels en vert.
+# Deux teintes franches, absentes des habillages de Power BI.
+_CANVAS_MARK = (0xE8, 0x11, 0x23)
+_VISUAL_MARK = (0x10, 0x7C, 0x10)
 
 
 @dataclass(frozen=True)
@@ -109,11 +115,17 @@ def recorder_for(config: DocConfig, options: CaptureOptions) -> Recorder:
 
 
 def describe_plan(plans: list[PagePlan], library: CaptureLibrary) -> None:
-    """Annonce ce qui va être capturé, page par page."""
+    """
+    Annonce ce qui va être capturé, page par page.
+
+    Le nom du fichier est dit avec chaque prise : c'est par lui que l'image se
+    retrouve dans le dossier, une fois le document ouvert à côté.
+    """
     for page in plans:
         console.info(f"{page.title} — canevas {page.canvas.width:g} × {page.canvas.height:g}")
         for shot in page.shots:
-            console.detail(f"{shot.kind:6} {shot.title} · {_placement(shot)}")
+            file = library.path(page.name, shot.name).name
+            console.detail(f"{shot.kind:6} {shot.title} · {file} · {_placement(shot)}")
 
     console.blank()
     console.done(f"{capture_plan.count(plans)} prise(s) prévue(s)")
@@ -211,7 +223,7 @@ class _Session:
 
         rendered = fit(page.canvas, self.recorder.show_page(page))
         if rendered.is_empty:
-            self._skip(page.shots, "canevas non rendu à l'écran")
+            self._skip(page.shots, "page non affichée, ou canevas non rendu à l'écran")
             return
 
         for shot in page.shots:
@@ -244,29 +256,30 @@ class _Session:
 # ─────────────────────────────────────────────────────────────
 
 
-def calibrate(config: DocConfig, directory: Path) -> None:
+def calibrate(config: DocConfig, directory: Path, plans: list[PagePlan] | None = None) -> None:
     """
-    Écrit la fenêtre entière et ce que l'outil croit être le canevas.
+    Écrit ce que le script voit de la fenêtre, et où il croit que tout se trouve.
 
-    Régler les marges à l'aveugle est impossible : elles dépendent de la
-    version de Power BI, de la taille de l'écran et des volets ouverts. Les
-    deux images se regardent côte à côte, et disent quoi corriger.
+    Trois images dans `_calibrage/` :
+
+        fenetre.png   la fenêtre entière, telle qu'elle est à l'écran
+        canevas.png   ce que le script retient comme canevas
+        reperes.png   la fenêtre, le canevas et chaque visuel entourés
+
+    C'est `reperes.png` qui répond à la question « pourquoi mes captures sont
+    mal cadrées » : si les rectangles tombent à côté des visuels, le décalage
+    se lit sur l'image, et il se lit *où*. Les repères sont ceux de la
+    première page du plan — affichez-la avant de lancer le calibrage.
     """
     library = CaptureLibrary(directory)
     recorder = recorder_for(config, CaptureOptions())
     if not isinstance(recorder, DesktopRecorder):
         raise CaptureError("Le calibrage ne concerne que la capture réelle.")
 
+    page = (plans or [None])[0]
     recorder.start()
     try:
-        frame = recorder.window_frame()
-        canvas = recorder.viewport()
-        console.info(f"Fenêtre : {_box(frame)}")
-        console.info(f"Canevas : {_box(canvas)}")
-        written = [
-            library.write("_calibrage", "fenetre", recorder.grab(frame.rounded())),
-            library.write("_calibrage", "canevas", recorder.grab(canvas.rounded())),
-        ]
+        written = _calibration_images(recorder, library, page)
     finally:
         recorder.stop()
 
@@ -275,7 +288,60 @@ def calibrate(config: DocConfig, directory: Path) -> None:
         console.done(str(path.relative_to(library.directory)))
     console.field("Dossier", str(written[0].parent))
     console.note("`canevas.png` doit tenir le rapport entier, sans ruban ni volets.")
-    console.note("Ajustez `capture.window` du plan, puis relancez.")
+    if page is not None:
+        console.note(f"`reperes.png` entoure les visuels de « {page.title} » — ils doivent")
+        console.note("tomber dessus. Sinon, ajustez `capture.window` du plan et relancez.")
+
+
+def _calibration_images(
+    recorder: DesktopRecorder, library: CaptureLibrary, page: PagePlan | None
+) -> list[Path]:
+    """Les trois images du calibrage, écrites dans le dossier des captures."""
+    frame = recorder.window_frame()
+    rendered = _rendered_canvas(recorder, page)
+    console.info(f"Fenêtre : {_box(frame)}")
+    console.info(f"Marges déclarées : {_box(recorder.viewport())}")
+    console.info(f"Canevas retenu : {_box(rendered)}")
+
+    written = [
+        library.write("_calibrage", "fenetre", recorder.grab(frame.rounded())),
+        library.write("_calibrage", "canevas", recorder.grab(rendered.rounded())),
+    ]
+    marked = _marked_window(recorder, frame, rendered, page)
+    if marked is not None:
+        written.append(library.write("_calibrage", "reperes", marked))
+    return written
+
+
+def _rendered_canvas(recorder: DesktopRecorder, page: PagePlan | None) -> Rect:
+    """Où le canevas est rendu : détecté si l'on sait quoi chercher."""
+    if page is None:
+        return recorder.viewport()
+    return fit(page.canvas, recorder.canvas_area(page.canvas))
+
+
+def _marked_window(
+    recorder: DesktopRecorder, frame: Rect, rendered: Rect, page: PagePlan | None
+) -> bytes | None:
+    """La fenêtre, avec le canevas et les visuels entourés. Sans page, rien."""
+    image = recorder.image(frame) if page is not None else None
+    if image is None:
+        return None
+
+    def local(area: Rect) -> Rect:
+        """Du repère de l'écran à celui de l'image de la fenêtre."""
+        return area.moved(-frame.left, -frame.top)
+
+    areas = [
+        local(place(shot.area, page.canvas, rendered))
+        for shot in page.shots
+        if shot.is_placed and shot.kind != capture_plan.PAGE
+    ]
+    drawn = canvas.outline(image, areas, _VISUAL_MARK)
+    drawn = canvas.outline(
+        canvas.Image(image.width, image.height, drawn), [local(rendered)], _CANVAS_MARK, width=3
+    )
+    return png.encode(image.width, image.height, drawn)
 
 
 def _box(area: Rect) -> str:

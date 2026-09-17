@@ -10,6 +10,8 @@ emplacements réservés.
     geometry.py   du repère du rapport à celui de l'écran — du calcul pur
     plan.py       ce qu'il y a à capturer, déduit du rapport, sans rien ouvrir
     library.py    où vivent les images, et sous quel nom
+    canvas.py     où le canevas est rendu dans l'image — du calcul sur pixels
+    png.py        écrire une image, sans bibliothèque d'images
     finder.py     laquelle des fenêtres du bureau est le rapport (Windows)
     recorder.py   le contrat que remplit un preneur de captures
     fake.py       un preneur qui n'ouvre rien : des rectangles unis

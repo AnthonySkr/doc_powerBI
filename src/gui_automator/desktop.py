@@ -42,11 +42,13 @@ vérifient avec `python -m gui_automator --calibrate`, qui écrit ce qu'il croit
 être le canevas pour qu'on le regarde.
 """
 
+import hashlib
+import sys
 from dataclasses import dataclass, field
 
 from src.core import console
-from src.gui_automator import finder
-from src.gui_automator.geometry import Rect
+from src.gui_automator import canvas, finder
+from src.gui_automator.geometry import Rect, Size
 from src.gui_automator.plan import PagePlan
 from src.gui_automator.recorder import CaptureError
 
@@ -56,6 +58,20 @@ _MISSING = (
     "Capture indisponible : `pywinauto` et `mss` ne sont pas installés. "
     'Installez-les avec `pip install -e ".[capture]"`.'
 )
+
+# Raccourcis de changement de page, dans la notation de `pywinauto`.
+_NEXT = "^{PGDN}"
+_PREVIOUS = "^{PGUP}"
+
+# Pauses entre deux touches, et nombre de remontées pour être sûr d'être
+# revenu à la première page : un rapport de cinquante onglets est déjà une
+# exception.
+_KEY_PAUSE = 0.05
+_REWIND_PRESSES = 50
+
+# Attente d'un onglet dans l'arbre d'automatisation. Court : les versions qui
+# l'exposent le font tout de suite, les autres jamais.
+_TAB_TIMEOUT = 2
 
 
 @dataclass(frozen=True)
@@ -91,6 +107,13 @@ class DesktopOptions:
     # s'arrête et attend. Plus lent, mais jamais pris en défaut — c'est le mode
     # à employer pour éprouver le reste de la chaîne.
     manual_pages: bool = False
+    # Agrandir la fenêtre avant de capturer. Le cadrage ne dépend plus alors de
+    # la taille qu'avait la fenêtre, et le canevas est rendu au plus grand.
+    maximize: bool = True
+    # Chercher le canevas dans l'image plutôt que de le déduire des marges
+    # (voir `canvas`). À couper pour revenir au calcul déclaré, si jamais la
+    # détection se trompait sur un habillage de page inhabituel.
+    detect_canvas: bool = True
 
     @classmethod
     def from_plan(cls, capture: dict) -> DesktopOptions:
@@ -106,6 +129,8 @@ class DesktopOptions:
             ),
             settle_seconds=float(capture.get("settle_seconds", cls.settle_seconds)),
             manual_pages=bool(capture.get("manual_pages", cls.manual_pages)),
+            maximize=bool(window.get("maximize", cls.maximize)),
+            detect_canvas=bool(window.get("detect_canvas", cls.detect_canvas)),
         )
 
 
@@ -116,20 +141,36 @@ class DesktopRecorder:
         self.options = options or DesktopOptions()
         self._window = None
         self._screen = None
+        # Rang de la page affichée, quand on le sait : c'est lui qui donne le
+        # nombre de pas à faire pour atteindre la suivante.
+        self._order: int | None = None
+        # Le clavier change-t-il de page sur cette version ? Éprouvé une fois,
+        # à la première page qui en a besoin.
+        self._keyboard: bool | None = None
+        self._said_undetected = False
 
     # ── Cycle de vie ──────────────────────────────────────────────
     def start(self) -> None:
-        """Trouve la fenêtre de Power BI Desktop et l'amène devant."""
+        """
+        Trouve la fenêtre de Power BI Desktop, l'amène devant, et s'y prépare.
+
+        L'échelle de l'écran est réclamée **avant** de charger `pywinauto` :
+        ce dernier la règle lui-même au passage, moins finement, et le premier
+        qui parle a raison — sur deux écrans de définitions différentes, cela
+        vaut des captures cadrées à côté.
+        """
+        console.detail(f"Échelle de l'écran : {finder.claim_real_pixels()}")
         pywinauto, mss = _import_tools()
-        _claim_real_pixels()
 
         found = finder.locate(self.options.window_title)
         console.done(f"fenêtre trouvée : {found.describe()}")
 
         self._window = _attach(pywinauto, found)
         _bring_to_front(self._window, found)
-        # Une fenêtre qui vient d'être dépliée s'anime : `--calibrate`
-        # photographie tout de suite, et la surprendrait en mouvement.
+        if self.options.maximize:
+            finder.maximize(found.handle)
+        # Une fenêtre qui vient d'être dépliée ou agrandie s'anime : la
+        # surprendre en mouvement fausserait le cadrage comme les empreintes.
         _settle(self.options.settle_seconds)
         self._screen = mss.mss()
 
@@ -142,28 +183,42 @@ class DesktopRecorder:
 
     # ── Capture ───────────────────────────────────────────────────
     def show_page(self, page: PagePlan) -> Rect:
-        """Affiche la page demandée et retourne la zone de canevas à l'écran."""
-        if self.options.manual_pages:
-            _ask_for_page(page)
-        else:
-            self._select_page(page)
+        """
+        Affiche la page demandée et retourne la zone de canevas à l'écran.
+
+        Un rectangle vide dit que la page n'a pas pu être affichée : la séance
+        écarte alors ses prises, plutôt que de photographier une autre page en
+        croyant tenir celle-là.
+        """
+        if not self._reach(page):
+            return Rect(0, 0, 0, 0)
 
         _settle(self.options.settle_seconds)
-        return self.viewport()
+        return self.canvas_area(page.canvas)
+
+    def canvas_area(self, size: Size) -> Rect:
+        """
+        Zone de l'écran où le canevas est rendu.
+
+        Cherchée dans l'image (voir `canvas`), et à défaut déduite des marges
+        déclarées — auquel cas `geometry.fit` y placera le canevas comme avant,
+        en le supposant ajusté et centré.
+        """
+        viewport = self.viewport()
+        if not self.options.detect_canvas or size.is_empty or viewport.is_empty:
+            return viewport
+
+        image = self._pixels(viewport)
+        found = canvas.detect(image, size.width / size.height) if image is not None else None
+        if found is None:
+            self._say_undetected()
+            return viewport
+        return found.moved(viewport.left, viewport.top)
 
     def viewport(self) -> Rect:
-        """
-        Zone de la fenêtre où le canevas est rendu, marges déclarées déduites.
-
-        `geometry.fit` s'occupe ensuite d'y placer le canevas : c'est lui qui
-        tient compte du fait que Power BI le centre en conservant ses
-        proportions, d'où les bandes vides sur les côtés.
-        """
-        window = self._require_window()
+        """Zone de la fenêtre où chercher le canevas, marges déclarées déduites."""
         insets = self.options.insets
-        box = window.rectangle()
-        frame = Rect(box.left, box.top, box.right - box.left, box.bottom - box.top)
-        return frame.inset(insets.left, insets.top, insets.right, insets.bottom)
+        return self.window_frame().inset(insets.left, insets.top, insets.right, insets.bottom)
 
     def window_frame(self) -> Rect:
         """Fenêtre entière — ce que `--calibrate` capture pour comparaison."""
@@ -172,10 +227,161 @@ class DesktopRecorder:
 
     def grab(self, area: Rect) -> bytes:
         """Photographie une région de l'écran et la retourne en PNG."""
+        _, mss = _import_tools()
+        shot = self._shoot(area)
+        return mss.tools.to_png(shot.rgb, shot.size)
+
+    def image(self, area: Rect) -> canvas.Image | None:
+        """Pixels bruts d'une région, pour les mesurer ou dessiner dessus."""
+        return self._pixels(area)
+
+    # ── Pages ─────────────────────────────────────────────────────
+    def _reach(self, page: PagePlan) -> bool:
+        """
+        Amène la page demandée à l'écran, et dit si elle y est.
+
+        Trois voies, de la plus sûre à la dernière : l'onglet, si la fenêtre
+        l'expose ; le clavier, en comptant les pages ; l'utilisateur, à qui
+        l'on demande plutôt que de capturer autre chose.
+        """
+        if self.options.manual_pages:
+            _ask_for_page(page)
+            self._order = page.order
+            return True
+        if self._order == page.order:
+            return True
+
+        before = self._fingerprint()
+        if self._click_tab(page) and self._moved(before):
+            self._order = page.order
+            return True
+        if self._by_keyboard(page, before):
+            self._order = page.order
+            return True
+        return self._ask_instead(page)
+
+    def _click_tab(self, page: PagePlan) -> bool:
+        """
+        Clique l'onglet de la page, en bas de la fenêtre.
+
+        Les versions récentes dessinent leurs onglets dans le canevas : elles
+        n'en exposent aucun à l'automatisation, et ce chemin ne mène nulle
+        part. Il reste tenté d'abord, parce qu'il est le plus direct là où il
+        fonctionne encore.
+        """
+        window = self._require_window()
+        try:
+            tab = window.child_window(title=page.title, control_type="TabItem")
+            tab.wait("exists ready", timeout=_TAB_TIMEOUT)
+            tab.click_input()
+        except Exception as e:  # noqa: BLE001 — l'échec est une voie de moins
+            console.detail(f"Onglet « {page.title} » non exposé par la fenêtre ({e})")
+            return False
+
+        _settle(self.options.settle_seconds)
+        return True
+
+    def _by_keyboard(self, page: PagePlan, before: bytes) -> bool:
+        """
+        Change de page au clavier, en comptant les onglets.
+
+        Power BI passe d'une page à l'autre par Ctrl+Page suivante / Ctrl+Page
+        précédente. Le rapport dit le rang de chaque page, onglets cachés
+        compris : d'un rang connu au suivant, il n'y a qu'à compter les pas.
+        Encore faut-il savoir d'où l'on part — d'où la remontée initiale.
+        """
+        if self._keyboard is None:
+            self._keyboard = self._probe_keyboard()
+        if not self._keyboard:
+            return False
+
+        if self._order is None:
+            self._rewind()
+
+        steps = page.order - (self._order or 0)
+        self._press(_NEXT if steps > 0 else _PREVIOUS, abs(steps))
+        _settle(self.options.settle_seconds)
+        return steps == 0 or self._moved(before)
+
+    def _probe_keyboard(self) -> bool:
+        """
+        Le clavier change-t-il de page sur cette version ?
+
+        Une descente ; et si elle ne donne rien, une montée — sur la dernière
+        page du rapport, la descente ne pouvait pas aboutir. Le raccourci
+        reconnu, on revient d'où l'on venait.
+        """
+        for forward, back in ((_NEXT, _PREVIOUS), (_PREVIOUS, _NEXT)):
+            before = self._fingerprint()
+            self._press(forward, 1)
+            _settle(self.options.settle_seconds)
+            if self._moved(before):
+                self._press(back, 1)
+                _settle(self.options.settle_seconds)
+                return True
+
+        console.detail("Le clavier ne change pas de page sur cette version.")
+        return False
+
+    def _rewind(self) -> None:
+        """Remonte jusqu'à la première page : on sait enfin où l'on est."""
+        self._press(_PREVIOUS, _REWIND_PRESSES)
+        _settle(self.options.settle_seconds)
+        self._order = 0
+
+    def _ask_instead(self, page: PagePlan) -> bool:
+        """Faute d'y arriver seul, demande — et n'invente rien s'il n'y a personne."""
+        console.warn(f"Page « {page.title} » non atteinte automatiquement.")
+        if not _can_ask():
+            console.detail("Personne pour l'afficher : les prises de cette page sont écartées.")
+            return False
+
+        _ask_for_page(page)
+        self._order = page.order
+        return True
+
+    def _press(self, keys: str, times: int = 1) -> None:
+        """Envoie une combinaison à la fenêtre, plusieurs fois s'il le faut."""
+        if times <= 0:
+            return
+
+        window = self._require_window()
+        try:
+            window.set_focus()
+            window.type_keys(keys * times, pause=_KEY_PAUSE)
+        except Exception as e:  # noqa: BLE001 — la vérification suivra de toute façon
+            console.detail(f"Raccourci {keys} non envoyé ({e})")
+
+    # ── Ce qui est à l'écran ──────────────────────────────────────
+    def _fingerprint(self) -> bytes:
+        """
+        Empreinte de ce qui est affiché dans la zone du canevas.
+
+        C'est la seule façon de savoir qu'un changement de page a eu lieu :
+        Power BI n'en dit rien, ni dans son titre, ni à l'automatisation.
+        """
+        image = self._pixels(self.viewport())
+        return hashlib.sha256(image.rgb).digest() if image is not None else b""
+
+    def _moved(self, before: bytes) -> bool:
+        """L'affichage a-t-il changé depuis cette empreinte ?"""
+        after = self._fingerprint()
+        return bool(after) and after != before
+
+    def _pixels(self, area: Rect) -> canvas.Image | None:
+        """Pixels bruts d'une région de l'écran."""
+        try:
+            shot = self._shoot(area)
+        except CaptureError as e:
+            console.detail(str(e))
+            return None
+        return canvas.Image(shot.size.width, shot.size.height, bytes(shot.rgb))
+
+    def _shoot(self, area: Rect):
+        """Photographie une région et retourne l'image brute de `mss`."""
         if self._screen is None:
             raise CaptureError("Capture non démarrée : appelez `start()` d'abord.")
 
-        _, mss = _import_tools()
         region = {
             "left": int(area.left),
             "top": int(area.top),
@@ -183,29 +389,18 @@ class DesktopRecorder:
             "height": int(area.height),
         }
         try:
-            shot = self._screen.grab(region)
+            return self._screen.grab(region)
         except Exception as e:
             raise CaptureError(f"Région {region} non capturable ({e})") from e
-        return mss.tools.to_png(shot.rgb, shot.size)
 
-    # ── Pages ─────────────────────────────────────────────────────
-    def _select_page(self, page: PagePlan) -> None:
-        """
-        Clique l'onglet de la page, en bas de la fenêtre.
+    def _say_undetected(self) -> None:
+        """Le canevas n'a pas été reconnu : on le dit une fois, pas à chaque page."""
+        if self._said_undetected:
+            return
 
-        L'onglet porte le nom affiché de la page. Introuvable, le script ne
-        s'arrête pas : il capture ce qui est à l'écran et le signale. Une page
-        manquée se rattrape en relançant sur elle seule, ou en `manual_pages`.
-        """
-        window = self._require_window()
-        try:
-            tab = window.child_window(title=page.title, control_type="TabItem")
-            tab.wait("exists ready", timeout=5)
-            tab.click_input()
-        except Exception as e:  # noqa: BLE001
-            # L'automatisation d'interface échoue de mille façons selon la
-            # version : aucune ne vaut d'abandonner la séance.
-            console.warn(f"Onglet « {page.title} » non atteint ({e}) — page affichée telle quelle")
+        self._said_undetected = True
+        console.warn("Canevas non reconnu dans l'image — cadrage déduit des marges déclarées.")
+        console.note("`--calibrate` écrit ce que le script voit : le repère y saute aux yeux.")
 
     def _require_window(self):
         if self._window is None:
@@ -261,6 +456,11 @@ def _settle(seconds: float) -> None:
         time.sleep(seconds)
 
 
+def _can_ask() -> bool:
+    """Y a-t-il quelqu'un pour répondre ? Une exécution automatisée, non."""
+    return bool(sys.stdin) and sys.stdin.isatty()
+
+
 def _import_tools():
     """Charge les outils de capture, ou dit lesquels manquent."""
     try:
@@ -270,23 +470,3 @@ def _import_tools():
     except ImportError as e:
         raise CaptureError(_MISSING) from e
     return pywinauto, mss
-
-
-def _claim_real_pixels() -> None:
-    """
-    Demande à Windows des coordonnées en vrais pixels.
-
-    Sans cela, un écran agrandi (125 %, 150 %) renvoie au script des
-    coordonnées de fenêtre mises à l'échelle, alors que la capture d'écran,
-    elle, travaille en pixels réels : le recadrage tomberait à côté, d'autant
-    plus loin qu'on s'éloigne du coin supérieur gauche.
-    """
-    try:
-        import ctypes  # noqa: PLC0415
-
-        # PROCESS_PER_MONITOR_DPI_AWARE
-        ctypes.windll.shcore.SetProcessDpiAwareness(2)  # type: ignore[attr-defined]
-    except Exception as e:  # noqa: BLE001
-        # Hors Windows, ou déjà réglé par l'hôte : sans conséquence tant que
-        # l'affichage est à 100 %.
-        console.detail(f"Mise à l'échelle de l'écran non interrogée ({e})")

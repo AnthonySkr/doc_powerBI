@@ -68,7 +68,7 @@ def parse_container(visual_json_path: str, folder_name: str) -> Visual | VisualG
 
 
 def parse_group(data: dict, folder_name: str) -> VisualGroup:
-    """Conteneur de groupe : pas de contenu propre, mais un nom et une place."""
+    """Conteneur de groupe : pas de contenu propre, mais un nom et un cadre."""
     node = data.get("visualGroup") or {}
     position = data.get("position") or {}
 
@@ -78,8 +78,13 @@ def parse_group(data: dict, folder_name: str) -> VisualGroup:
         title=(node.get("displayName") or "").strip() or UNTITLED_GROUP,
         group_mode=node.get("groupMode", ""),
         parent_group_name=data.get("parentGroupName", ""),
-        pos_x=float(position.get("x") or 0),
-        pos_y=float(position.get("y") or 0),
+        pos_x=_length(position.get("x"), 0.0),
+        pos_y=_length(position.get("y"), 0.0),
+        # Le cadre du groupe, quand il est déclaré : il vaut mieux que
+        # l'étendue de ses visuels, qui ignore ce que le groupe laisse de vide
+        # autour d'eux.
+        width=_length(position.get("width"), 0.0),
+        height=_length(position.get("height"), 0.0),
     )
 
 
