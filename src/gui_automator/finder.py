@@ -30,7 +30,16 @@ from pathlib import PureWindowsPath
 
 from src.gui_automator.recorder import CaptureError
 
-__all__ = ["WindowInfo", "choose", "locate", "mentions", "restore", "visible_windows"]
+__all__ = [
+    "WindowInfo",
+    "choose",
+    "claim_real_pixels",
+    "locate",
+    "maximize",
+    "mentions",
+    "restore",
+    "visible_windows",
+]
 
 # Les exécutables de Power BI Desktop partagent tous ce préfixe :
 # `PBIDesktop.exe` pour l'installation classique, `PBIDesktopStore.exe` pour la
@@ -51,6 +60,13 @@ _LISTED = 8
 _MAX_PATH = 32768
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _SW_RESTORE = 9
+_SW_MAXIMIZE = 3
+
+# Dire à Windows que le script travaille en vrais pixels, du plus précis au
+# plus ancien : contexte par écran (Windows 10 1703 et au-delà), conscience
+# par écran, puis conscience tout court.
+_PER_MONITOR_AWARE_V2 = -4
+_PROCESS_PER_MONITOR_DPI_AWARE = 2
 
 
 @dataclass(frozen=True)
@@ -186,6 +202,73 @@ def restore(handle: int) -> None:
     api = _api()
     if api is not None and api.user32.IsIconic(handle):
         api.user32.ShowWindow(handle, _SW_RESTORE)
+
+
+def maximize(handle: int) -> None:
+    """
+    Agrandit la fenêtre à tout l'écran qui la porte.
+
+    Deux raisons, et la seconde compte autant que la première : une fenêtre
+    agrandie donne au canevas la plus grande surface possible, donc des
+    captures nettes ; et elle est reproductible, là où une fenêtre posée à la
+    main change de taille — donc de cadrage — d'une séance à l'autre.
+    """
+    api = _api()
+    if api is not None:
+        api.user32.ShowWindow(handle, _SW_MAXIMIZE)
+
+
+def claim_real_pixels() -> str:
+    """
+    Demande à Windows des coordonnées en vrais pixels, et dit ce qu'il a fallu.
+
+    Sans cela, un écran agrandi (125 %, 150 %) renvoie au script des
+    coordonnées de fenêtre mises à l'échelle, alors que la capture d'écran,
+    elle, travaille en pixels réels : le recadrage tomberait à côté, d'autant
+    plus loin qu'on s'éloigne du coin supérieur gauche.
+
+    **À appeler avant toute autre chose** : la conscience d'échelle d'un
+    processus se fige dès qu'elle est posée une fois, et `pywinauto` la pose
+    lui-même — moins finement — au moment de son import.
+    """
+    for claim, description in (
+        (_claim_per_monitor_v2, "par écran (v2)"),
+        (_claim_per_monitor, "par écran"),
+        (_claim_system, "à l'échelle du système"),
+    ):
+        if claim():
+            return description
+    return "non réglée"
+
+
+def _claim_per_monitor_v2() -> bool:
+    """Windows 10 1703 et au-delà : l'échelle de l'écran qui porte la fenêtre."""
+    try:
+        context = ctypes.c_void_p(_PER_MONITOR_AWARE_V2)
+        return bool(ctypes.windll.user32.SetProcessDpiAwarenessContext(context))  # type: ignore[attr-defined]
+    except AttributeError, OSError:
+        return False
+
+
+def _claim_per_monitor() -> bool:
+    """Windows 8.1 : même idée, sans le rattrapage des fenêtres déjà ouvertes."""
+    try:
+        return (
+            ctypes.windll.shcore.SetProcessDpiAwareness(  # type: ignore[attr-defined]
+                _PROCESS_PER_MONITOR_DPI_AWARE
+            )
+            == 0
+        )
+    except AttributeError, OSError:
+        return False
+
+
+def _claim_system() -> bool:
+    """Le plus ancien : une seule échelle pour tous les écrans."""
+    try:
+        return bool(ctypes.windll.user32.SetProcessDPIAware())  # type: ignore[attr-defined]
+    except AttributeError, OSError:
+        return False
 
 
 def _describe(api: _Api, handle: int) -> WindowInfo:

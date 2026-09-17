@@ -4,6 +4,10 @@ Plan de capture : ce que le rapport dit qu'il y a à photographier.
 Le plan se calcule sans ouvrir Power BI. C'est ce qui permet de répondre avant
 toute capture : combien de prises, de quoi, et lesquelles le rapport ne place
 pas assez précisément pour qu'on puisse les cadrer.
+
+Le document réserve un emplacement par page, un par groupe et un par visuel
+documenté — **y compris les visuels d'un groupe**, qu'il détaille sous la
+capture d'ensemble. Le plan en prévoit donc exactement autant.
 """
 
 import unittest
@@ -13,7 +17,7 @@ from src.gui_automator import plan
 from src.gui_automator.geometry import Rect
 
 
-def visual(name: str, title: str, x=0.0, y=0.0, width=400.0, height=300.0) -> Visual:
+def visual(name: str, title: str, x=0.0, y=0.0, width=400.0, height=300.0, group="") -> Visual:
     return Visual(
         id=name,
         visual_type="clusteredColumnChart",
@@ -23,6 +27,7 @@ def visual(name: str, title: str, x=0.0, y=0.0, width=400.0, height=300.0) -> Vi
         pos_y=y,
         width=width,
         height=height,
+        parent_group_name=group,
     )
 
 
@@ -35,27 +40,53 @@ def page(*visuals: Visual, **values) -> ReportPage:
     return built
 
 
+def shots(pages: list[ReportPage], kind: str = "") -> list[plan.Shot]:
+    built = plan.build(pages)[0].shots
+    return [shot for shot in built if not kind or shot.kind == kind]
+
+
+class PageShotTest(unittest.TestCase):
+    """La page entière est une prise comme les autres — la première."""
+
+    def test_la_page_ouvre_le_plan(self):
+        first = shots([page(visual("v1", "CA"))])[0]
+        self.assertEqual(first.kind, plan.PAGE)
+        self.assertEqual(first.name, plan.PAGE_SHOT)
+        self.assertEqual(first.title, "Ventes")
+
+    def test_la_prise_couvre_le_canevas_entier(self):
+        built = page(visual("v1", "CA"))
+        built.canvas_width, built.canvas_height = 1600.0, 900.0
+        self.assertEqual(shots([built])[0].area, Rect(0, 0, 1600, 900))
+
+    def test_une_page_sans_visuel_se_capture_quand_meme(self):
+        empty = ReportPage(name="page_1", display_name="Accueil")
+        self.assertEqual(len(shots([empty])), 1)
+
+
 class VisualShotsTest(unittest.TestCase):
     def test_une_prise_par_visuel(self):
         plans = plan.build([page(visual("v1", "CA"), visual("v2", "Marge"))])
-        self.assertEqual([shot.title for shot in plans[0].shots], ["CA", "Marge"])
-        self.assertEqual(plan.count(plans), 2)
+        taken = [shot.title for shot in plans[0].shots if shot.kind == plan.VISUAL]
+        self.assertEqual(taken, ["CA", "Marge"])
+        self.assertEqual(plan.count(plans), 3)  # la page, et ses deux visuels
 
     def test_la_prise_reprend_la_place_declaree(self):
-        plans = plan.build([page(visual("v1", "CA", x=120, y=40, width=500, height=250))])
-        self.assertEqual(plans[0].shots[0].area, Rect(120, 40, 500, 250))
+        taken = shots([page(visual("v1", "CA", x=120, y=40, width=500, height=250))], plan.VISUAL)
+        self.assertEqual(taken[0].area, Rect(120, 40, 500, 250))
 
     def test_le_nom_technique_sert_de_cle(self):
         """Renommer un visuel dans Power BI ne doit pas égarer sa capture."""
-        plans = plan.build([page(visual("abc123", "Titre du jour"))])
-        self.assertEqual(plans[0].shots[0].name, "abc123")
+        self.assertEqual(
+            shots([page(visual("abc123", "Titre du jour"))], plan.VISUAL)[0].name, "abc123"
+        )
 
     def test_un_visuel_sans_dimensions_est_decrit_mais_ecarte(self):
         plans = plan.build([page(visual("v1", "CA", width=0, height=0))])
-        shot = plans[0].shots[0]
+        shot = plans[0].shots[-1]
         self.assertFalse(shot.is_placed)
         self.assertEqual(shot.title, "CA")
-        self.assertEqual(plan.count(plans), 0)
+        self.assertEqual(plan.count(plans), 1)  # la page seule
 
     def test_le_canevas_de_la_page_est_celui_du_rapport(self):
         built = page(visual("v1", "CA"))
@@ -63,41 +94,96 @@ class VisualShotsTest(unittest.TestCase):
         plans = plan.build([built])
         self.assertEqual((plans[0].canvas.width, plans[0].canvas.height), (1600, 900))
 
+    def test_le_rang_de_la_page_suit_le_plan(self):
+        """C'est lui qui dit combien d'onglets franchir pour l'atteindre."""
+        built = page(visual("v1", "CA"))
+        built.order = 3
+        self.assertEqual(plan.build([built])[0].order, 3)
+
 
 class GroupShotsTest(unittest.TestCase):
-    """Un groupe se capture d'un tenant : son étendue vient de ses membres."""
+    """Un groupe se capture d'un tenant, et ses visuels chacun de leur côté."""
 
     def _page_with_group(self) -> ReportPage:
         group = VisualGroup(id="g1", name="g1", title="Indicateurs")
         group.visuals = [
-            visual("v1", "CA", x=0, y=0, width=200, height=100),
-            visual("v2", "Marge", x=300, y=150, width=200, height=100),
+            visual("v1", "CA", x=0, y=0, width=200, height=100, group="g1"),
+            visual("v2", "Marge", x=300, y=150, width=200, height=100, group="g1"),
         ]
         built = ReportPage(name="page_1", display_name="Ventes")
         built.groups = [group]
         built.ungrouped_visuals = [visual("v3", "Détail", x=0, y=400)]
+        built.visuals = [*group.visuals, *built.ungrouped_visuals]
         return built
 
     def test_l_etendue_couvre_tous_les_membres(self):
-        plans = plan.build([self._page_with_group()])
-        group_shot = plans[0].shots[0]
-        self.assertEqual(group_shot.kind, plan.GROUP)
+        """Sans cadre déclaré, l'étendue des visuels tient lieu de cadre."""
+        group_shot = shots([self._page_with_group()], plan.GROUP)[0]
         self.assertEqual(group_shot.area, Rect(0, 0, 500, 250))
 
-    def test_les_visuels_isoles_suivent_les_groupes(self):
-        plans = plan.build([self._page_with_group()])
-        self.assertEqual([shot.title for shot in plans[0].shots], ["Indicateurs", "Détail"])
+    def test_le_cadre_declare_prime_sur_l_etendue(self):
+        built = self._page_with_group()
+        built.groups[0].pos_x, built.groups[0].pos_y = 0.0, 0.0
+        built.groups[0].width, built.groups[0].height = 600.0, 400.0
+        self.assertEqual(shots([built], plan.GROUP)[0].area, Rect(0, 0, 600, 400))
+
+    def test_les_visuels_du_groupe_ont_aussi_leur_prise(self):
+        """Le document les détaille un à un : il leur faut une capture chacun."""
+        taken = [shot.title for shot in shots([self._page_with_group()], plan.VISUAL)]
+        self.assertEqual(taken, ["CA", "Marge", "Détail"])
+
+    def test_l_ordre_est_la_page_les_groupes_puis_les_visuels(self):
+        taken = [shot.kind for shot in shots([self._page_with_group()])]
+        self.assertEqual(taken, [plan.PAGE, plan.GROUP] + [plan.VISUAL] * 3)
 
     def test_les_sous_groupes_comptent_dans_l_etendue(self):
         group = VisualGroup(id="g1", name="g1", title="Indicateurs")
-        group.visuals = [visual("v1", "CA", x=0, y=0, width=100, height=100)]
+        group.visuals = [visual("v1", "CA", x=0, y=0, width=100, height=100, group="g1")]
         sub = VisualGroup(id="g2", name="g2", title="Détail")
-        sub.visuals = [visual("v2", "Marge", x=600, y=400, width=100, height=100)]
+        sub.visuals = [visual("v2", "Marge", x=600, y=400, width=100, height=100, group="g2")]
         group.subgroups = [sub]
 
         built = ReportPage(name="page_1", display_name="Ventes")
         built.groups = [group]
-        self.assertEqual(plan.build([built])[0].shots[0].area, Rect(0, 0, 700, 500))
+        self.assertEqual(shots([built], plan.GROUP)[0].area, Rect(0, 0, 700, 500))
+
+
+class GroupCoordinatesTest(unittest.TestCase):
+    """
+    Un visuel de groupe est placé tantôt dans le repère de la page, tantôt
+    dans celui de son groupe. Le cadre déclaré du groupe tranche.
+    """
+
+    def _page(self, x: float, y: float) -> ReportPage:
+        group = VisualGroup(id="g1", name="g1", title="Indicateurs")
+        group.pos_x, group.pos_y = 400.0, 200.0
+        group.width, group.height = 500.0, 300.0
+        member = visual("v1", "CA", x=x, y=y, width=200, height=100, group="g1")
+        group.visuals = [member]
+
+        built = ReportPage(name="page_1", display_name="Ventes")
+        built.groups = [group]
+        built.visuals = [member]
+        return built
+
+    def test_des_coordonnees_de_page_sont_gardees(self):
+        taken = shots([self._page(x=450, y=250)], plan.VISUAL)[0]
+        self.assertEqual(taken.area, Rect(450, 250, 200, 100))
+
+    def test_des_coordonnees_de_groupe_sont_ramenees_a_la_page(self):
+        """Hors du cadre du groupe : c'est qu'elles partent de son coin."""
+        taken = shots([self._page(x=10, y=20)], plan.VISUAL)[0]
+        self.assertEqual(taken.area, Rect(410, 220, 200, 100))
+
+    def test_sans_cadre_declare_rien_n_est_deplace(self):
+        built = self._page(x=10, y=20)
+        built.groups[0].width, built.groups[0].height = 0.0, 0.0
+        self.assertEqual(shots([built], plan.VISUAL)[0].area, Rect(10, 20, 200, 100))
+
+    def test_un_visuel_hors_du_groupe_des_deux_facons_reste_tel_quel(self):
+        """Ni dans le cadre, ni ramené dedans : le rapport a raison, pas nous."""
+        taken = shots([self._page(x=900, y=900)], plan.VISUAL)[0]
+        self.assertEqual(taken.area, Rect(900, 900, 200, 100))
 
 
 class WithoutOrganisationTest(unittest.TestCase):
@@ -106,7 +192,19 @@ class WithoutOrganisationTest(unittest.TestCase):
     def test_les_visuels_de_la_page_servent_faute_de_mieux(self):
         built = ReportPage(name="page_1", display_name="Ventes")
         built.visuals = [visual("v1", "CA")]
-        self.assertEqual(len(plan.build([built])[0].shots), 1)
+        self.assertEqual(len(shots([built], plan.VISUAL)), 1)
+
+    def test_un_visuel_n_est_jamais_capture_deux_fois(self):
+        """`page.visuals` porte les visuels de groupe comme les autres."""
+        member = visual("v1", "CA", group="g1")
+        group = VisualGroup(id="g1", name="g1", title="Indicateurs")
+        group.visuals = [member]
+
+        built = ReportPage(name="page_1", display_name="Ventes")
+        built.groups = [group]
+        built.visuals = [member]
+        built.ungrouped_visuals = []
+        self.assertEqual(len(shots([built], plan.VISUAL)), 1)
 
 
 class OnlyTest(unittest.TestCase):
@@ -132,7 +230,13 @@ class OnlyTest(unittest.TestCase):
         self.assertEqual(len(plan.only(self.plans, shot="v3")), 1)
 
     def test_sans_filtre_le_plan_est_entier(self):
-        self.assertEqual(plan.count(plan.only(self.plans)), 3)
+        self.assertEqual(plan.count(plan.only(self.plans)), 5)  # 2 pages, 3 visuels
+
+    def test_le_rang_de_la_page_est_conserve(self):
+        """Restreindre le plan ne doit pas égarer le chemin jusqu'à la page."""
+        built = page(visual("v1", "CA"), name="p_stock", title="Stocks")
+        built.order = 7
+        self.assertEqual(plan.only(plan.build([built]), page="stock")[0].order, 7)
 
     def test_un_filtre_sans_correspondance_ne_garde_rien(self):
         self.assertEqual(plan.only(self.plans, page="absente"), [])

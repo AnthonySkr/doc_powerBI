@@ -609,9 +609,15 @@ Le document réserve la place des captures ; `gui_automator` les prend.
 ```
 assets/
     page_ventes/
+        page.png              ← la page entière
+        g_indicateurs.png     ← un groupe : son cadre, visuels compris
         v_evolution.png       ← nom technique du visuel, pas son titre
-        g_indicateurs.png     ← un groupe : l'étendue de ses visuels
 ```
+
+Une image par emplacement que le document réserve : **une par page, une par
+groupe, une par visuel documenté** — y compris les visuels d'un groupe, que le
+document détaille un à un sous la capture d'ensemble.
+`--capture-plan` les énumère avec leur nom de fichier, avant toute capture.
 
 C'est tout le contrat. Renommer un visuel dans Power BI ne perd pas sa capture,
 et remplacer une image par une meilleure — retouchée, prise autrement — revient
@@ -674,23 +680,69 @@ Chaque étape s'éprouve seule, de la plus sûre à la moins sûre :
 `--page` et `--shot` restreignent à une page ou à une prise : de quoi reprendre
 une seule capture sans redérouler le rapport.
 
-### Régler le cadrage
+### Où le canevas est rendu
 
-`--calibrate` écrit deux images dans `assets/_calibrage/` : la fenêtre
-entière, et ce que l'outil croit être le canevas. Si `canevas.png` montre un
-bout de ruban ou le volet Visualisations, ajustez `capture.window` du plan :
+Tout le cadrage découle d'un seul rectangle : celui où Power BI dessine le
+canevas à l'écran. Il est **cherché dans l'image**, pas déduit de mesures
+déclarées — Power BI dessine le canevas sur un fond uni, et le canevas est le
+rectangle de ce qui n'est pas ce fond (voir `src/gui_automator/canvas.py`).
+
+Le rectangle trouvé n'est retenu que s'il a les proportions que la page
+déclare (1280 × 720, ou ce qu'elle dit). Sinon le script ne devine pas : il
+revient aux marges déclarées et le signale. Ce contrôle attrape du même coup
+le rapport qui n'est pas en « Ajuster à la page », ou dont on a zoomé — deux
+états où **aucun** calcul de cadrage ne peut être juste.
+
+Les marges de `capture.window` ne servent plus qu'à délimiter la recherche :
+elles doivent contenir le canevas entier, bordé de fond sur ses quatre côtés.
+Être large suffit ; être exact n'est plus nécessaire.
 
 ```yaml
 capture:
-  directory: assets     # où ranger les images, à côté du .pbip
+  directory: assets      # où ranger les images, à côté du .pbip
   window:
-    inset_top: 130      # ruban
-    inset_right: 340    # volets Visualisations et Filtres
-    inset_bottom: 60    # barre des onglets de page
+    maximize: true       # agrandir la fenêtre : cadrage reproductible, image nette
+    detect_canvas: true  # chercher le canevas dans l'image (recommandé)
+    inset_top: 130       # ruban
+    inset_right: 340     # volets Visualisations et Filtres
+    inset_bottom: 60     # barre des onglets de page
 ```
 
-Puis relancez `--calibrate` jusqu'à ce que `canevas.png` tienne le rapport
-entier, et rien d'autre.
+### Régler le cadrage
+
+`--calibrate` écrit trois images dans `assets/_calibrage/` :
+
+| Image | Ce qu'elle montre |
+| --- | --- |
+| `fenetre.png` | la fenêtre entière, telle qu'elle est à l'écran |
+| `canevas.png` | ce que le script retient comme canevas |
+| `reperes.png` | la même fenêtre, **canevas et visuels entourés** |
+
+`reperes.png` est celle qui répond à « pourquoi mes captures sont mal
+cadrées » : les rectangles verts doivent tomber sur les visuels, le rouge sur
+le canevas. S'ils sont décalés, l'image dit de combien et dans quel sens. Les
+repères sont ceux de la première page du plan — affichez-la dans Power BI
+avant de lancer le calibrage.
+
+### Changer de page
+
+Trois voies, essayées dans cet ordre, parce qu'aucune ne marche partout :
+
+1. **l'onglet**, cliqué par l'automatisation — les versions récentes dessinent
+   leurs onglets dans le canevas et n'en exposent aucun ([le problème est
+   connu](https://stackoverflow.com/questions/71948392/pywinauto-automate-power-bi-desktop-tabs)) ;
+2. **le clavier** : `Ctrl+Page suivante` / `Ctrl+Page précédente`. Le rapport
+   donne le rang de chaque page, onglets cachés compris : d'un rang connu au
+   suivant, il n'y a qu'à compter les pas. Le script remonte d'abord à la
+   première page pour savoir d'où il part, après avoir éprouvé une fois que le
+   raccourci fonctionne ;
+3. **vous**, à qui le script demande d'afficher la page.
+
+Chaque voie est **vérifiée** : le script compare ce qui est à l'écran avant et
+après. Rien n'a changé, la page n'a pas été atteinte — et il préfère demander,
+ou écarter les prises de cette page, plutôt que de photographier une autre page
+en croyant tenir celle-là. `--manual-pages` court-circuite tout cela et
+demande à chaque page.
 
 ## Structure du projet
 
@@ -735,6 +787,8 @@ src/
       geometry.py             du repère du rapport à celui de l'écran
       plan.py                 ce qu'il y a à capturer, sans rien ouvrir
       library.py              où vivent les images, et sous quel nom
+      canvas.py               où le canevas est rendu, cherché dans l'image
+      png.py                  écrire une image, sans bibliothèque d'images
       finder.py               quelle fenêtre du bureau est le rapport
       recorder.py             le contrat d'un preneur de captures
       fake.py                 un preneur qui n'ouvre rien : rectangles unis

@@ -65,13 +65,17 @@ class SessionTest(unittest.TestCase):
             return run(capture_plan.build(pages), self.recorder, self.library)
 
     def test_une_image_par_prise(self):
+        """La page entière, puis chacun de ses visuels."""
         log = self._run([page(visual("v1", "CA"), visual("v2", "Marge"))])
-        self.assertEqual(len(log.written), 2)
+        self.assertEqual(len(log.written), 3)
         self.assertEqual(log.skipped, [])
 
     def test_les_images_sont_rangees_par_page(self):
         self._run([page(visual("v1", "CA"))])
-        self.assertEqual(self.library.existing(), [Path("page_1") / "v1.png"])
+        self.assertEqual(
+            self.library.existing(),
+            [Path("page_1") / "page.png", Path("page_1") / "v1.png"],
+        )
 
     def test_le_document_retrouve_une_capture_par_les_memes_identifiants(self):
         """Tout le contrat entre les deux moitiés du projet tient là-dedans."""
@@ -118,7 +122,7 @@ class ResilienceTest(unittest.TestCase):
             FakeRecorder(),
             [page(visual("v1", "CA", width=0, height=0), visual("v2", "Marge"))],
         )
-        self.assertEqual(len(log.written), 1)
+        self.assertEqual(len(log.written), 2)  # la page, et le visuel placé
         self.assertEqual(log.skipped[0][0], "CA")
         self.assertIn("place non déclarée", log.details()[0])
 
@@ -131,8 +135,10 @@ class ResilienceTest(unittest.TestCase):
                 return super().grab(area)
 
         log = self._run(Fragile(), [page(visual("v1", "CA"), visual("v2", "Marge"))])
-        self.assertEqual(len(log.written), 1)
-        self.assertEqual(log.skipped, [("CA", "région hors écran")])
+        # La première prise est celle de la page : elle échoue, les deux
+        # visuels sont capturés quand même.
+        self.assertEqual(len(log.written), 2)
+        self.assertEqual(log.skipped, [("Ventes", "région hors écran")])
 
     def test_une_page_non_rendue_ecarte_ses_prises_sans_lever(self):
         log = self._run(FakeRecorder(Rect(0, 0, 0, 0)), [page(visual("v1", "CA"))])

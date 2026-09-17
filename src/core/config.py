@@ -183,19 +183,31 @@ DEFAULTS: dict[str, Any] = {
     # leur place sinon.
     "capture": {
         "directory": DEFAULT_CAPTURES_DIR,
-        # Fenêtre de Power BI Desktop, et ce qui entoure son canevas — ruban,
-        # volets de droite, barre d'onglets. Ces marges dépendent de la version
-        # et de l'écran : `--calibrate` écrit de quoi les régler à coup sûr.
+        # Fenêtre de Power BI Desktop, et où y chercher le canevas. Les marges
+        # ne servent plus qu'à délimiter la recherche : le canevas est reconnu
+        # dans l'image (`detect_canvas`), et elles ne reprennent la main que si
+        # elle échoue. `--calibrate` montre ce que le script voit.
         "window": {
             # La fenêtre se reconnaît à son processus (PBIDesktop.exe), pas à
             # son titre : selon la version, celui-ci ne porte que le nom du
             # rapport. Ce fragment ne sert donc qu'à désigner un rapport parmi
             # plusieurs ouverts en même temps ; vide, le premier trouvé.
             "title": "",
+            # Zone où chercher le canevas : la fenêtre, moins le ruban, les
+            # volets de droite et la barre d'onglets. Elle doit contenir le
+            # canevas entier, bordé de fond sur ses quatre côtés — être large
+            # suffit, être exact n'est plus nécessaire.
             "inset_left": 0,
             "inset_top": 130,
             "inset_right": 340,
             "inset_bottom": 60,
+            # Agrandir la fenêtre avant de capturer : le cadrage ne dépend
+            # plus de la taille qu'elle avait, et le canevas est rendu au plus
+            # grand — donc les captures au plus net.
+            "maximize": True,
+            # Reconnaître le canevas dans l'image plutôt que de le déduire des
+            # marges. À couper pour revenir au calcul déclaré.
+            "detect_canvas": True,
         },
         # Temps laissé au rendu après un changement de page, en secondes.
         "settle_seconds": 1.5,

@@ -121,10 +121,10 @@ def _inspect_captures(metadata: PowerBiMetadata, config: DocConfig, options: Opt
     """`--capture-plan` et `--calibrate` : ils n'écrivent aucun document."""
     directory = capturer.captures_dir(metadata, config)
     try:
+        plans = capturer.shot_plan(metadata, config, options.capture_options)
         if options.calibrate:
-            capturer.calibrate(config, directory)
+            capturer.calibrate(config, directory, plans)
         else:
-            plans = capturer.shot_plan(metadata, config, options.capture_options)
             capturer.describe_plan(plans, capturer.CaptureLibrary(directory))
     except CaptureError as e:
         raise PipelineError(str(e)) from e

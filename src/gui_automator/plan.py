@@ -5,16 +5,21 @@ Le plan de capture se calcule **sans ouvrir Power BI** : les positions des
 visuels viennent du rapport `.pbip`, que `pbi_extractor.report` a déjà lu. On
 sait donc à l'avance combien de captures seront prises, de quoi, et à quel
 endroit du canevas — de quoi vérifier le cadrage avant de lancer quoi que ce
-soit (`python -m gui_automator --plan`).
+soit (`python main.py <rapport> --capture-plan`).
 
-Deux sortes de prises :
+Trois sortes de prises, une par emplacement que le document réserve :
 
-    un visuel   sa place, telle que le rapport la déclare
-    un groupe   l'étendue de ses visuels documentés, que Power BI ne
-                déclare pas — elle se déduit de leurs places
+    une page    le canevas entier, tel que la page le déclare
+    un groupe   le cadre du groupe, ou l'étendue de ses visuels à défaut
+    un visuel   sa place, telle que le rapport la déclare — y compris les
+                visuels d'un groupe, qui sont documentés un à un
 
 Le plan ne décide pas *ce qui* est documenté : il reçoit les pages telles que
-`generators.filters` les a organisées, et les suit.
+`core.selection` les a organisées, et les suit.
+
+    Coordonnées d'un visuel de groupe — Power BI les écrit tantôt dans le
+    repère de la page, tantôt dans celui du groupe qui le contient. On ne
+    devine pas : le cadre déclaré du groupe tranche (voir `_placed`).
 """
 
 from dataclasses import dataclass, field
@@ -22,18 +27,28 @@ from dataclasses import dataclass, field
 from src.core.models import ReportPage, Visual, VisualGroup
 from src.gui_automator.geometry import Rect, Size, union
 
-__all__ = ["GROUP", "VISUAL", "PagePlan", "Shot", "build", "count", "only"]
+__all__ = ["GROUP", "PAGE", "PAGE_SHOT", "VISUAL", "PagePlan", "Shot", "build", "count", "only"]
 
-# Ce qu'une prise cadre : un visuel seul, ou un groupe entier.
+# Ce qu'une prise cadre : la page entière, un groupe, ou un visuel seul.
+PAGE = "page"
 VISUAL = "visual"
 GROUP = "group"
+
+# Nom de fichier de la capture d'une page entière. Le tiret bas la distingue
+# des visuels, dont les noms techniques n'en portent pas au début.
+PAGE_SHOT = "_page"
+
+# Tolérance, en unités du canevas, sur l'appartenance d'un visuel au cadre de
+# son groupe : Power BI arrondit, et un demi-point ne dit pas un changement de
+# repère.
+_INSIDE = 1.0
 
 
 @dataclass(frozen=True)
 class Shot:
     """Une capture à prendre : ce qu'elle cadre, et où c'est dans le canevas."""
 
-    kind: str  # VISUAL | GROUP
+    kind: str  # PAGE | GROUP | VISUAL
     name: str  # identifiant technique, stable d'une génération à l'autre
     title: str  # titre lisible, pour le compte rendu
     area: Rect  # place dans le canevas de la page
@@ -58,6 +73,9 @@ class PagePlan:
     title: str  # `displayName`, pour le compte rendu
     canvas: Size
     shots: list[Shot] = field(default_factory=list)
+    # Rang de la page dans le rapport, onglets cachés compris. C'est lui qui
+    # permet d'aller d'une page à l'autre au clavier (voir `desktop`).
+    order: int = 0
 
 
 def build(pages: list[ReportPage]) -> list[PagePlan]:
@@ -84,43 +102,108 @@ def only(plans: list[PagePlan], page: str = "", shot: str = "") -> list[PagePlan
             continue
         shots = [s for s in plan.shots if not shot or _matches(shot, s.name, s.title)]
         if shots:
-            kept.append(PagePlan(plan.name, plan.title, plan.canvas, shots))
+            kept.append(PagePlan(plan.name, plan.title, plan.canvas, shots, plan.order))
     return kept
 
 
 def _page_plan(page: ReportPage) -> PagePlan:
     canvas = Size(page.canvas_width, page.canvas_height)
-    return PagePlan(page.name, page.display_name, canvas, _shots(page))
+    return PagePlan(page.name, page.display_name, canvas, _shots(page, canvas), page.order)
 
 
-def _shots(page: ReportPage) -> list[Shot]:
+def _shots(page: ReportPage, canvas: Size) -> list[Shot]:
     """
-    Prises d'une page : ses groupes documentés, puis ses visuels isolés.
+    Prises d'une page : la page entière, ses groupes, puis tous ses visuels.
 
-    `generators.filters.organize_page` a déjà réparti les visuels entre les
-    groupes et `ungrouped_visuals`. Sans lui — le plan est aussi calculable sur
-    un rapport tout juste lu — la page n'a que `visuals`, et c'est elle qui
-    sert.
+    Une prise par emplacement que le document réserve — il en réserve un pour
+    la page, un par groupe et un par visuel documenté, **y compris ceux d'un
+    groupe**, dont il détaille chacun sous la capture d'ensemble.
+
+    `core.selection.organize_page` a déjà réparti les visuels documentés entre
+    les groupes et `ungrouped_visuals`, et `page.visuals` les porte tous. Sans
+    lui — le plan est aussi calculable sur un rapport tout juste lu — la page
+    n'a que ses visuels bruts, et ce sont eux qui servent.
     """
-    grouped = [_group_shot(group) for group in page.groups]
-    isolated = page.ungrouped_visuals or (page.visuals if not page.groups else [])
-    return grouped + [_visual_shot(visual) for visual in isolated]
+    shots = [Shot(PAGE, PAGE_SHOT, page.display_name, Rect(0, 0, canvas.width, canvas.height))]
+    shots += [_group_shot(group) for group in page.groups]
 
-
-def _visual_shot(visual: Visual) -> Shot:
-    return Shot(VISUAL, visual.name or visual.id, visual.title, _area(visual))
+    frames = _group_frames(page)
+    seen: set[str] = set()
+    for visual in page.visuals or page.ungrouped_visuals:
+        name = visual.name or visual.id
+        if name in seen:
+            continue
+        seen.add(name)
+        frame = frames.get(visual.parent_group_name)
+        shots.append(Shot(VISUAL, name, visual.title, _placed(visual, frame)))
+    return shots
 
 
 def _group_shot(group: VisualGroup) -> Shot:
     """
-    Prise d'un groupe : l'étendue de ses visuels documentés.
+    Prise d'un groupe : son cadre déclaré, ou l'étendue de ses visuels.
 
-    Un groupe déclare son coin supérieur gauche, jamais ses dimensions. Ses
-    sous-groupes sont traversés — `filters` les rattache au groupe racine, mais
-    leurs visuels comptent dans l'étendue.
+    Le cadre déclaré vaut mieux : c'est celui que Power BI dessine, espaces
+    compris, quand l'étendue des visuels s'arrête au dernier d'entre eux. Les
+    rapports qui ne le déclarent pas — anciens, ou retouchés — gardent le
+    calcul par étendue, sous-groupes compris.
     """
-    areas = [_area(visual) for visual in _all_visuals(group)]
-    return Shot(GROUP, group.name or group.id, group.title, union(areas))
+    return Shot(GROUP, group.name or group.id, group.title, _frame(group))
+
+
+def _frame(group: VisualGroup) -> Rect:
+    """Cadre du groupe dans le canevas de la page."""
+    declared = Rect(group.pos_x, group.pos_y, group.width, group.height)
+    if not declared.is_empty:
+        return declared
+    return union([_area(visual) for visual in _all_visuals(group)])
+
+
+def _group_frames(page: ReportPage) -> dict[str, Rect]:
+    """
+    Cadre de chaque groupe de la page, par nom technique.
+
+    Sous-groupes compris : un visuel est situé par rapport au groupe qui le
+    contient directement, celui que son `parentGroupName` désigne.
+    """
+    frames: dict[str, Rect] = {}
+    for group in page.groups:
+        _collect_frames(group, frames)
+    return frames
+
+
+def _collect_frames(group: VisualGroup, frames: dict[str, Rect]) -> None:
+    frames[group.name or group.id] = _frame(group)
+    for subgroup in group.subgroups:
+        _collect_frames(subgroup, frames)
+
+
+def _placed(visual: Visual, frame: Rect | None) -> Rect:
+    """
+    Place d'un visuel dans le canevas de la page.
+
+    Un visuel de groupe porte, selon la version de Power BI qui a écrit le
+    rapport, des coordonnées de page ou des coordonnées relatives au groupe.
+    Les secondes tombent hors du cadre du groupe : c'est à cela qu'on les
+    reconnaît, et l'origine du groupe les y ramène. Sans cadre déclaré, rien ne
+    permet de trancher — on garde ce que le rapport dit.
+    """
+    area = _area(visual)
+    if frame is None or frame.is_empty or area.is_empty or _within(area, frame):
+        return area
+
+    moved = area.moved(frame.left, frame.top)
+    return moved if _within(moved, frame) else area
+
+
+def _within(area: Rect, frame: Rect) -> bool:
+    """Le rectangle tient-il dans le cadre, à l'arrondi près ?"""
+    return (
+        area.left >= frame.left - _INSIDE
+        and area.top >= frame.top - _INSIDE
+        and area.right <= frame.right + _INSIDE
+        and area.bottom <= frame.bottom + _INSIDE
+    )
 
 
 def _all_visuals(group: VisualGroup) -> list[Visual]:
