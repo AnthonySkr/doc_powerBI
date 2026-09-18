@@ -34,10 +34,12 @@ __all__ = [
     "shot_plan",
 ]
 
-# Couleurs des repères du calibrage : le canevas en rouge, les visuels en vert.
-# Deux teintes franches, absentes des habillages de Power BI.
+# Couleurs des repères du calibrage : le canevas en rouge, les visuels en vert,
+# et en bleu la zone que les marges déclarées désignent. Trois teintes
+# franches, absentes des habillages de Power BI.
 _CANVAS_MARK = (0xE8, 0x11, 0x23)
 _VISUAL_MARK = (0x10, 0x7C, 0x10)
+_DECLARED_MARK = (0x00, 0x78, 0xD4)
 
 
 @dataclass(frozen=True)
@@ -280,6 +282,7 @@ def calibrate(config: DocConfig, directory: Path, plans: list[PagePlan] | None =
     recorder.start()
     try:
         written = _calibration_images(recorder, library, page)
+        verdict = _verdict(recorder, page)
     finally:
         recorder.stop()
 
@@ -287,10 +290,8 @@ def calibrate(config: DocConfig, directory: Path, plans: list[PagePlan] | None =
     for path in written:
         console.done(str(path.relative_to(library.directory)))
     console.field("Dossier", str(written[0].parent))
-    console.note("`canevas.png` doit tenir le rapport entier, sans ruban ni volets.")
-    if page is not None:
-        console.note(f"`reperes.png` entoure les visuels de « {page.title} » — ils doivent")
-        console.note("tomber dessus. Sinon, ajustez `capture.window` du plan et relancez.")
+    for line in verdict:
+        console.note(line)
 
 
 def _calibration_images(
@@ -299,9 +300,10 @@ def _calibration_images(
     """Les trois images du calibrage, écrites dans le dossier des captures."""
     frame = recorder.window_frame()
     rendered = _rendered_canvas(recorder, page)
-    console.info(f"Fenêtre : {_box(frame)}")
-    console.info(f"Marges déclarées : {_box(recorder.viewport())}")
-    console.info(f"Canevas retenu : {_box(rendered)}")
+    console.info(f"Fenêtre : {frame.describe()}")
+    console.info(f"Zone utile : {recorder.client_frame().describe()}")
+    console.info(f"Marges déclarées : {recorder.viewport().describe()}")
+    console.info(f"Canevas retenu : {rendered.describe()}")
 
     written = [
         library.write("_calibrage", "fenetre", recorder.grab(frame.rounded())),
@@ -323,7 +325,14 @@ def _rendered_canvas(recorder: DesktopRecorder, page: PagePlan | None) -> Rect:
 def _marked_window(
     recorder: DesktopRecorder, frame: Rect, rendered: Rect, page: PagePlan | None
 ) -> bytes | None:
-    """La fenêtre, avec le canevas et les visuels entourés. Sans page, rien."""
+    """
+    La fenêtre, avec le canevas et les visuels entourés. Sans page, rien.
+
+    Trois couleurs, et la troisième compte : les visuels en vert, le canevas
+    retenu en rouge, et en bleu la zone que les marges déclarées désignent.
+    Voir les deux dernières côte à côte, c'est voir d'un coup si le cadrage
+    vient de l'image ou d'un réglage — et de combien ce réglage se trompe.
+    """
     image = recorder.image(frame) if page is not None else None
     if image is None:
         return None
@@ -338,11 +347,51 @@ def _marked_window(
         if shot.is_placed and shot.kind != capture_plan.PAGE
     ]
     drawn = canvas.outline(image, areas, _VISUAL_MARK)
-    drawn = canvas.outline(
-        canvas.Image(image.width, image.height, drawn), [local(rendered)], _CANVAS_MARK, width=3
-    )
+    for marks, color, width in (
+        ([local(recorder.viewport())], _DECLARED_MARK, 2),
+        ([local(rendered)], _CANVAS_MARK, 3),
+    ):
+        drawn = canvas.outline(canvas.Image(image.width, image.height, drawn), marks, color, width)
     return png.encode(image.width, image.height, drawn)
 
 
-def _box(area: Rect) -> str:
-    return f"{area.width:g} × {area.height:g} en ({area.left:g}, {area.top:g})"
+def _verdict(recorder: DesktopRecorder, page: PagePlan | None) -> list[str]:
+    """
+    Ce qu'il faut retenir du calibrage, en quelques lignes.
+
+    D'où vient le cadrage — de l'image ou des marges déclarées —, ce qu'il
+    reste à vérifier à l'œil, et, si les marges ne servaient qu'à retomber
+    dessus, celles qui conviendraient à cet écran-ci.
+    """
+    lines = ["`canevas.png` doit tenir le rapport entier, sans ruban ni volets."]
+    if page is None:
+        lines.append("Aucune page au plan : le canevas n'a pas été cherché, et le cadrage")
+        lines.append("montré est celui des marges déclarées. Reprenez le calibrage sur un")
+        lines.append("rapport dont au moins une page est documentée.")
+        return lines
+
+    lines.append(f"`reperes.png` entoure les visuels de « {page.title} » — ils doivent")
+    lines.append("tomber dessus. Le cadre rouge est le canevas retenu, le bleu ce que")
+    lines.append("`capture.window` désigne, et le vert chaque visuel à capturer.")
+
+    measured = recorder.measured_canvas(page.canvas)
+    if measured is None:
+        lines.append("Canevas non reconnu dans l'image : le cadrage vient des marges")
+        lines.append("déclarées, à régler dans `capture.window` du plan jusqu'à ce que le")
+        lines.append("cadre bleu tienne le rapport entier.")
+        return lines
+
+    lines.append("Canevas reconnu dans l'image : les marges déclarées ne servent plus.")
+    lines.append("Pour qu'elles retombent dessus si la reconnaissance échouait un jour :")
+    lines.append(_suggested_insets(recorder.client_frame(), measured))
+    return lines
+
+
+def _suggested_insets(client: Rect, measured: Rect) -> str:
+    """Les marges qui, sur cet écran, désignent exactement le canevas mesuré."""
+    return (
+        f"inset_left: {round(measured.left - client.left)}, "
+        f"inset_top: {round(measured.top - client.top)}, "
+        f"inset_right: {round(client.right - measured.right)}, "
+        f"inset_bottom: {round(client.bottom - measured.bottom)}"
+    )

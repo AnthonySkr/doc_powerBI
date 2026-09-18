@@ -87,6 +87,10 @@ class Rect:
     def moved(self, dx: float, dy: float) -> Rect:
         return Rect(self.left + dx, self.top + dy, self.width, self.height)
 
+    def describe(self) -> str:
+        """Comment un rectangle s'écrit dans un message : « 1364 × 804 en (256, 177) »."""
+        return f"{self.width:g} × {self.height:g} en ({self.left:g}, {self.top:g})"
+
     def rounded(self) -> Rect:
         """
         Rectangle ramené à des pixels entiers, sans jamais rétrécir.

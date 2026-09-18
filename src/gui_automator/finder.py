@@ -34,6 +34,7 @@ __all__ = [
     "WindowInfo",
     "choose",
     "claim_real_pixels",
+    "client_box",
     "locate",
     "maximize",
     "mentions",
@@ -218,6 +219,38 @@ def maximize(handle: int) -> None:
         api.user32.ShowWindow(handle, _SW_MAXIMIZE)
 
 
+def client_box(handle: int) -> tuple[int, int, int, int] | None:
+    """
+    Zone utile de la fenêtre, en coordonnées d'écran : `(x, y, largeur, hauteur)`.
+
+    Une fenêtre agrandie déborde de l'écran de l'épaisseur de sa poignée de
+    redimensionnement — une petite dizaine de pixels de chaque côté, invisibles
+    parce que hors écran. `GetWindowRect` les compte ; la capture d'écran, elle,
+    n'en ramène que du noir. Tout ce qui se mesure depuis le bord de la fenêtre
+    s'en trouve décalé d'autant : les marges déclarées, et la recherche du
+    canevas dans l'image.
+
+    D'où cette zone-ci, celle que la fenêtre dessine réellement. `None` hors de
+    Windows, ou si la fenêtre ne répond pas — l'appelant reprend alors le cadre
+    entier, comme avant.
+    """
+    api = _api()
+    if api is None:
+        return None
+
+    box = api.wintypes.RECT()
+    origin = api.wintypes.POINT(0, 0)
+    if not api.user32.GetClientRect(handle, ctypes.byref(box)):
+        return None
+    if not api.user32.ClientToScreen(handle, ctypes.byref(origin)):
+        return None
+
+    width, height = box.right - box.left, box.bottom - box.top
+    if width <= 0 or height <= 0:
+        return None
+    return (origin.x, origin.y, width, height)
+
+
 def claim_real_pixels() -> str:
     """
     Demande à Windows des coordonnées en vrais pixels, et dit ce qu'il a fallu.
@@ -368,6 +401,10 @@ def _declare(user32, kernel32, wintypes, enumproc) -> None:
     user32.GetWindowTextW.restype = ctypes.c_int
     user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
     user32.GetWindowRect.restype = wintypes.BOOL
+    user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+    user32.GetClientRect.restype = wintypes.BOOL
+    user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+    user32.ClientToScreen.restype = wintypes.BOOL
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
