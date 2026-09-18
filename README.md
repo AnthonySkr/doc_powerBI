@@ -684,18 +684,35 @@ une seule capture sans redérouler le rapport.
 
 Tout le cadrage découle d'un seul rectangle : celui où Power BI dessine le
 canevas à l'écran. Il est **cherché dans l'image**, pas déduit de mesures
-déclarées — Power BI dessine le canevas sur un fond uni, et le canevas est le
-rectangle de ce qui n'est pas ce fond (voir `src/gui_automator/canvas.py`).
+déclarées, et par deux chemins (voir `src/gui_automator/canvas.py`) :
 
-Le rectangle trouvé n'est retenu que s'il a les proportions que la page
-déclare (1280 × 720, ou ce qu'elle dit). Sinon le script ne devine pas : il
-revient aux marges déclarées et le signale. Ce contrôle attrape du même coup
-le rapport qui n'est pas en « Ajuster à la page », ou dont on a zoomé — deux
-états où **aucun** calcul de cadrage ne peut être juste.
+| Chemin | Ce qu'il regarde | Quand il sert |
+| --- | --- | --- |
+| le pourtour | le canevas est ce qui n'est pas de la couleur du fond | habillage distinct des pages |
+| la bordure | les quatre côtés du pointillé dont Power BI entoure le canevas | habillage de la couleur des pages |
 
-Les marges de `capture.window` ne servent plus qu'à délimiter la recherche :
-elles doivent contenir le canevas entier, bordé de fond sur ses quatre côtés.
-Être large suffit ; être exact n'est plus nécessaire.
+Le second existe parce que le premier ne voit rien d'un rapport dont
+l'habillage (*wallpaper*) est de la couleur de ses pages : page et fond se
+confondent, il n'y a plus de pourtour du tout. Le pointillé, lui, est toujours
+là. Il est cherché pixel par pixel : il alterne deux points pleins et deux
+vides, et un balayage plus rapide le voyait ou non selon l'endroit où la
+fenêtre commençait.
+
+Le rectangle trouvé n'est retenu, d'un chemin comme de l'autre, que s'il a les
+proportions que la page déclare (1280 × 720, ou ce qu'elle dit). Sinon le
+script ne devine pas : il revient aux marges déclarées et le signale. Ce
+contrôle attrape du même coup le rapport qui n'est pas en « Ajuster à la
+page », ou dont on a zoomé — deux états où **aucun** calcul de cadrage ne peut
+être juste.
+
+La recherche porte sur deux zones, de la plus étroite à la plus large : ce que
+les marges de `capture.window` retiennent, puis la zone utile de la fenêtre
+entière, ruban et volets compris. La seconde est ce qui rattrape des marges
+trop larges — elles coupaient le canevas, la reconnaissance n'y trouvait plus
+les proportions annoncées, et le cadrage retombait sur ces mêmes marges
+fausses. Ces marges ne servent donc plus que de **dernier recours**, quand le
+canevas n'a pas été reconnu du tout ; `--calibrate` dit celles qui
+conviennent à l'écran qu'il voit.
 
 ```yaml
 capture:
@@ -703,10 +720,15 @@ capture:
   window:
     maximize: true       # agrandir la fenêtre : cadrage reproductible, image nette
     detect_canvas: true  # chercher le canevas dans l'image (recommandé)
-    inset_top: 130       # ruban
-    inset_right: 340     # volets Visualisations et Filtres
-    inset_bottom: 60     # barre des onglets de page
+    inset_top: 130       # ruban            ─┐ cadrage de secours, si le canevas
+    inset_right: 340     # volets            │ n'a pas été reconnu : `--calibrate`
+    inset_bottom: 60     # barre des onglets ─┘ donne les valeurs de votre écran
 ```
+
+Ces marges se comptent depuis la zone utile de la fenêtre, et non depuis son
+cadre : une fenêtre agrandie déborde de l'écran de l'épaisseur de sa poignée
+de redimensionnement, une dizaine de pixels dont la capture d'écran ne ramène
+que du noir.
 
 ### Régler le cadrage
 
@@ -719,9 +741,21 @@ capture:
 | `reperes.png` | la même fenêtre, **canevas et visuels entourés** |
 
 `reperes.png` est celle qui répond à « pourquoi mes captures sont mal
-cadrées » : les rectangles verts doivent tomber sur les visuels, le rouge sur
-le canevas. S'ils sont décalés, l'image dit de combien et dans quel sens. Les
-repères sont ceux de la première page du plan — affichez-la dans Power BI
+cadrées ». Trois couleurs :
+
+| Repère | Ce qu'il entoure |
+| --- | --- |
+| vert | chaque visuel, tel qu'il sera capturé |
+| rouge | le canevas retenu — celui dont tout le cadrage découle |
+| bleu | la zone que les marges déclarées désignent |
+
+Les rectangles verts doivent tomber sur les visuels, le rouge sur le canevas.
+Voir le bleu à côté du rouge dit d'où vient le cadrage : confondus, il vient
+des marges ; distincts, il vient de l'image — et le bleu ne sert alors à rien.
+La console, elle, donne les marges qui tomberaient sur le canevas mesuré, à
+reporter dans le plan pour que le secours soit juste lui aussi.
+
+Les repères sont ceux de la première page du plan — affichez-la dans Power BI
 avant de lancer le calibrage.
 
 ### Changer de page

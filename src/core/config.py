@@ -183,20 +183,23 @@ DEFAULTS: dict[str, Any] = {
     # leur place sinon.
     "capture": {
         "directory": DEFAULT_CAPTURES_DIR,
-        # Fenêtre de Power BI Desktop, et où y chercher le canevas. Les marges
-        # ne servent plus qu'à délimiter la recherche : le canevas est reconnu
-        # dans l'image (`detect_canvas`), et elles ne reprennent la main que si
-        # elle échoue. `--calibrate` montre ce que le script voit.
+        # Fenêtre de Power BI Desktop, et cadrage du canevas. Le canevas est
+        # reconnu dans l'image (`detect_canvas`), cherché sur toute la zone
+        # utile de la fenêtre : les marges ci-dessous ne sont qu'un cadrage de
+        # secours, pour le cas où il ne s'y reconnaîtrait pas.
+        # `--calibrate` montre ce que le script voit, et dit les marges qui
+        # conviennent à l'écran qu'il a sous les yeux.
         "window": {
             # La fenêtre se reconnaît à son processus (PBIDesktop.exe), pas à
             # son titre : selon la version, celui-ci ne porte que le nom du
             # rapport. Ce fragment ne sert donc qu'à désigner un rapport parmi
             # plusieurs ouverts en même temps ; vide, le premier trouvé.
             "title": "",
-            # Zone où chercher le canevas : la fenêtre, moins le ruban, les
-            # volets de droite et la barre d'onglets. Elle doit contenir le
-            # canevas entier, bordé de fond sur ses quatre côtés — être large
-            # suffit, être exact n'est plus nécessaire.
+            # Cadrage de secours : la zone utile de la fenêtre, moins le
+            # ruban, les volets de droite et la barre d'onglets. Le canevas y
+            # est alors supposé ajusté et centré, comme avant que la
+            # reconnaissance existe — d'où l'intérêt de les régler juste, avec
+            # les valeurs que `--calibrate` affiche.
             "inset_left": 0,
             "inset_top": 130,
             "inset_right": 340,

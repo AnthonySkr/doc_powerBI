@@ -35,11 +35,16 @@ chargement de durée inconnue, parfois une demande d'identifiants — autant de
 choses qui échouent silencieusement. Laisser l'utilisateur ouvrir son rapport
 comme il en a l'habitude est plus sûr, et rend la mise au point possible.
 
-Le cadrage du canevas dans la fenêtre est **déclaré**, pas deviné : le ruban,
+Le cadrage du canevas dans la fenêtre est **mesuré**, pas déclaré : le ruban,
 les volets de droite et la barre d'onglets ont des tailles qui dépendent de la
-version et de l'écran. Ils se règlent dans `capture.window` du plan, et se
-vérifient avec `python -m gui_automator --calibrate`, qui écrit ce qu'il croit
-être le canevas pour qu'on le regarde.
+version, de l'écran et de ce qui est replié — les régler à la main revenait à
+les régler faux. Le canevas se cherche donc dans l'image (voir `canvas`), sur
+toute la zone utile de la fenêtre, et les marges de `capture.window` ne
+reprennent la main que si la recherche échoue.
+
+Ce que le script voit s'écrit sur le disque : `python main.py <rapport>
+--calibrate` en fait trois images, dont une où le canevas et chaque visuel
+sont entourés. Un cadrage faux s'y voit, et se voit *où*.
 """
 
 import hashlib
@@ -80,8 +85,14 @@ class Insets:
     Ce qui entoure le canevas dans la fenêtre, en pixels.
 
     Le ruban en haut, les volets Visualisations et Filtres à droite, la barre
-    des onglets de page en bas. Ces tailles dépendent de la version de Power BI
-    et de la résolution : elles se règlent plutôt qu'elles ne se devinent.
+    des onglets de page en bas. Ces tailles dépendent de la version de Power BI,
+    de la résolution et des volets qu'on a repliés : ces marges-ci ne servent
+    donc qu'en dernier recours, quand le canevas n'a pas été reconnu dans
+    l'image. `--calibrate` dit celles qui conviennent à l'écran qu'il voit.
+
+    Elles se comptent depuis la zone utile de la fenêtre — ce qu'elle dessine
+    vraiment —, et non depuis son cadre, dont une partie est hors écran quand
+    elle est agrandie (voir `finder.client_box`).
     """
 
     left: int = 0
@@ -140,7 +151,11 @@ class DesktopRecorder:
     def __init__(self, options: DesktopOptions | None = None):
         self.options = options or DesktopOptions()
         self._window = None
+        self._handle = 0
         self._screen = None
+        # Canevas reconnu, par dimensions de page et zone cherchée : la
+        # reconnaissance coûte une seconde, et rien ne bouge entre deux pages.
+        self._canvas_areas: dict[tuple[Size, Rect], Rect | None] = {}
         # Rang de la page affichée, quand on le sait : c'est lui qui donne le
         # nombre de pas à faire pour atteindre la suivante.
         self._order: int | None = None
@@ -166,6 +181,8 @@ class DesktopRecorder:
         console.done(f"fenêtre trouvée : {found.describe()}")
 
         self._window = _attach(pywinauto, found)
+        self._handle = found.handle
+        self._canvas_areas.clear()
         _bring_to_front(self._window, found)
         if self.options.maximize:
             finder.maximize(found.handle)
@@ -180,6 +197,7 @@ class DesktopRecorder:
             self._screen.close()
             self._screen = None
         self._window = None
+        self._handle = 0
 
     # ── Capture ───────────────────────────────────────────────────
     def show_page(self, page: PagePlan) -> Rect:
@@ -203,22 +221,88 @@ class DesktopRecorder:
         Cherchée dans l'image (voir `canvas`), et à défaut déduite des marges
         déclarées — auquel cas `geometry.fit` y placera le canevas comme avant,
         en le supposant ajusté et centré.
-        """
-        viewport = self.viewport()
-        if not self.options.detect_canvas or size.is_empty or viewport.is_empty:
-            return viewport
 
-        image = self._pixels(viewport)
-        found = canvas.detect(image, size.width / size.height) if image is not None else None
-        if found is None:
-            self._say_undetected()
-            return viewport
-        return found.moved(viewport.left, viewport.top)
+        Le résultat est gardé : le canevas ne se déplace pas d'une page à
+        l'autre, et la reconnaissance coûte une seconde. Il est repris dès que
+        la fenêtre bouge ou que la page change de dimensions.
+        """
+        measured = self.measured_canvas(size)
+        return self.viewport() if measured is None else measured
+
+    def measured_canvas(self, size: Size) -> Rect | None:
+        """
+        Le canevas tel qu'il a été reconnu dans l'image, ou `None` faute de mieux.
+
+        `canvas_area` retombe alors sur les marges déclarées, et les deux cas y
+        sont indiscernables. Le calibrage, lui, a besoin de les distinguer :
+        c'est toute la différence entre un cadrage mesuré et un cadrage réglé
+        à la main.
+        """
+        if not self.options.detect_canvas or size.is_empty:
+            return None
+
+        key = (size, self.client_frame())
+        if key not in self._canvas_areas:
+            self._canvas_areas[key] = self._find_canvas(size)
+        return self._canvas_areas[key]
+
+    def _find_canvas(self, size: Size) -> Rect | None:
+        """Cherche le canevas dans l'image, et dit ce qu'il en est."""
+        ratio = size.width / size.height
+        for search in self.search_areas():
+            found = self._canvas_in(search, ratio)
+            if found is not None:
+                console.detail(f"Canevas reconnu dans l'image : {found.describe()}")
+                return found
+
+        self._say_undetected()
+        return None
+
+    def _canvas_in(self, search: Rect, ratio: float) -> Rect | None:
+        """Le canevas dans une zone de l'écran, ramené aux coordonnées de l'écran."""
+        image = None if search.is_empty else self._pixels(search)
+        found = canvas.detect(image, ratio) if image is not None else None
+        return None if found is None else found.moved(search.left, search.top)
+
+    def search_areas(self) -> list[Rect]:
+        """
+        Zones où chercher le canevas, de la plus étroite à la plus large.
+
+        D'abord ce que les marges déclarées retiennent : là, si elles sont
+        justes, le canevas se détache franchement de son pourtour — c'est le
+        cas le plus facile, et le plus ancien.
+
+        Puis la zone utile entière, ruban et volets compris. C'est elle qui
+        rattrape des marges trop larges : elles coupaient le canevas, la
+        reconnaissance n'y trouvait plus les proportions annoncées, et le
+        cadrage retombait sur ces mêmes marges fausses. Chercher large ne
+        coûte rien de plus qu'une seconde, puisque le canevas se reconnaît à
+        ses proportions et à sa bordure, pas à ce qui l'entoure.
+        """
+        client, declared = self.client_frame(), self.viewport()
+        return [declared, client] if declared != client and not declared.is_empty else [client]
 
     def viewport(self) -> Rect:
-        """Zone de la fenêtre où chercher le canevas, marges déclarées déduites."""
+        """
+        Cadrage de dernier recours : la zone utile, marges déclarées déduites.
+
+        N'entre en jeu que si le canevas n'a pas été reconnu dans l'image
+        (`detect_canvas`). `geometry.fit` y place alors le canevas en le
+        supposant ajusté et centré, comme avant que la détection existe.
+        """
         insets = self.options.insets
-        return self.window_frame().inset(insets.left, insets.top, insets.right, insets.bottom)
+        return self.client_frame().inset(insets.left, insets.top, insets.right, insets.bottom)
+
+    def client_frame(self) -> Rect:
+        """
+        Fenêtre sans son cadre invisible — ce qu'elle dessine vraiment.
+
+        Voir `finder.client_box` : une fenêtre agrandie déborde de l'écran de
+        l'épaisseur de sa poignée de redimensionnement, et ces pixels-là ne
+        ramènent que du noir. Hors de Windows, le cadre entier fait l'affaire.
+        """
+        box = finder.client_box(self._handle) if self._handle else None
+        return Rect(*box) if box is not None else self.window_frame()
 
     def window_frame(self) -> Rect:
         """Fenêtre entière — ce que `--calibrate` capture pour comparaison."""
@@ -355,12 +439,21 @@ class DesktopRecorder:
     # ── Ce qui est à l'écran ──────────────────────────────────────
     def _fingerprint(self) -> bytes:
         """
-        Empreinte de ce qui est affiché dans la zone du canevas.
+        Empreinte de ce qui est affiché au milieu de la fenêtre.
 
         C'est la seule façon de savoir qu'un changement de page a eu lieu :
         Power BI n'en dit rien, ni dans son titre, ni à l'automatisation.
+
+        Au milieu, parce que c'est la seule zone dont on sache deux choses à
+        la fois : le canevas la couvre — il occupe le centre de la fenêtre,
+        quels que soient les volets ouverts —, et le reste de l'habillage n'y
+        est pas. Prendre la fenêtre entière ferait passer une simple prise de
+        focus, qui ravive la barre de titre, pour un changement de page ; s'en
+        remettre aux marges déclarées ferait comparer un bout de ruban
+        immobile si elles sont mal réglées, et conclure que la page n'a pas
+        tourné alors qu'elle l'a fait.
         """
-        image = self._pixels(self.viewport())
+        image = self._pixels(_middle(self.client_frame()))
         return hashlib.sha256(image.rgb).digest() if image is not None else b""
 
     def _moved(self, before: bytes) -> bool:
@@ -400,6 +493,8 @@ class DesktopRecorder:
 
         self._said_undetected = True
         console.warn("Canevas non reconnu dans l'image — cadrage déduit des marges déclarées.")
+        console.note("Les captures seront cadrées d'après `capture.window` du plan, qui")
+        console.note("n'est juste que s'il a été réglé pour cette version et cet écran.")
         console.note("`--calibrate` écrit ce que le script voit : le repère y saute aux yeux.")
 
     def _require_window(self):
@@ -446,6 +541,12 @@ def _ask_for_page(page: PagePlan) -> None:
     console.question(f"Affichez la page « {page.title} » dans Power BI Desktop")
     console.note("Puis revenez ici et validez pour lancer la capture.")
     console.ask("Entrée quand la page est à l'écran")
+
+
+def _middle(area: Rect) -> Rect:
+    """La moitié centrale d'une zone, dans les deux sens."""
+    margin_x, margin_y = area.width / 4, area.height / 4
+    return area.inset(margin_x, margin_y, margin_x, margin_y).rounded()
 
 
 def _settle(seconds: float) -> None:

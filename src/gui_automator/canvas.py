@@ -19,23 +19,31 @@ côté. C'est exactement ce que l'on observait.
 
 Ce que fait ce module
 ─────────────────────
-Il regarde l'image plutôt que de faire confiance aux marges. Power BI dessine
-le canevas sur un fond uni qui l'entoure de toutes parts : le canevas est donc
-le rectangle des pixels qui **ne sont pas** de la couleur du fond.
+Il regarde l'image plutôt que de faire confiance aux marges, et par deux
+chemins — parce qu'aucun des deux ne vaut partout :
 
-    fond        la couleur des quatre coins de l'image, si elles s'accordent
-    canevas     l'étendue de ce qui n'est pas de cette couleur
+    le pourtour   Power BI pose le canevas sur un fond uni qui l'entoure de
+                  toutes parts. Le canevas est alors le rectangle des pixels
+                  qui **ne sont pas** de la couleur de ce fond.
 
-Le résultat n'est retenu que s'il a les proportions que le rapport déclare
-(1280 × 720, ou ce que la page dit). Sinon, on ne devine pas : on rend la main
-aux marges déclarées, en le disant. Ce contrôle est ce qui distingue une
-détection d'un pari — et il attrape du même coup le rapport qui n'est pas
-ajusté à la page, puisque le canevas y déborde de sa zone.
+    la bordure    un rapport dont l'habillage est de la couleur de ses pages
+                  n'a plus de pourtour : page et fond se confondent, et le
+                  premier chemin ne voit plus rien. Reste le trait pointillé
+                  dont Power BI Desktop entoure le canevas, qui se cherche
+                  comme un rectangle de traits dans l'image.
+
+Le résultat n'est retenu, d'un chemin comme de l'autre, que s'il a les
+proportions que le rapport déclare (1280 × 720, ou ce que la page dit). Sinon,
+on ne devine pas : on rend la main aux marges déclarées, en le disant. Ce
+contrôle est ce qui distingue une détection d'un pari — et il attrape du même
+coup le rapport qui n'est pas ajusté à la page, puisque le canevas y déborde
+de sa zone.
 
 Tout ici est du calcul sur des pixels, sans écran ni Power BI : une image de
 test se fabrique en quelques octets, et c'est ce que font les tests.
 """
 
+from array import array
 from dataclasses import dataclass
 
 from src.gui_automator.geometry import Rect
@@ -63,6 +71,38 @@ AGREEING_CORNERS = 3
 # Pas du balayage grossier. Les bords sont ensuite repris pixel par pixel :
 # ce pas ne décide que du temps passé, jamais de la précision.
 STEP = 4
+
+# ── Ce qui fait un trait de bordure ───────────────────────────
+# Les seuils du second chemin. Ils portent tous sur la somme des trois canaux
+# d'un pixel, et se lisent dans l'ordre où le module les emploie.
+
+# Écart à partir duquel un pixel tranche sur son voisinage. Le trait du
+# canevas (#605E5C) s'écarte de plus de 450 d'une page blanche : le seuil est
+# bas exprès, pour attraper aussi les habillages sombres, où c'est le trait
+# qui est le plus clair des deux.
+LINE_CONTRAST = 120
+
+# Distance à laquelle ce voisinage est lu, de part et d'autre du trait. Plus
+# grande que l'épaisseur du trait — deux pixels —, assez petite pour que ce
+# qu'on y lise soit encore la page, et non ce qui est posé dessus.
+LINE_MARGIN = 4
+
+# Part de sa propre longueur qu'un trait doit marquer pour compter comme
+# bordure. La bordure est en pointillé : elle en marque la moitié. Une ligne
+# de texte, elle, n'en marque qu'un dixième.
+LINE_DENSITY = 0.2
+
+# Écart maximal entre deux marques d'un même trait, en pixels. Au-delà, ce
+# sont deux traits : c'est ce qui évite d'étirer une bordure jusqu'à un mot
+# posé plus loin sur la même ligne.
+LINE_GAP = 24
+
+# Part d'un côté du rectangle que le trait qui le borde doit longer. Deux
+# cinquièmes : un visuel posé contre le bord du canevas recouvre la bordure
+# sur près de la moitié de sa longueur, et il en reste encore assez pour la
+# suivre — c'est ce qu'on observe sur un rapport dont un tableau touche le
+# bas de la page.
+LINE_COVERAGE = 0.4
 
 
 @dataclass(frozen=True)
@@ -97,20 +137,18 @@ def detect(image: Image, ratio: float, tolerance: float = RATIO_TOLERANCE) -> Re
     `ratio` est le rapport largeur/hauteur que le rapport déclare pour la page.
     Les coordonnées retournées sont celles de l'image : c'est à l'appelant de
     les ramener à l'écran, en y ajoutant l'origine de ce qu'il a photographié.
+
+    Le pourtour d'abord — il est le moins cher et le plus sûr là où il
+    s'applique —, puis la bordure de page, pour les rapports dont l'habillage
+    se confond avec les pages.
     """
     if image.is_empty or ratio <= 0:
         return None
 
-    background = _background(image)
-    if background is None:
-        return None
-
-    found = _content_box(image, background)
-    if found is None:
-        return None
-
-    found = _refine(image, background, found)
-    return found if _plausible(found, image, ratio, tolerance) else None
+    surrounded = _surrounded_box(image)
+    if surrounded is not None and _plausible(surrounded, image, ratio, tolerance):
+        return surrounded
+    return _bordered_box(image, ratio, tolerance)
 
 
 def outline(image: Image, areas: list[Rect], color: tuple[int, int, int], width: int = 2) -> bytes:
@@ -127,8 +165,20 @@ def outline(image: Image, areas: list[Rect], color: tuple[int, int, int], width:
 
 
 # ─────────────────────────────────────────────────────────────
-#  Trouver
+#  Trouver — par le pourtour
 # ─────────────────────────────────────────────────────────────
+
+
+def _surrounded_box(image: Image) -> Rect | None:
+    """Le canevas comme étendue de ce qui n'est pas de la couleur du fond."""
+    background = _background(image)
+    if background is None:
+        return None
+
+    found = _content_box(image, background)
+    if found is None:
+        return None
+    return _refine(image, background, found)
 
 
 def _background(image: Image) -> tuple[int, int, int] | None:
@@ -213,6 +263,213 @@ def _edge(line: _Line, background: tuple[int, int, int], start: int, step: int) 
         last = position
         position += step
     return last
+
+
+# ─────────────────────────────────────────────────────────────
+#  Trouver — par la bordure de page
+# ─────────────────────────────────────────────────────────────
+
+
+@dataclass(frozen=True)
+class _Band:
+    """
+    Un trait de l'image, repéré comme bordure possible.
+
+    `first` et `last` sont ses coordonnées perpendiculaires : un trait a deux
+    pixels d'épaisseur, parfois plus s'il est lissé. `start` et `end` sont son
+    étendue — d'où il part et où il s'arrête, le long de lui-même.
+    """
+
+    first: int
+    last: int
+    start: int
+    end: int
+
+    def joined(self, other: _Band) -> _Band:
+        """Les deux traits n'en font qu'un : même bordure, lissée sur deux rangs."""
+        return _Band(
+            min(self.first, other.first),
+            max(self.last, other.last),
+            min(self.start, other.start),
+            max(self.end, other.end),
+        )
+
+    def follows(self, start: float, end: float) -> bool:
+        """
+        Le trait longe-t-il ce côté du rectangle, de bout en bout ou presque ?
+
+        C'est ce qui sépare un côté de canevas d'un trait qui passait par là :
+        la bordure du haut longe toute la largeur du canevas, la ligne d'un
+        tableau ne longe que la sienne.
+        """
+        overlap = min(self.end, end) - max(self.start, start) + 1
+        return overlap >= (end - start + 1) * LINE_COVERAGE
+
+
+def _bordered_box(image: Image, ratio: float, tolerance: float) -> Rect | None:
+    """
+    Le canevas comme rectangle de traits, à défaut de pourtour.
+
+    Quatre traits — deux horizontaux, deux verticaux — dont chacun longe le
+    côté qu'il borde : c'est cela, un rectangle, et c'est ce que l'on cherche.
+    Un trait isolé ne dit rien ; quatre traits qui se recoupent ne se
+    rencontrent pas par hasard.
+
+    Entre plusieurs rectangles plausibles, le plus grand : le canevas porte
+    les autres, il ne tient dans aucun.
+    """
+    levels = _Levels(image)
+    rows = _bands(levels, horizontal=True)
+    columns = _bands(levels, horizontal=False)
+    boxes = [box for box in _rectangles(rows, columns) if _plausible(box, image, ratio, tolerance)]
+    return max(boxes, key=lambda box: box.width * box.height, default=None)
+
+
+def _rectangles(rows: list[_Band], columns: list[_Band]) -> list[Rect]:
+    """
+    Rectangles dont les quatre côtés sont des traits qui se recoupent.
+
+    Toutes les combinaisons sont éprouvées : une fenêtre porte une poignée de
+    traits par sens, et les compter toutes coûte moins que de les trier.
+    """
+    boxes = []
+    for top, bottom in _pairs(rows):
+        for left, right in _pairs(columns):
+            box = Rect(
+                left.first,
+                top.first,
+                right.last - left.first + 1,
+                bottom.last - top.first + 1,
+            )
+            if _bordered(box, top, bottom, left, right):
+                boxes.append(box)
+    return boxes
+
+
+def _bordered(box: Rect, top: _Band, bottom: _Band, left: _Band, right: _Band) -> bool:
+    """Les quatre traits longent-ils bien les quatre côtés du rectangle ?"""
+    return (
+        top.follows(box.left, box.right)
+        and bottom.follows(box.left, box.right)
+        and left.follows(box.top, box.bottom)
+        and right.follows(box.top, box.bottom)
+    )
+
+
+def _pairs(bands: list[_Band]) -> list[tuple[_Band, _Band]]:
+    """Les traits deux à deux, dans l'ordre où ils traversent l'image."""
+    return [(first, second) for index, first in enumerate(bands) for second in bands[index + 1 :]]
+
+
+class _Levels:
+    """
+    Niveau de chaque pixel de l'image : la somme de ses trois canaux.
+
+    Le balayage des traits lit chaque pixel et ses deux voisins, dans les deux
+    sens — une dizaine de millions de lectures pour une fenêtre ordinaire. Les
+    niveaux sont donc calculés une fois, dans un tableau d'entiers courts (deux
+    octets par pixel, la moitié de l'image), dont une ligne comme une colonne
+    s'extraient d'une seule opération.
+
+    Une somme plutôt qu'une luminance pondérée : un trait gris tranche autant
+    sur l'une que sur l'autre, et celle-ci est de l'arithmétique entière.
+    """
+
+    def __init__(self, image: Image):
+        self.width = image.width
+        self.height = image.height
+        self.values = array("h")
+        stride = self.width * 3
+        for y in range(self.height):
+            row = image.rgb[y * stride : (y + 1) * stride]
+            self.values.extend(row[i] + row[i + 1] + row[i + 2] for i in range(0, stride, 3))
+
+    def line(self, position: int, horizontal: bool) -> array:
+        """Une ligne ou une colonne entière de niveaux, extraite d'un coup."""
+        if horizontal:
+            return self.values[position * self.width : (position + 1) * self.width]
+        return self.values[position :: self.width]
+
+
+def _bands(levels: _Levels, horizontal: bool) -> list[_Band]:
+    """
+    Traits de l'image dans un sens, les rangs voisins réunis.
+
+    Chaque rang est éprouvé, et chaque pixel du rang avec lui. Rien n'est
+    échantillonné ici : le pointillé de Power BI alterne deux pixels pleins et
+    deux vides, et un balayage d'un pas de quatre tombait, selon l'endroit où
+    la fenêtre commence, tantôt sur les pleins, tantôt sur les vides — la même
+    bordure se voyait ou disparaissait selon le cadrage.
+    """
+    count = levels.height if horizontal else levels.width
+    found: list[_Band] = []
+    for position in range(LINE_MARGIN, count - LINE_MARGIN):
+        band = _band(levels, position, horizontal)
+        if band is None:
+            continue
+        if found and band.first - found[-1].last <= 1:
+            found[-1] = found[-1].joined(band)
+        else:
+            found.append(band)
+    return found
+
+
+def _band(levels: _Levels, position: int, horizontal: bool) -> _Band | None:
+    """
+    Le trait porté par cette ligne, s'il y en a un.
+
+    Les marques de la ligne — les pixels qui tranchent sur leur voisinage — se
+    groupent en suites ; la plus longue est le trait. Ce qui reste est ailleurs
+    sur la ligne : un mot, la bordure d'un visuel, et cela ne rallonge pas le
+    trait.
+    """
+    here = levels.line(position, horizontal)
+    before = levels.line(position - LINE_MARGIN, horizontal)
+    after = levels.line(position + LINE_MARGIN, horizontal)
+    marks = [
+        index for index, level in enumerate(here) if _stands_out(level, before[index], after[index])
+    ]
+
+    run = _longest_run(marks)
+    if not run:
+        return None
+
+    start, end = run[0], run[-1]
+    length = end - start + 1
+    if length < len(here) * MIN_SHARE or len(run) < length * LINE_DENSITY:
+        return None
+    return _Band(position, position, start, end)
+
+
+def _stands_out(level: int, before: int, after: int) -> bool:
+    """
+    Le pixel tranche-t-il sur ses deux voisins, et du même côté ?
+
+    Du même côté, parce qu'un trait est plus sombre que la page **de part et
+    d'autre** — ou plus clair, sur un habillage sombre. Un pixel pris entre un
+    voisin clair et un voisin sombre est au milieu d'un dégradé, et non sur un
+    trait : c'est ce qui écarte les ombres et les bords adoucis.
+    """
+    low, high = level - before, level - after
+    return min(abs(low), abs(high)) >= LINE_CONTRAST and (low > 0) == (high > 0)
+
+
+def _longest_run(marks: list[int]) -> list[int]:
+    """La plus longue suite de marques dont aucune n'est isolée des autres."""
+    best: list[int] = []
+    start = 0
+    for index in range(1, len(marks) + 1):
+        if index < len(marks) and marks[index] - marks[index - 1] <= LINE_GAP:
+            continue
+        if index - start > len(best):
+            best = marks[start:index]
+        start = index
+    return best
+
+
+# ─────────────────────────────────────────────────────────────
+#  Retenir, ou non
+# ─────────────────────────────────────────────────────────────
 
 
 def _plausible(found: Rect, image: Image, ratio: float, tolerance: float) -> bool:
