@@ -54,6 +54,15 @@ class Recorder(Protocol):
         """Capture une région de l'écran et la retourne en PNG."""
         ...
 
+    def measure(self, page: PagePlan) -> Rect:
+        """
+        Où le canevas de la page affichée est rendu **maintenant**, sans en changer.
+
+        Un signet peut ouvrir ou replier le volet Filtres : le canevas se
+        redimensionne, et tout cadrage calculé avant tombe à côté.
+        """
+        ...
+
     def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:
         """
         Applique un signet de la page affichée, et dit s'il l'a été.

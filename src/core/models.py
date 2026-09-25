@@ -288,6 +288,9 @@ class BookmarkControl:
     group: str = ""  # navigateur : groupe de signets affiché, vide pour tous
     orientation: str = ""  # navigateur : 0 horizontal, 1 vertical, 2 grille
     bookmark: str = ""  # bouton : le signet qu'il applique
+    # Navigateur : le signet sélectionné à l'enregistrement du rapport, celui
+    # dont l'affichage est donc à l'écran à l'ouverture de la page.
+    selected: str = ""
 
     @property
     def is_navigator(self) -> bool:
@@ -312,6 +315,9 @@ class PageView:
     hidden: set[str] = field(default_factory=set)
     touched: set[str] = field(default_factory=set)
     trigger: tuple[float, float, float, float] | None = None  # x, y, largeur, hauteur
+    # Signet sélectionné, à l'ouverture, sur le navigateur qui mène à celui-ci
+    # — vide pour un bouton, ou pour le signet sélectionné lui-même.
+    selected: str = ""
 
 
 @dataclass
