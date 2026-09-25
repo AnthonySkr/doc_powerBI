@@ -348,6 +348,9 @@ class DesktopRecorder:
         if not self._ctrl_click(_middle_point(trigger)):
             return self._ask_for_bookmark(title)
         _settle(self.options.settle_seconds)
+        # Le signet a pu ouvrir ou replier un volet : le canevas mesuré ne
+        # vaut plus, ni pour cette page ni pour les suivantes.
+        self._canvas_areas.clear()
 
         if self._print(rendered) != before:
             self._idle_clicks = 0
@@ -359,6 +362,11 @@ class DesktopRecorder:
             return self._ask_for_bookmark(title)
         console.detail(f"Signet « {title} » : affichage inchangé, sans doute déjà actif")
         return True
+
+    def measure(self, page: PagePlan) -> Rect:
+        """Le canevas de la page affichée, cherché à nouveau dans l'image."""
+        self._canvas_areas.clear()
+        return self.canvas_area(page.canvas)
 
     def _ctrl_click(self, point: tuple[int, int]) -> bool:
         """Ctrl+clic en un point de l'écran, puis la souris hors du canevas."""
@@ -388,6 +396,7 @@ class DesktopRecorder:
         console.question(f"Appliquez le signet « {title} » dans Power BI Desktop")
         console.note("Ctrl+clic sur son bouton, ou volet Affichage › Signets.")
         console.ask("Entrée quand l'affichage est à l'écran")
+        self._canvas_areas.clear()
         return True
 
     # ── Pages ─────────────────────────────────────────────────────

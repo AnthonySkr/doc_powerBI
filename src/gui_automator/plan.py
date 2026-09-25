@@ -71,6 +71,8 @@ class Shot:
     view: str = ""
     # Masqué dans tous les affichages : décrit, jamais capturé.
     hidden: bool = False
+    # Pourquoi, quand c'est masqué : ce que le compte rendu en dit.
+    note: str = ""
 
     @property
     def is_placed(self) -> bool:
@@ -154,7 +156,12 @@ def only(plans: list[PagePlan], page: str = "", shot: str = "") -> list[PagePlan
 
 def without_bookmarks(plan: PagePlan) -> PagePlan:
     """Le plan sans aucun clic : ce qui demandait un signet est écarté."""
-    shots = [replace(shot, view="", hidden=True) if shot.view else shot for shot in plan.shots]
+    shots = [
+        replace(shot, view="", hidden=True, note="masqué à l'ouverture (signets coupés)")
+        if shot.view
+        else shot
+        for shot in plan.shots
+    ]
     return replace(plan, shots=shots, views=[])
 
 
@@ -163,17 +170,16 @@ def _page_plan(page: ReportPage) -> PagePlan:
     undos = _undoable(page)
     shots = [_in_view(shot, page, undos) for shot in _shots(page, canvas)]
 
-    used = {shot.view for shot in shots if shot.view}
-    needed = used | {name for view in used for name in undos[view]}
+    # Tous les signets de la page, même ceux qu'aucune prise ne demande : le
+    # calibrage montre où chacun serait cliqué.
     views = [
         View(
             view.name,
             view.title,
             Rect(*view.trigger) if view.trigger else _NOWHERE,
-            tuple(undos[view.name]) if view.name in used else (),
+            tuple(undos.get(view.name, ())),
         )
         for view in page.views
-        if view.name in needed
     ]
     return PagePlan(page.name, page.display_name, canvas, shots, page.order, views)
 
@@ -204,6 +210,11 @@ def _undoable(page: ReportPage) -> dict[str, list[str]]:
             if other.hidden & other.touched == page.hidden_by_default & other.touched:
                 chosen.append(other.name)
                 remaining -= other.touched
+        if remaining and view.selected in {other.name for other in clickable}:
+            # Le navigateur dit lequel de ses signets était actif à l'ouverture :
+            # c'est lui qui remet ce que celui-ci change, même s'il touche
+            # aussi à autre chose.
+            chosen, remaining = [view.selected], set()
         if not remaining:
             undos[view.name] = chosen
     return undos
@@ -222,10 +233,20 @@ def _in_view(shot: Shot, page: ReportPage, undos: dict[str, list[str]]) -> Shot:
     if shot.kind == PAGE or shot.name not in page.hidden_by_default:
         return shot
 
-    for view in page.views:
-        if view.name in undos and shot.name in view.touched and shot.name not in view.hidden:
+    showing = [
+        view for view in page.views if shot.name in view.touched and shot.name not in view.hidden
+    ]
+    for view in showing:
+        if view.name in undos:
             return replace(shot, view=view.name)
-    return replace(shot, hidden=True)
+
+    if not showing:
+        note = "masqué à l'ouverture, et aucun signet ne l'affiche"
+    elif not any(view.trigger for view in showing):
+        note = f"masqué ; « {showing[0].title} » l'affiche, mais aucun bouton de la page n'y mène"
+    else:
+        note = f"masqué ; « {showing[0].title} » l'affiche, mais aucun signet ne le défait"
+    return replace(shot, hidden=True, note=note)
 
 
 def _shots(page: ReportPage, canvas: Size) -> list[Shot]:

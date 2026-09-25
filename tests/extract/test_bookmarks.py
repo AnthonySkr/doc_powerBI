@@ -16,6 +16,7 @@ from src.core import console
 from src.gui_automator import plan as capture_plan
 from src.gui_automator.capturer import run_session
 from src.gui_automator.fake import FakeRecorder
+from src.gui_automator.geometry import Rect
 from src.gui_automator.library import CaptureLibrary
 from src.pbi_extractor.report import parse_report
 from src.pbi_extractor.report.bookmarks import load_bookmarks
@@ -260,7 +261,8 @@ class PlanWithBookmarksTest(unittest.TestCase):
 
     def test_un_signet_qu_on_ne_saurait_defaire_n_est_pas_applique(self):
         self.assertTrue(self.shots["orphan"].hidden)
-        self.assertIsNone(self.plan.view("lone"))
+        self.assertIn("aucun signet ne le défait", self.shots["orphan"].note)
+        self.assertEqual(self.plan.view("lone").undo, ())
 
     def test_la_seance_applique_et_defait_chaque_signet_un_a_un(self):
         with tempfile.TemporaryDirectory() as directory, console.silenced():
@@ -276,6 +278,31 @@ class PlanWithBookmarksTest(unittest.TestCase):
             ],
         )
         self.assertEqual([title for title, _ in log.skipped], ["card (orphan)"])
+
+    def test_le_canevas_est_remesure_apres_chaque_signet(self):
+        """
+        Un signet qui ouvre le volet Filtres rétrécit le canevas : la prise qui
+        suit se cadre sur le nouveau, pas sur celui d'avant le clic.
+        """
+
+        class Narrowing(FakeRecorder):
+            def measure(self, page):  # noqa: ARG002
+                return Rect(0, 0, 960, 540)  # la moitié de 1920 × 1080
+
+        plan = capture_plan.only([self.plan], shot=CHARTS[1])
+        with tempfile.TemporaryDirectory() as directory, console.silenced():
+            recorder = Narrowing()
+            run_session(plan, recorder, CaptureLibrary(directory))
+        # Le graphique est en (500, 200), 600 × 300, sur un canevas de 1280 × 720.
+        self.assertEqual(recorder.grabbed[-1], Rect(375, 150, 450, 225))
+
+    def test_tous_les_signets_cliquables_sont_au_plan(self):
+        """Le calibrage les entoure tous, même ceux qu'aucune prise ne demande."""
+        clickable = {view.name for view in self.plan.views if not view.trigger.is_empty}
+        self.assertEqual(
+            clickable,
+            {"chiffrage", "evolution", "pipeline", "secteur", "axe", "open", "close", "lone"},
+        )
 
     def test_sans_signets_rien_n_est_clique(self):
         bare = capture_plan.without_bookmarks(self.plan)

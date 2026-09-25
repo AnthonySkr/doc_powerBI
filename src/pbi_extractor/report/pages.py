@@ -141,6 +141,7 @@ def parse_bookmark_control(visual: Visual, folder: str) -> BookmarkControl | Non
             visual,
             group=_literal(objects, "bookmarks", "bookmarkGroup"),
             orientation=_literal(objects, "layout", "orientation"),
+            selected=_literal(objects, "bookmarks", "selectedBookmark"),
         )
 
     link = node.get("visualContainerObjects") or {}

@@ -32,6 +32,8 @@ from src.pbi_extractor.report.pages import read_json
 
 __all__ = ["Bookmark", "attach_views", "load_bookmarks"]
 
+type _Area = tuple[float, float, float, float]  # x, y, largeur, hauteur
+
 # Orientations du navigateur de signets : les boutons s'y alignent en ligne,
 # ou en colonne. La grille dépend d'un nombre de colonnes que le rapport
 # n'écrit pas toujours : on n'y clique pas, on demande.
@@ -139,13 +141,15 @@ def attach_views(page: ReportPage, bookmarks: list[Bookmark]) -> None:
             continue
         raw = {item for item in hidden_raw if declared.get(item, True)}
         raw |= {item for item, hidden in declared.items() if hidden}
+        trigger, selected = _trigger(bookmark, page.bookmark_controls, bookmarks)
         page.views.append(
             PageView(
                 bookmark.name,
                 bookmark.title,
                 _effective(raw, parents),
                 _effective(set(declared), parents),
-                _trigger(bookmark, page.bookmark_controls, bookmarks),
+                trigger,
+                selected if selected != bookmark.name else "",
             )
         )
 
@@ -167,7 +171,7 @@ def _hidden(name: str, hidden: set[str], parents: dict[str, str]) -> bool:
 
 def _trigger(
     bookmark: Bookmark, controls: list[BookmarkControl], bookmarks: list[Bookmark]
-) -> tuple[float, float, float, float] | None:
+) -> tuple[_Area | None, str]:
     """
     Où cliquer, sur la page, pour appliquer ce signet.
 
@@ -175,10 +179,13 @@ def _trigger(
     un navigateur qui l'aligne : ses boutons se partagent sa place à parts
     égales, dans l'ordre des signets de son groupe — la case du signet est
     celle de son rang.
+
+    Avec la zone, le signet que ce navigateur a sélectionné à l'ouverture :
+    c'est lui qui remet ce que le signet change.
     """
     for control in controls:
         if control.bookmark == bookmark.name:
-            return _box(control)
+            return _box(control), ""
 
     for control in controls:
         if not control.is_navigator:
@@ -188,16 +195,13 @@ def _trigger(
             continue
         cell = _cell(control, listed.index(bookmark.name), len(listed))
         if cell is not None:
-            return cell
-    return None
+            return cell, control.selected
+    return None, ""
 
 
 def _box(control: BookmarkControl) -> tuple[float, float, float, float]:
     visual = control.visual
     return (visual.pos_x, visual.pos_y, visual.width, visual.height)
-
-
-type _Area = tuple[float, float, float, float]
 
 
 def _cell(control: BookmarkControl, rank: int, count: int) -> _Area | None:

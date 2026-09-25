@@ -161,7 +161,7 @@ def _center(area: Rect) -> Rect:
 
 def _placement(shot: Shot) -> str:
     if shot.hidden:
-        return "masqué à l'ouverture, aucun signet sûr ne l'affiche — écarté"
+        return f"{shot.note} — écarté"
     if not shot.is_placed:
         return "place non déclarée — écartée"
     area = shot.area
@@ -263,32 +263,50 @@ class _Session:
             shots = page.shots_for(view.name)
             if not shots:
                 continue
-            if not self._apply(view, page, rendered):
+            shown = self._apply(view, page, rendered)
+            if shown is None:
                 self._skip(shots, f"signet « {view.title} » non appliqué")
                 continue
             for shot in shots:
-                self.shot(shot, page, rendered)
-            if not self._undo(view, page, rendered):
-                rest = [
-                    shot for later in page.views[index + 1 :] for shot in page.shots_for(later.name)
-                ]
+                self.shot(shot, page, shown)
+            restored = self._undo(view, page, shown)
+            if restored is None:
+                later = page.views[index + 1 :]
+                rest = [shot for other in later for shot in page.shots_for(other.name)]
                 self._skip(rest, f"page non rendue après le signet « {view.title} »")
                 return
+            rendered = restored
 
-    def _undo(self, view: View, page: PagePlan, rendered: Rect) -> bool:
+    def _undo(self, view: View, page: PagePlan, rendered: Rect) -> Rect | None:
         """Défait le signet : la page comme à l'ouverture, pour la suite."""
-        undos = [page.view(name) for name in view.undo]
-        return all(self._apply(undo, page, rendered) for undo in undos if undo is not None)
+        for name in view.undo:
+            undo = page.view(name)
+            if undo is None:
+                continue
+            rendered = self._apply(undo, page, rendered)
+            if rendered is None:
+                return None
+        return rendered
 
-    def _apply(self, view: View, page: PagePlan, rendered: Rect) -> bool:
-        """Applique le signet : un clic sur son bouton, ou la main de l'utilisateur."""
+    def _apply(self, view: View, page: PagePlan, rendered: Rect) -> Rect | None:
+        """
+        Applique le signet, et retourne où le canevas est rendu ensuite.
+
+        Mesuré à nouveau, et non repris d'avant : un signet peut ouvrir ou
+        replier le volet Filtres, le canevas se redimensionne alors, et les
+        prises cadrées sur l'ancien tomberaient à côté. `None` si le signet
+        n'a pas été appliqué, ou si le canevas ne se retrouve plus.
+        """
         trigger = view.trigger
         target = Rect(0, 0, 0, 0) if trigger.is_empty else place(trigger, page.canvas, rendered)
-        return self.recorder.apply_bookmark(view.title, target.rounded(), rendered)
+        if not self.recorder.apply_bookmark(view.title, target.rounded(), rendered):
+            return None
+        measured = fit(page.canvas, self.recorder.measure(page))
+        return None if measured.is_empty else measured
 
     def shot(self, shot: Shot, page: PagePlan, rendered: Rect) -> None:
         if shot.hidden:
-            self._skip([shot], "masqué à l'ouverture, et aucun signet sûr ne l'affiche")
+            self._skip([shot], shot.note)
             return
         if not shot.is_placed:
             self._skip([shot], "place non déclarée par le rapport")
@@ -439,6 +457,9 @@ def _verdict(recorder: DesktopRecorder, page: PagePlan | None) -> list[str]:
     lines.append("`capture.window` désigne, et le vert chaque visuel à capturer.")
     if page.views:
         lines.append("En orange, le bouton de chaque signet : le clic vise son centre.")
+        unreachable = [view.title for view in page.views if view.trigger.is_empty]
+        if unreachable:
+            lines.append(f"Sans bouton repéré sur la page : {', '.join(unreachable)}.")
 
     measured = recorder.measured_canvas(page.canvas)
     if measured is None:
