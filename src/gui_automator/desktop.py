@@ -171,6 +171,8 @@ class DesktopRecorder:
         # à la première page qui en a besoin.
         self._keyboard: bool | None = None
         self._said_undetected = False
+        # Dernier canevas reconnu : l'indice de la mesure suivante.
+        self._last_canvas: Rect | None = None
         # Clics de signet restés sans effet d'affilée. Un seul se comprend —
         # le signet était déjà actif ; deux disent que le clic ne porte pas.
         self._idle_clicks = 0
@@ -265,15 +267,27 @@ class DesktopRecorder:
             found = self._canvas_in(search, ratio)
             if found is not None:
                 console.detail(f"Canevas reconnu dans l'image : {found.describe()}")
+                self._last_canvas = found
                 return found
 
         self._say_undetected()
         return None
 
     def _canvas_in(self, search: Rect, ratio: float) -> Rect | None:
-        """Le canevas dans une zone de l'écran, ramené aux coordonnées de l'écran."""
+        """
+        Le canevas dans une zone de l'écran, ramené aux coordonnées de l'écran.
+
+        Le dernier canevas reconnu sert d'indice : entre deux pages, rien ne
+        l'a déplacé la plupart du temps, et un rectangle de traits presque
+        aussi grand que lui — le bord d'un tableau, celui du volet Filtres —
+        ne doit pas lui être préféré s'il est toujours là.
+        """
         image = None if search.is_empty else self._pixels(search)
-        found = canvas.detect(image, ratio) if image is not None else None
+        if image is None:
+            return None
+        last = self._last_canvas
+        hint = None if last is None else last.moved(-search.left, -search.top)
+        found = canvas.detect(image, ratio, hint=hint)
         return None if found is None else found.moved(search.left, search.top)
 
     def search_areas(self) -> list[Rect]:

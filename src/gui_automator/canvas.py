@@ -77,6 +77,14 @@ AGREEING_CORNERS = 3
 # ce pas ne décide que du temps passé, jamais de la précision.
 STEP = 4
 
+# Au-dessous de cette densité, un trait est un pointillé : celui du canevas
+# en marque la moitié ; le bord plein d'un visuel ou d'un volet, presque tout.
+DASHED_DENSITY = 0.85
+
+# Écart, en pixels, sous lequel deux rectangles sont le même : l'épaisseur
+# d'un trait, et son lissage.
+SAME_BOX = 3
+
 # ── Ce qui fait un trait de bordure ───────────────────────────
 # Les seuils du second chemin. Ils portent tous sur la somme des trois canaux
 # d'un pixel, et se lisent dans l'ordre où le module les emploie.
@@ -135,7 +143,9 @@ class Image:
         return self.width <= 0 or self.height <= 0 or len(self.rgb) < self.width * self.height * 3
 
 
-def detect(image: Image, ratio: float, tolerance: float = RATIO_TOLERANCE) -> Rect | None:
+def detect(
+    image: Image, ratio: float, tolerance: float = RATIO_TOLERANCE, hint: Rect | None = None
+) -> Rect | None:
     """
     Rectangle du canevas dans l'image, ou `None` s'il ne s'y reconnaît pas.
 
@@ -145,20 +155,21 @@ def detect(image: Image, ratio: float, tolerance: float = RATIO_TOLERANCE) -> Re
 
     Le pourtour d'abord — il est le moins cher et le plus sûr là où il
     s'applique —, puis la bordure de page, pour les rapports dont l'habillage
-    se confond avec les pages.
+    se confond avec les pages. `hint` est le canevas d'une mesure précédente,
+    dans les coordonnées de l'image : retrouvé tel quel, il est préféré.
     """
     if image.is_empty or ratio <= 0:
         return None
 
     surrounded = _surrounded_box(image)
     if surrounded is None or not _plausible(surrounded, image, ratio, tolerance):
-        return _bordered_box(image, ratio, tolerance)
+        return _bordered_box(image, ratio, tolerance, hint)
     if _plausible(surrounded, image, ratio, EXACT_RATIO):
         return surrounded
     # Des proportions à peine faussées : un visuel qui déborde du canevas, ou
     # son ombre, élargit le pourtour de quelques dizaines de pixels. La
     # bordure, si elle se voit, est exacte — elle l'emporte.
-    return _bordered_box(image, ratio, tolerance) or surrounded
+    return _bordered_box(image, ratio, tolerance, hint) or surrounded
 
 
 def outline(image: Image, areas: list[Rect], color: tuple[int, int, int], width: int = 2) -> bytes:
@@ -294,6 +305,14 @@ class _Band:
     last: int
     start: int
     end: int
+    # Part de son étendue que le trait marque : une moitié pour le pointillé
+    # du canevas, presque tout pour le bord plein d'un visuel ou d'un volet.
+    density: float = 1.0
+
+    @property
+    def dashed(self) -> bool:
+        """Un pointillé — ce que Power BI trace autour du canevas, et lui seul."""
+        return self.density < DASHED_DENSITY
 
     def joined(self, other: _Band) -> _Band:
         """Les deux traits n'en font qu'un : même bordure, lissée sur deux rangs."""
@@ -302,6 +321,7 @@ class _Band:
             max(self.last, other.last),
             min(self.start, other.start),
             max(self.end, other.end),
+            min(self.density, other.density),
         )
 
     def follows(self, start: float, end: float) -> bool:
@@ -316,7 +336,9 @@ class _Band:
         return overlap >= (end - start + 1) * LINE_COVERAGE
 
 
-def _bordered_box(image: Image, ratio: float, tolerance: float) -> Rect | None:
+def _bordered_box(
+    image: Image, ratio: float, tolerance: float, hint: Rect | None = None
+) -> Rect | None:
     """
     Le canevas comme rectangle de traits, à défaut de pourtour.
 
@@ -325,17 +347,51 @@ def _bordered_box(image: Image, ratio: float, tolerance: float) -> Rect | None:
     Un trait isolé ne dit rien ; quatre traits qui se recoupent ne se
     rencontrent pas par hasard.
 
-    Entre plusieurs rectangles plausibles, le plus grand : le canevas porte
-    les autres, il ne tient dans aucun.
+    Plusieurs rectangles peuvent pourtant avoir les bonnes proportions : le
+    haut et le bas du canevas, avec le bord d'un tableau à gauche et celui du
+    volet Filtres à droite, en font un presque aussi grand que lui, décalé de
+    cent pixels. On retient donc, dans l'ordre :
+
+        celui que l'on connaît déjà    `hint`, le canevas de la mesure
+                                        d'avant, s'il est toujours là
+        le plus pointillé              le canevas est le seul rectangle bordé
+                                        de pointillés ; visuels et volets ont
+                                        des bords pleins
+        le plus grand                  à égalité, le canevas porte les autres
     """
     levels = _Levels(image)
     rows = _bands(levels, horizontal=True)
     columns = _bands(levels, horizontal=False)
-    boxes = [box for box in _rectangles(rows, columns) if _plausible(box, image, ratio, tolerance)]
-    return max(boxes, key=lambda box: box.width * box.height, default=None)
+    found = [
+        (box, sides)
+        for box, sides in _rectangles(rows, columns)
+        if _plausible(box, image, ratio, tolerance)
+    ]
+    if hint is not None:
+        for box, _ in found:
+            if _same(box, hint):
+                return box
+    best = max(
+        found,
+        key=lambda item: (sum(side.dashed for side in item[1]), item[0].width * item[0].height),
+        default=None,
+    )
+    return None if best is None else best[0]
 
 
-def _rectangles(rows: list[_Band], columns: list[_Band]) -> list[Rect]:
+def _same(box: Rect, other: Rect) -> bool:
+    """Le même rectangle, aux quelques pixels d'épaisseur d'un trait près."""
+    return all(
+        abs(a - b) <= SAME_BOX
+        for a, b in zip(
+            (box.left, box.top, box.right, box.bottom),
+            (other.left, other.top, other.right, other.bottom),
+            strict=True,
+        )
+    )
+
+
+def _rectangles(rows: list[_Band], columns: list[_Band]) -> list[tuple[Rect, tuple[_Band, ...]]]:
     """
     Rectangles dont les quatre côtés sont des traits qui se recoupent.
 
@@ -352,7 +408,7 @@ def _rectangles(rows: list[_Band], columns: list[_Band]) -> list[Rect]:
                 bottom.last - top.first + 1,
             )
             if _bordered(box, top, bottom, left, right):
-                boxes.append(box)
+                boxes.append((box, (top, bottom, left, right)))
     return boxes
 
 
@@ -448,7 +504,7 @@ def _band(levels: _Levels, position: int, horizontal: bool) -> _Band | None:
     length = end - start + 1
     if length < len(here) * MIN_SHARE or len(run) < length * LINE_DENSITY:
         return None
-    return _Band(position, position, start, end)
+    return _Band(position, position, start, end, len(run) / length)
 
 
 def _stands_out(level: int, before: int, after: int) -> bool:
