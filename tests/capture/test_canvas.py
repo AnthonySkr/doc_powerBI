@@ -247,6 +247,29 @@ class BorderedDetectTest(unittest.TestCase):
         self.assertIsNone(found)
 
 
+class OverflowTest(unittest.TestCase):
+    """
+    Un visuel qui déborde du canevas élargit son pourtour : de quelques pixels,
+    assez pour rester dans la tolérance, trop pour cadrer juste. La bordure
+    pointillée, elle, n'a pas bougé — c'est elle qui fait foi.
+    """
+
+    def test_la_bordure_l_emporte_sur_un_pourtour_elargi(self):
+        page = Rect(50, 40, 480, 270)
+        drawn = Canvas(600, 400)
+        drawn.fill(page, PAGE)
+        drawn.fill(Rect(45, 200, 490, 60), VISUAL)  # un tableau qui déborde de 5 px
+        drawn.dashes(page)
+        self.assertEqual(canvas.detect(drawn.image(), RATIO), page)
+
+    def test_sans_bordure_le_pourtour_reste_retenu(self):
+        page = Rect(50, 40, 480, 270)
+        image = window(600, 400, page, visuals=(Rect(45, 200, 490, 60),))
+        found = canvas.detect(image, RATIO)
+        self.assertIsNotNone(found)  # à peu près : c'est tout ce qu'il y a à voir
+        self.assertGreater(found.width, page.width)
+
+
 class OutlineTest(unittest.TestCase):
     """Le calibrage dessine sur la capture ce que le script croit voir."""
 

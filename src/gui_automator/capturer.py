@@ -283,12 +283,12 @@ class _Session:
             undo = page.view(name)
             if undo is None:
                 continue
-            rendered = self._apply(undo, page, rendered)
+            rendered = self._apply(undo, page, rendered, undo=True)
             if rendered is None:
                 return None
         return rendered
 
-    def _apply(self, view: View, page: PagePlan, rendered: Rect) -> Rect | None:
+    def _apply(self, view: View, page: PagePlan, rendered: Rect, undo: bool = False) -> Rect | None:
         """
         Applique le signet, et retourne où le canevas est rendu ensuite.
 
@@ -299,9 +299,9 @@ class _Session:
         """
         trigger = view.trigger
         target = Rect(0, 0, 0, 0) if trigger.is_empty else place(trigger, page.canvas, rendered)
-        if not self.recorder.apply_bookmark(view.title, target.rounded(), rendered):
+        if not self.recorder.apply_bookmark(view.title, target.rounded(), rendered, undo):
             return None
-        measured = fit(page.canvas, self.recorder.measure(page))
+        measured = fit(page.canvas, self.recorder.measure(page, rendered))
         return None if measured.is_empty else measured
 
     def shot(self, shot: Shot, page: PagePlan, rendered: Rect) -> None:

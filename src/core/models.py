@@ -318,6 +318,8 @@ class PageView:
     # Signet sélectionné, à l'ouverture, sur le navigateur qui mène à celui-ci
     # — vide pour un bouton, ou pour le signet sélectionné lui-même.
     selected: str = ""
+    # Pourquoi aucun bouton n'a été trouvé, quand `trigger` est vide.
+    note: str = ""
 
 
 @dataclass

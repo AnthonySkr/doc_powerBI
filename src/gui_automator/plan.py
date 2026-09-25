@@ -243,7 +243,10 @@ def _in_view(shot: Shot, page: ReportPage, undos: dict[str, list[str]]) -> Shot:
     if not showing:
         note = "masqué à l'ouverture, et aucun signet ne l'affiche"
     elif not any(view.trigger for view in showing):
-        note = f"masqué ; « {showing[0].title} » l'affiche, mais aucun bouton de la page n'y mène"
+        note = (
+            f"masqué ; « {showing[0].title} » l'affiche, mais aucun bouton de la page "
+            f"n'y mène ({showing[0].note})"
+        )
     else:
         note = f"masqué ; « {showing[0].title} » l'affiche, mais aucun signet ne le défait"
     return replace(shot, hidden=True, note=note)
