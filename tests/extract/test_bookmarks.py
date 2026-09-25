@@ -13,13 +13,14 @@ import tempfile
 import unittest
 
 from src.core import console
+from src.core.models import BookmarkControl, Visual
 from src.gui_automator import plan as capture_plan
 from src.gui_automator.capturer import run_session
 from src.gui_automator.fake import FakeRecorder
 from src.gui_automator.geometry import Rect
 from src.gui_automator.library import CaptureLibrary
 from src.pbi_extractor.report import parse_report
-from src.pbi_extractor.report.bookmarks import load_bookmarks
+from src.pbi_extractor.report.bookmarks import _cell, load_bookmarks
 
 PAGE = "389a7480ca3c71dcb0b1"
 CHARTS = ["86d64bb9a10ab0805d2b", "7632a0a8c98bc05d800b", "681d9640999e002bd8ed"]
@@ -227,6 +228,25 @@ class BookmarksTest(unittest.TestCase):
         """Navigateur vertical de 300 de haut, ramené à la page : trois cases de 100."""
         self.assertEqual(self.views["chiffrage"].trigger, (400, 200, 90, 100))
         self.assertEqual(self.views["pipeline"].trigger, (400, 400, 90, 100))
+
+    def test_un_navigateur_en_grille_plus_large_que_haut_tient_sur_une_ligne(self):
+        grid = BookmarkControl(
+            Visual(
+                id="n",
+                visual_type="bookmarkNavigator",
+                title="",
+                pos_x=32,
+                pos_y=680,
+                width=216,
+                height=68,
+            ),
+            orientation="2",
+        )
+        self.assertEqual(_cell(grid, 1, 2), (140, 680, 108, 68))
+
+    def test_un_signet_sans_bouton_dit_ce_qu_on_a_trouve(self):
+        """Le signet « lone » a un bouton ; « close » aussi : aucun n'a de note."""
+        self.assertEqual([view.note for view in self.page.views if view.note], [])
 
     def test_un_bouton_a_action_signet_se_vise_en_entier(self):
         self.assertEqual(self.views["axe"].trigger, (100, 510, 100, 40))

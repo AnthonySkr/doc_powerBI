@@ -142,6 +142,7 @@ def attach_views(page: ReportPage, bookmarks: list[Bookmark]) -> None:
         raw = {item for item in hidden_raw if declared.get(item, True)}
         raw |= {item for item, hidden in declared.items() if hidden}
         trigger, selected = _trigger(bookmark, page.bookmark_controls, bookmarks)
+        note = "" if trigger else _unreachable(bookmark, page.bookmark_controls, bookmarks)
         page.views.append(
             PageView(
                 bookmark.name,
@@ -150,6 +151,7 @@ def attach_views(page: ReportPage, bookmarks: list[Bookmark]) -> None:
                 _effective(set(declared), parents),
                 trigger,
                 selected if selected != bookmark.name else "",
+                note,
             )
         )
 
@@ -199,6 +201,29 @@ def _trigger(
     return None, ""
 
 
+def _unreachable(
+    bookmark: Bookmark, controls: list[BookmarkControl], bookmarks: list[Bookmark]
+) -> str:
+    """
+    Ce qu'on a trouvé sur la page, quand rien n'y mène à ce signet.
+
+    Le compte rendu le dit : c'est ce qui permet de comprendre, sans ouvrir
+    le rapport, pourquoi un navigateur bien visible ne sert pas.
+    """
+    navigators = [control for control in controls if control.is_navigator]
+    if not navigators and not controls:
+        return "aucun navigateur ni bouton de signet sur la page"
+    group = bookmark.group or "aucun"
+    seen = ", ".join(
+        f"{control.visual.name[:8]} (groupe {control.group or 'tous'})" for control in navigators
+    )
+    listed = sum(1 for b in bookmarks if b.group == bookmark.group)
+    return (
+        f"signet du groupe {group} ({listed} signet(s)) ; navigateurs de la page : "
+        f"{seen or 'aucun'}"
+    )
+
+
 def _box(control: BookmarkControl) -> tuple[float, float, float, float]:
     visual = control.visual
     return (visual.pos_x, visual.pos_y, visual.width, visual.height)
@@ -208,6 +233,11 @@ def _cell(control: BookmarkControl, rank: int, count: int) -> _Area | None:
     """La case du navigateur qui porte le bouton de ce rang."""
     x, y, width, height = _box(control)
     orientation = control.orientation or _HORIZONTAL
+    if orientation not in (_HORIZONTAL, _VERTICAL):
+        # Une grille : le rapport n'en écrit pas les colonnes. Une grille plus
+        # large que haute tient ses boutons sur une ligne, sinon en colonne —
+        # ce qui vaut pour les navigateurs de deux ou trois boutons.
+        orientation = _HORIZONTAL if width >= height else _VERTICAL
     if orientation == _HORIZONTAL:
         return (x + width * rank / count, y, width / count, height)
     if orientation == _VERTICAL:

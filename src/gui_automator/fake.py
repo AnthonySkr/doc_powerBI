@@ -62,7 +62,7 @@ class FakeRecorder:
     def measure(self, page: PagePlan) -> Rect:  # noqa: ARG002
         return self.viewport
 
-    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:  # noqa: ARG002
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect, undo: bool = False) -> bool:  # noqa: ARG002
         self.bookmarks.append(title)
         return True
 

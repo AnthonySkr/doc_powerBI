@@ -60,6 +60,11 @@ CLOSE = 6
 # pour absorber une bordure, trop peu pour laisser passer un cadrage faux.
 RATIO_TOLERANCE = 0.02
 
+# En deçà de cet écart, le pourtour est pris tel quel. Au-delà — tout en
+# restant sous la tolérance —, il a pu être élargi par un visuel qui déborde,
+# et la bordure pointillée, quand elle se trouve, est préférée.
+EXACT_RATIO = 0.005
+
 # Le canevas occupe l'essentiel de la zone qu'on lui laisse. Un rectangle plus
 # petit que cela est autre chose — une boîte de dialogue, une infobulle.
 MIN_SHARE = 0.3
@@ -146,9 +151,14 @@ def detect(image: Image, ratio: float, tolerance: float = RATIO_TOLERANCE) -> Re
         return None
 
     surrounded = _surrounded_box(image)
-    if surrounded is not None and _plausible(surrounded, image, ratio, tolerance):
+    if surrounded is None or not _plausible(surrounded, image, ratio, tolerance):
+        return _bordered_box(image, ratio, tolerance)
+    if _plausible(surrounded, image, ratio, EXACT_RATIO):
         return surrounded
-    return _bordered_box(image, ratio, tolerance)
+    # Des proportions à peine faussées : un visuel qui déborde du canevas, ou
+    # son ombre, élargit le pourtour de quelques dizaines de pixels. La
+    # bordure, si elle se voit, est exacte — elle l'emporte.
+    return _bordered_box(image, ratio, tolerance) or surrounded
 
 
 def outline(image: Image, areas: list[Rect], color: tuple[int, int, int], width: int = 2) -> bytes:

@@ -63,12 +63,13 @@ class Recorder(Protocol):
         """
         ...
 
-    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect, undo: bool = False) -> bool:
         """
         Applique un signet de la page affichée, et dit s'il l'a été.
 
         `trigger` est la zone **écran** du bouton qui y mène, vide si aucun
         n'y mène ; `rendered`, celle du canevas, où l'effet doit se voir.
+        `undo` : le signet défait un autre — il doit changer l'affichage.
         """
         ...
 

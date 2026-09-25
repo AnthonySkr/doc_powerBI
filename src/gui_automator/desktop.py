@@ -219,7 +219,9 @@ class DesktopRecorder:
             return Rect(0, 0, 0, 0)
 
         _settle(self.options.settle_seconds)
-        return self.canvas_area(page.canvas)
+        # Mesuré à nouveau sur chaque page : un signet de la page d'avant a
+        # pu ouvrir ou replier un volet, et le canevas n'est plus où il était.
+        return self.measure(page)
 
     def canvas_area(self, size: Size) -> Rect:
         """
@@ -229,9 +231,8 @@ class DesktopRecorder:
         déclarées — auquel cas `geometry.fit` y placera le canevas comme avant,
         en le supposant ajusté et centré.
 
-        Le résultat est gardé : le canevas ne se déplace pas d'une page à
-        l'autre, et la reconnaissance coûte une seconde. Il est repris dès que
-        la fenêtre bouge ou que la page change de dimensions.
+        Le résultat est gardé tant que rien n'a pu le déplacer : il est repris
+        à chaque page, après chaque signet, et dès que la fenêtre bouge.
         """
         measured = self.measured_canvas(size)
         return self.viewport() if measured is None else measured
@@ -327,7 +328,7 @@ class DesktopRecorder:
         return self._pixels(area)
 
     # ── Signets ───────────────────────────────────────────────────
-    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect, undo: bool = False) -> bool:
         """
         Applique un signet par Ctrl+clic sur son bouton, et vérifie l'effet.
 
@@ -355,6 +356,12 @@ class DesktopRecorder:
         if self._print(rendered) != before:
             self._idle_clicks = 0
             return True
+
+        if undo:
+            # Défaire un signet change forcément l'affichage : resté tel quel,
+            # c'est que le clic a manqué — une fenêtre de filtres reste ouverte.
+            console.warn(f"Signet « {title} » : le clic n'a rien refermé.")
+            return self._ask_for_bookmark(title)
 
         self._idle_clicks += 1
         if self._idle_clicks >= _IDLE_CLICKS:
