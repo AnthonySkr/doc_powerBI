@@ -247,6 +247,28 @@ class BorderedDetectTest(unittest.TestCase):
         self.assertIsNone(found)
 
 
+class LookalikeTest(unittest.TestCase):
+    """
+    Le haut et le bas du canevas, le bord d'un tableau à gauche, celui du
+    volet Filtres à droite : un rectangle aux bonnes proportions, un peu plus
+    grand que le canevas, et décalé. C'est ce qui décalait toutes les prises
+    des pages où le pourtour ne se voyait pas.
+    """
+
+    def setUp(self):
+        self.page = Rect(50, 40, 480, 270)
+        drawn = dressed_window(self.page)
+        drawn.fill(Rect(80, 40, 2, 270), BORDER)  # le bord plein d'un tableau
+        drawn.fill(Rect(562, 0, 2, 400), BORDER)  # le bord du volet Filtres
+        self.image = drawn.image()
+
+    def test_le_rectangle_pointille_l_emporte_sur_un_plus_grand_a_bords_pleins(self):
+        self.assertEqual(canvas.detect(self.image, RATIO), self.page)
+
+    def test_le_canevas_deja_connu_est_prefere_s_il_est_toujours_la(self):
+        self.assertEqual(canvas.detect(self.image, RATIO, hint=self.page), self.page)
+
+
 class OverflowTest(unittest.TestCase):
     """
     Un visuel qui déborde du canevas élargit son pourtour : de quelques pixels,
