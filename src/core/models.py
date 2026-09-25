@@ -191,6 +191,8 @@ class Visual:
     name: str = ""
     # `parentGroupName` : nom du groupe Power BI qui contient le visuel.
     parent_group_name: str = ""
+    # `isHidden` : masqué à l'ouverture de la page. Un signet peut l'afficher.
+    is_hidden: bool = False
     # Renseigné par `generators.references` : lignes du tableau des références.
     references: list[VisualReference] = field(default_factory=list)
 
@@ -253,6 +255,8 @@ class VisualGroup:
     pos_y: float = 0.0
     width: float = 0.0
     height: float = 0.0
+    # `isHidden` : groupe masqué à l'ouverture de la page, contenu compris.
+    is_hidden: bool = False
     # Renseignés par `apps.document.filters` :
     visuals: list[Visual] = field(default_factory=list)  # visuels du groupe
     members: list[VisualGroupMember] = field(default_factory=list)  # légende du groupe
@@ -267,6 +271,47 @@ class VisualGroup:
         groupe, la rédaction reprise porte peut-être sur une version périmée.
         """
         return " ".join(sorted(f"{m.title}:{m.visual_type}" for m in self.members))
+
+
+@dataclass
+class BookmarkControl:
+    """
+    Ce qui, sur une page, applique un signet d'un clic.
+
+    Deux sortes : un navigateur de signets (`bookmarkNavigator`), qui aligne
+    un bouton par signet de son groupe, et un bouton simple dont l'action est
+    un signet. La place est celle du visuel qui les porte, lue — et ramenée au
+    repère de la page — avec les autres.
+    """
+
+    visual: Visual
+    group: str = ""  # navigateur : groupe de signets affiché, vide pour tous
+    orientation: str = ""  # navigateur : 0 horizontal, 1 vertical, 2 grille
+    bookmark: str = ""  # bouton : le signet qu'il applique
+
+    @property
+    def is_navigator(self) -> bool:
+        return not self.bookmark
+
+
+@dataclass
+class PageView:
+    """
+    Un affichage de la page, tel qu'un signet le produit.
+
+    `hidden` est ce qui est masqué une fois le signet appliqué, visuels et
+    groupes, par nom technique — ce que masque un groupe masqué compris.
+    `touched` est ce dont le signet fixe la visibilité — le reste garde celle
+    qu'il avait avant qu'on l'applique, quelle qu'elle soit.
+    `trigger` est la zone du canevas où cliquer pour l'appliquer, `None` si
+    aucun bouton de la page n'y mène.
+    """
+
+    name: str  # nom technique du signet
+    title: str  # `displayName`
+    hidden: set[str] = field(default_factory=set)
+    touched: set[str] = field(default_factory=set)
+    trigger: tuple[float, float, float, float] | None = None  # x, y, largeur, hauteur
 
 
 @dataclass
@@ -289,6 +334,12 @@ class ReportPage:
     groups: list[VisualGroup] = field(default_factory=list)
     # Visuels documentés n'appartenant à aucun groupe.
     ungrouped_visuals: list[Visual] = field(default_factory=list)
+    # Signets : ce qui les applique, ce qui est masqué à l'ouverture de la
+    # page (visuels et groupes, par nom, un groupe masqué emportant son
+    # contenu), et chaque affichage qu'un signet produit sur cette page.
+    bookmark_controls: list[BookmarkControl] = field(default_factory=list)
+    hidden_by_default: set[str] = field(default_factory=set)
+    views: list[PageView] = field(default_factory=list)
 
 
 @dataclass

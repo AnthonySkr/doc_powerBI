@@ -17,18 +17,35 @@ Trois sortes de prises, une par emplacement que le document réserve :
 Le plan ne décide pas *ce qui* est documenté : il reçoit les pages telles que
 `core.selection` les a organisées, et les suit.
 
+    Visuels superposés — un navigateur de signets fait alterner au même
+    endroit des visuels dont un seul est visible à la fois. Chaque prise est
+    rangée dans le premier **affichage** où son visuel se voit : la page
+    telle qu'elle s'ouvre, puis chaque signet (voir `View`). Un visuel
+    qu'aucun affichage ne montre est décrit, mais pas capturé.
+
     Coordonnées d'un visuel de groupe — Power BI les écrit tantôt dans le
     repère de la page, tantôt dans celui du groupe qui le contient. La lecture
     du rapport les a déjà ramenées à la page, groupes imbriqués compris (voir
     `pbi_extractor.report.layout`) : le plan les prend telles quelles.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from src.core.models import ReportPage, Visual, VisualGroup
 from src.gui_automator.geometry import Rect, Size, union
 
-__all__ = ["GROUP", "PAGE", "PAGE_SHOT", "VISUAL", "PagePlan", "Shot", "build", "count", "only"]
+__all__ = [
+    "GROUP",
+    "PAGE",
+    "PAGE_SHOT",
+    "VISUAL",
+    "PagePlan",
+    "Shot",
+    "View",
+    "build",
+    "count",
+    "only",
+]
 
 # Ce qu'une prise cadre : la page entière, un groupe, ou un visuel seul.
 PAGE = "page"
@@ -48,6 +65,10 @@ class Shot:
     name: str  # identifiant technique, stable d'une génération à l'autre
     title: str  # titre lisible, pour le compte rendu
     area: Rect  # place dans le canevas de la page
+    # Signet à appliquer avant la prise — vide : la page telle qu'elle est.
+    view: str = ""
+    # Masqué dans tous les affichages : décrit, jamais capturé.
+    hidden: bool = False
 
     @property
     def is_placed(self) -> bool:
@@ -61,6 +82,24 @@ class Shot:
         return not self.area.is_empty
 
 
+_NOWHERE = Rect(0, 0, 0, 0)
+
+
+@dataclass(frozen=True)
+class View:
+    """
+    Un signet à appliquer sur la page, et où cliquer pour cela.
+
+    `trigger` est une zone du canevas — la case du navigateur, ou le bouton —,
+    vide quand aucun bouton de la page ne mène à ce signet : il faut alors
+    l'appliquer à la main.
+    """
+
+    name: str
+    title: str
+    trigger: Rect = _NOWHERE
+
+
 @dataclass(frozen=True)
 class PagePlan:
     """Les prises d'une page, dans le canevas qui leur donne leur échelle."""
@@ -72,6 +111,14 @@ class PagePlan:
     # Rang de la page dans le rapport, onglets cachés compris. C'est lui qui
     # permet d'aller d'une page à l'autre au clavier (voir `desktop`).
     order: int = 0
+    # Les signets que les prises demandent, dans l'ordre où les appliquer.
+    views: list[View] = field(default_factory=list)
+    # Signets qui rendent la page telle qu'elle s'ouvre, à appliquer une fois
+    # les autres parcourus. Vide s'il n'y en a pas, ou rien à rendre.
+    restore: list[str] = field(default_factory=list)
+
+    def shots_for(self, view: str) -> list[Shot]:
+        return [shot for shot in self.shots if shot.view == view]
 
 
 def build(pages: list[ReportPage]) -> list[PagePlan]:
@@ -81,7 +128,7 @@ def build(pages: list[ReportPage]) -> list[PagePlan]:
 
 def count(plans: list[PagePlan]) -> int:
     """Nombre de prises que le plan prévoit réellement."""
-    return sum(1 for plan in plans for shot in plan.shots if shot.is_placed)
+    return sum(1 for plan in plans for shot in plan.shots if shot.is_placed and not shot.hidden)
 
 
 def only(plans: list[PagePlan], page: str = "", shot: str = "") -> list[PagePlan]:
@@ -98,13 +145,70 @@ def only(plans: list[PagePlan], page: str = "", shot: str = "") -> list[PagePlan
             continue
         shots = [s for s in plan.shots if not shot or _matches(shot, s.name, s.title)]
         if shots:
-            kept.append(PagePlan(plan.name, plan.title, plan.canvas, shots, plan.order))
+            kept.append(replace(plan, shots=shots))
     return kept
 
 
 def _page_plan(page: ReportPage) -> PagePlan:
     canvas = Size(page.canvas_width, page.canvas_height)
-    return PagePlan(page.name, page.display_name, canvas, _shots(page, canvas), page.order)
+    shots = [_in_view(shot, page) for shot in _shots(page, canvas)]
+
+    used = {shot.view for shot in shots if shot.view}
+    restore = _restoring(page, used)
+    views = [
+        View(view.name, view.title, Rect(*view.trigger) if view.trigger else _NOWHERE)
+        for view in page.views
+        if view.name in used or view.name in restore
+    ]
+    return PagePlan(page.name, page.display_name, canvas, shots, page.order, views, restore)
+
+
+def _restoring(page: ReportPage, used: set[str]) -> list[str]:
+    """
+    Les signets qui rendent la page telle qu'elle s'ouvre, une fois les autres passés.
+
+    Chaque signet appliqué a changé ce qu'il touche ; il faut, pour chacun de
+    ces visuels, un signet qui le remette comme à l'ouverture. Un seul n'y
+    suffit pas toujours : le signet d'un navigateur ne remet que ses
+    graphiques, pas le tableau qu'un autre bouton a échangé.
+    """
+    touched = [view for view in page.views if view.name in used]
+    remaining = set().union(*(view.touched for view in touched))
+    restoring = []
+    for view in page.views:
+        if not view.touched & remaining:
+            continue
+        if view.hidden & view.touched == page.hidden_by_default & view.touched:
+            restoring.append(view.name)
+            remaining -= view.touched
+    if len(restoring) == 1 and used == set(restoring):
+        return []  # le seul signet appliqué est déjà celui de l'ouverture
+    return restoring
+
+
+def _in_view(shot: Shot, page: ReportPage) -> Shot:
+    """
+    La prise, rangée dans le premier affichage où ce qu'elle cadre se voit.
+
+    Ce que les signets de la page ne touchent pas se prend tel quel, sans
+    rien appliquer. Ce qu'ils font apparaître ou disparaître se prend sous le
+    premier signet qui le montre **explicitement** — un signet qui ne le
+    touche pas le laisse tel qu'on l'a trouvé, ce qui ne dit rien ; à défaut,
+    tel que la page s'ouvre s'il y est visible. Et ce que rien ne montre n'est
+    pas pris : ce serait prendre le visuel qui est au-dessus.
+    """
+    if shot.kind == PAGE:
+        return shot
+
+    hidden_first = shot.name in page.hidden_by_default
+    touching = [view for view in page.views if shot.name in view.touched]
+    if all((shot.name in view.hidden) == hidden_first for view in touching):
+        return replace(shot, hidden=hidden_first)
+
+    shown_by = next((view.name for view in touching if shot.name not in view.hidden), None)
+    if shown_by is not None:
+        return replace(shot, view=shown_by)
+    return replace(shot, hidden=hidden_first)
 
 
 def _shots(page: ReportPage, canvas: Size) -> list[Shot]:

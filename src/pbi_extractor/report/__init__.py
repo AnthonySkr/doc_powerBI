@@ -6,12 +6,18 @@ Lecture du rapport Power BI au format PBIR.
 
 Un `visual.json` décrit soit un visuel, soit un groupe (`visualGroup`) dont les
 membres le désignent par `parentGroupName`.
+
+    Report/definition/bookmarks/*.bookmark.json
+
+Les signets disent quels visuels chaque bouton de navigation fait apparaître
+(voir `bookmarks`).
 """
 
 import os
 
 from src.core import console
 from src.core.models import PowerBIReport
+from src.pbi_extractor.report.bookmarks import attach_views, load_bookmarks
 from src.pbi_extractor.report.fields import parse_filters
 from src.pbi_extractor.report.pages import load_page_order, parse_page, read_json
 
@@ -44,12 +50,16 @@ def parse_report(report_dir: str, report_name: str = "Rapport Power BI") -> Powe
 
     report.pages.sort(key=lambda page: page.order)
 
+    bookmarks = load_bookmarks(report_dir)
+    for page in report.pages:
+        attach_views(page, bookmarks)
+
     visuals = sum(len(page.visuals) for page in report.pages)
     groups = sum(len(page.groups) for page in report.pages)
     with_measures = sum(1 for page in report.pages for v in page.visuals if v.has_measures)
     console.done(
         f"{len(report.pages)} page(s), {visuals} visuel(s) dont {with_measures} "
-        f"avec mesures, {groups} groupe(s)"
+        f"avec mesures, {groups} groupe(s)" + (f", {len(bookmarks)} signet(s)" if bookmarks else "")
     )
     return report
 
