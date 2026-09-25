@@ -11,10 +11,11 @@ from pathlib import Path
 from typing import Any
 
 from src.core import console
-from src.core.config import DEFAULT_OUTPUT_DIR, DocConfig
+from src.core.config import DEFAULT_CAPTURES_DIR, DEFAULT_OUTPUT_DIR, DocConfig
 from src.core.expressions import render
 from src.core.models import PowerBiMetadata
 from src.core.prompts import TextProvider
+from src.gui_automator.library import CaptureLibrary
 from src.report_generator.context import build_context
 from src.report_generator.word import DocumentError, generate_word_documentation
 
@@ -55,6 +56,10 @@ def write_document(
     """Écrit le document Word et retourne son bilan."""
     report = metadata.report
     context = build_context(report, report.all_measures, config, inputs)
+    # Le dossier des captures, que les blocs `image` fouillent : une image
+    # prise par `--captures`, ou déposée à la main, y est trouvée d'elle-même.
+    captures = str(config.capture.get("directory") or DEFAULT_CAPTURES_DIR)
+    context["captures"] = CaptureLibrary(metadata.project_dir / captures)
     name = render(config.document.get("output_name"), context) or (
         f"documentation_{report.name}.docx"
     )

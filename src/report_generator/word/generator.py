@@ -53,6 +53,9 @@ def generate_word_documentation(
 
     builder = DocumentBuilder(doc, config, context, text_provider, previous)
     builder.build()
+    pictures = builder.figures.summary()
+    if pictures:
+        console.done(pictures)
 
     log = builder.merge.log
     archived = ""

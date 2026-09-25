@@ -52,7 +52,11 @@ class DocumentBuilder:
         self.links = LinkIndex(config, context, self.styles.ids)
         self.merge = MergeWriter(self.body, config, previous)
         self.figures = FigureWriter(
-            self.body, self.styles, config.rendering["image_placeholder"], shapes.last_id(doc)
+            self.body,
+            self.styles,
+            config.rendering["image_placeholder"],
+            shapes.last_id(doc),
+            _text_width(doc),
         )
 
         self._block_writers = {
@@ -516,3 +520,12 @@ def _apply_column_widths(table, columns: list[dict[str, Any]]) -> None:
         if width is not None:
             for row in table.rows:
                 row.cells[index].width = Cm(width)
+
+
+def _text_width(doc) -> int:
+    """Largeur utile de la dernière section du template, en EMU : page moins marges."""
+    section = doc.sections[-1]
+    try:
+        return int(section.page_width - section.left_margin - section.right_margin)
+    except TypeError:
+        return 0  # template sans dimensions de page : la largeur par défaut vaut
