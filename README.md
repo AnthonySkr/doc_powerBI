@@ -47,9 +47,10 @@ demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
 7. Si une documentation existait déjà, en reprend tout ce que vous y avez
    écrit et signale ce qui a changé (voir « Regénération » plus bas).
 
-Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
-avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
-capture correspondante une fois le document généré.
+Les captures d'écran prises par `--captures` sont insérées à leur place :
+la page, chaque groupe et chaque visuel documenté. Celles qui manquent — et
+les images que le script ne sait pas prendre, comme les schémas de navigation
+— gardent un emplacement décrit (`[IMAGE] ...`), à remplacer à la main.
 
 ### Groupes de visuels
 
@@ -132,7 +133,7 @@ Types de blocs :
 | Type | Effet |
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
-| `image` | Emplacement réservé pour une capture, avec sa description ; `markers:` y ajoute les repères numérotés à glisser sur l'image |
+| `image` | Capture insérée depuis le dossier des captures (`capture:`), ou à défaut son emplacement réservé, avec sa description ; `markers:` y ajoute les repères numérotés à glisser sur l'image |
 | `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `hint:` remplace cette amorce par ce qu'on attend à cet endroit ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
@@ -444,6 +445,7 @@ repris par la configuration :
 | `table_data` | `Tableau Donnees` | Tableau neutre, disponible pour d'autres tableaux du plan |
 | `ref_header` / `ref_number` / `ref_role` / `ref_value` | `Ref Entete` / `Ref Numero` / `Ref Role` / `Ref Valeur` | Les quatre styles de ce tableau |
 | `image` | `Image Placeholder` | Encadré pointillé réservant la capture |
+| `picture` | `Normal` | Paragraphe (centré) qui porte une capture insérée |
 | `caption` | `Legende` | Légende numérotée sous l'emplacement |
 | `todo` | `A completer` | Zones à rédiger après génération |
 | `technical_id` | `Id technique` | Type du visuel affiché en gris à la suite du titre |
@@ -602,7 +604,8 @@ cache ses sous-modules à pdoc) et de découper par module.
 
 ## Captures d'écran des visuels
 
-Le document réserve la place des captures ; `gui_automator` les prend.
+`gui_automator` prend les captures ; le document les insère, et réserve la
+place de celles qui manquent.
 **Les deux ne se connaissent que par un dossier d'images** — celui que
 `capture.directory` désigne, à côté du `.pbip` :
 
@@ -621,7 +624,22 @@ document détaille un à un sous la capture d'ensemble.
 
 C'est tout le contrat. Renommer un visuel dans Power BI ne perd pas sa capture,
 et remplacer une image par une meilleure — retouchée, prise autrement — revient
-à écrire dans ce dossier.
+à écrire dans ce dossier, puis à régénérer.
+
+Dans le plan, c'est `capture:` qui relie un bloc `image` à son fichier :
+
+```yaml
+- type: image
+  id: visuel_capture
+  description: "Capture du visuel « {{ visual.title }} »"
+  capture:
+    page: "{{ page.name }}"
+    shot: "{{ visual.name }}"     # "_page" pour la page, "{{ group.name }}" pour un groupe
+```
+
+Une capture insérée garde sa taille d'écran sans dépasser la largeur du texte
+ni `rendering.image_placeholder.max_height_cm`. À la régénération, une image
+que vous n'avez pas touchée est remplacée par la capture du jour.
 
 ### Comment ça marche
 

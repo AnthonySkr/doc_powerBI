@@ -55,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "bullet": "List Bullet",
         "code": "Code DAX",
         "image": "Image Placeholder",
+        "picture": "Normal",
         "caption": "Legende",
         "todo": "A completer",
         "table": "Tableau Reference",
@@ -75,6 +76,9 @@ DEFAULTS: dict[str, Any] = {
             "numbering": "auto",
             "sequence": "Figure",
             "empty_paragraph_after": True,
+            # Hauteur maximale d'une capture insérée : une page entière, plus
+            # haute que large, tient ainsi sur une page du document.
+            "max_height_cm": 18,
             "markers": {
                 "shape": "ellipse",
                 "size_cm": 0.62,
