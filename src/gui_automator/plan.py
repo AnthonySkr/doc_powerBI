@@ -18,8 +18,9 @@ Le plan ne décide pas *ce qui* est documenté : il reçoit les pages telles que
 `core.selection` les a organisées, et les suit.
 
     Coordonnées d'un visuel de groupe — Power BI les écrit tantôt dans le
-    repère de la page, tantôt dans celui du groupe qui le contient. On ne
-    devine pas : le cadre déclaré du groupe tranche (voir `_placed`).
+    repère de la page, tantôt dans celui du groupe qui le contient. La lecture
+    du rapport les a déjà ramenées à la page, groupes imbriqués compris (voir
+    `pbi_extractor.report.layout`) : le plan les prend telles quelles.
 """
 
 from dataclasses import dataclass, field
@@ -37,11 +38,6 @@ GROUP = "group"
 # Nom de fichier de la capture d'une page entière. Le tiret bas la distingue
 # des visuels, dont les noms techniques n'en portent pas au début.
 PAGE_SHOT = "_page"
-
-# Tolérance, en unités du canevas, sur l'appartenance d'un visuel au cadre de
-# son groupe : Power BI arrondit, et un demi-point ne dit pas un changement de
-# repère.
-_INSIDE = 1.0
 
 
 @dataclass(frozen=True)
@@ -127,15 +123,13 @@ def _shots(page: ReportPage, canvas: Size) -> list[Shot]:
     shots = [Shot(PAGE, PAGE_SHOT, page.display_name, Rect(0, 0, canvas.width, canvas.height))]
     shots += [_group_shot(group) for group in page.groups]
 
-    frames = _group_frames(page)
     seen: set[str] = set()
     for visual in page.visuals or page.ungrouped_visuals:
         name = visual.name or visual.id
         if name in seen:
             continue
         seen.add(name)
-        frame = frames.get(visual.parent_group_name)
-        shots.append(Shot(VISUAL, name, visual.title, _placed(visual, frame)))
+        shots.append(Shot(VISUAL, name, visual.title, _area(visual)))
     return shots
 
 
@@ -157,53 +151,6 @@ def _frame(group: VisualGroup) -> Rect:
     if not declared.is_empty:
         return declared
     return union([_area(visual) for visual in _all_visuals(group)])
-
-
-def _group_frames(page: ReportPage) -> dict[str, Rect]:
-    """
-    Cadre de chaque groupe de la page, par nom technique.
-
-    Sous-groupes compris : un visuel est situé par rapport au groupe qui le
-    contient directement, celui que son `parentGroupName` désigne.
-    """
-    frames: dict[str, Rect] = {}
-    for group in page.groups:
-        _collect_frames(group, frames)
-    return frames
-
-
-def _collect_frames(group: VisualGroup, frames: dict[str, Rect]) -> None:
-    frames[group.name or group.id] = _frame(group)
-    for subgroup in group.subgroups:
-        _collect_frames(subgroup, frames)
-
-
-def _placed(visual: Visual, frame: Rect | None) -> Rect:
-    """
-    Place d'un visuel dans le canevas de la page.
-
-    Un visuel de groupe porte, selon la version de Power BI qui a écrit le
-    rapport, des coordonnées de page ou des coordonnées relatives au groupe.
-    Les secondes tombent hors du cadre du groupe : c'est à cela qu'on les
-    reconnaît, et l'origine du groupe les y ramène. Sans cadre déclaré, rien ne
-    permet de trancher — on garde ce que le rapport dit.
-    """
-    area = _area(visual)
-    if frame is None or frame.is_empty or area.is_empty or _within(area, frame):
-        return area
-
-    moved = area.moved(frame.left, frame.top)
-    return moved if _within(moved, frame) else area
-
-
-def _within(area: Rect, frame: Rect) -> bool:
-    """Le rectangle tient-il dans le cadre, à l'arrondi près ?"""
-    return (
-        area.left >= frame.left - _INSIDE
-        and area.top >= frame.top - _INSIDE
-        and area.right <= frame.right + _INSIDE
-        and area.bottom <= frame.bottom + _INSIDE
-    )
 
 
 def _all_visuals(group: VisualGroup) -> list[Visual]:
