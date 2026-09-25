@@ -19,7 +19,7 @@ from src.gui_automator.desktop import DesktopOptions, DesktopRecorder
 from src.gui_automator.fake import FakeRecorder
 from src.gui_automator.geometry import Rect, fit, place
 from src.gui_automator.library import CaptureLibrary
-from src.gui_automator.plan import PagePlan, Shot
+from src.gui_automator.plan import PagePlan, Shot, View
 from src.gui_automator.recorder import CaptureError, Recorder
 
 __all__ = [
@@ -40,6 +40,8 @@ __all__ = [
 _CANVAS_MARK = (0xE8, 0x11, 0x23)
 _VISUAL_MARK = (0x10, 0x7C, 0x10)
 _DECLARED_MARK = (0x00, 0x78, 0xD4)
+# Et en orange, là où le script cliquera pour appliquer chaque signet.
+_TRIGGER_MARK = (0xF7, 0x63, 0x0C)
 
 
 @dataclass(frozen=True)
@@ -125,9 +127,15 @@ def describe_plan(plans: list[PagePlan], library: CaptureLibrary) -> None:
     """
     for page in plans:
         console.info(f"{page.title} — canevas {page.canvas.width:g} × {page.canvas.height:g}")
-        for shot in page.shots:
-            file = library.path(page.name, shot.name).name
-            console.detail(f"{shot.kind:6} {shot.title} · {file} · {_placement(shot)}")
+        for view in [None, *page.views]:
+            shots = page.shots_for(view.name if view else "")
+            if view is not None:
+                console.detail(f"signet « {view.title} » · {_trigger(view)}")
+            for shot in shots:
+                file = library.path(page.name, shot.name).name
+                console.detail(f"{shot.kind:6} {shot.title} · {file} · {_placement(shot)}")
+        if page.restore:
+            console.detail("puis retour à l'affichage d'ouverture de la page")
 
     console.blank()
     console.done(f"{capture_plan.count(plans)} prise(s) prévue(s)")
@@ -136,7 +144,21 @@ def describe_plan(plans: list[PagePlan], library: CaptureLibrary) -> None:
         console.done(f"{len(existing)} capture(s) déjà dans le dossier")
 
 
+def _trigger(view: View) -> str:
+    if view.trigger.is_empty:
+        return "aucun bouton n'y mène — il sera demandé"
+    center = _center(view.trigger)
+    return f"clic en ({center.left:g}, {center.top:g})"
+
+
+def _center(area: Rect) -> Rect:
+    """Le point central d'une zone, en rectangle d'un pixel."""
+    return Rect(round(area.left + area.width / 2), round(area.top + area.height / 2), 1, 1)
+
+
 def _placement(shot: Shot) -> str:
+    if shot.hidden:
+        return "masqué, et aucun signet ne l'affiche — écarté"
     if not shot.is_placed:
         return "place non déclarée — écartée"
     area = shot.area
@@ -228,10 +250,36 @@ class _Session:
             self._skip(page.shots, "page non affichée, ou canevas non rendu à l'écran")
             return
 
-        for shot in page.shots:
+        for shot in page.shots_for(""):
             self.shot(shot, page, rendered)
 
+        applied = False
+        for view in page.views:
+            shots = page.shots_for(view.name)
+            if not shots:
+                continue
+            applied = True
+            if not self._apply(view, page, rendered):
+                self._skip(shots, f"signet « {view.title} » non appliqué")
+                continue
+            for shot in shots:
+                self.shot(shot, page, rendered)
+
+        if applied:
+            for view in page.views:
+                if view.name in page.restore:
+                    self._apply(view, page, rendered)
+
+    def _apply(self, view: View, page: PagePlan, rendered: Rect) -> bool:
+        """Applique le signet : un clic sur son bouton, ou la main de l'utilisateur."""
+        trigger = view.trigger
+        target = Rect(0, 0, 0, 0) if trigger.is_empty else place(trigger, page.canvas, rendered)
+        return self.recorder.apply_bookmark(view.title, target.rounded(), rendered)
+
     def shot(self, shot: Shot, page: PagePlan, rendered: Rect) -> None:
+        if shot.hidden:
+            self._skip([shot], "masqué, et aucun signet de la page ne l'affiche")
+            return
         if not shot.is_placed:
             self._skip([shot], "place non déclarée par le rapport")
             return
@@ -344,10 +392,16 @@ def _marked_window(
     areas = [
         local(place(shot.area, page.canvas, rendered))
         for shot in page.shots
-        if shot.is_placed and shot.kind != capture_plan.PAGE
+        if shot.is_placed and not shot.hidden and shot.kind != capture_plan.PAGE
+    ]
+    triggers = [
+        local(place(view.trigger, page.canvas, rendered))
+        for view in page.views
+        if not view.trigger.is_empty
     ]
     drawn = canvas.outline(image, areas, _VISUAL_MARK)
     for marks, color, width in (
+        (triggers, _TRIGGER_MARK, 3),
         ([local(recorder.viewport())], _DECLARED_MARK, 2),
         ([local(rendered)], _CANVAS_MARK, 3),
     ):
@@ -373,6 +427,8 @@ def _verdict(recorder: DesktopRecorder, page: PagePlan | None) -> list[str]:
     lines.append(f"`reperes.png` entoure les visuels de « {page.title} » — ils doivent")
     lines.append("tomber dessus. Le cadre rouge est le canevas retenu, le bleu ce que")
     lines.append("`capture.window` désigne, et le vert chaque visuel à capturer.")
+    if page.views:
+        lines.append("En orange, le bouton de chaque signet : le clic vise son centre.")
 
     measured = recorder.measured_canvas(page.canvas)
     if measured is None:

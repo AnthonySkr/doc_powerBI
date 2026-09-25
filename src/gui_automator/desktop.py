@@ -12,7 +12,8 @@ place de chaque visuel au pixel logique près (voir `geometry`).
 
 D'où deux outils, chacun sur un seul travail :
 
-    pywinauto   piloter la fenêtre : l'amener devant, changer de page
+    pywinauto   piloter la fenêtre : l'amener devant, changer de page,
+                cliquer les boutons de signets
     mss         photographier une région de l'écran, et la rendre en PNG
 
 Laquelle de toutes les fenêtres du bureau est le rapport, c'est `finder` qui
@@ -58,6 +59,9 @@ from src.gui_automator.plan import PagePlan
 from src.gui_automator.recorder import CaptureError
 
 __all__ = ["DesktopOptions", "DesktopRecorder", "Insets"]
+
+# Clics de signet sans effet, d'affilée, au-delà desquels on cesse de cliquer.
+_IDLE_CLICKS = 2
 
 _MISSING = (
     "Capture indisponible : `pywinauto` et `mss` ne sont pas installés. "
@@ -163,6 +167,9 @@ class DesktopRecorder:
         # à la première page qui en a besoin.
         self._keyboard: bool | None = None
         self._said_undetected = False
+        # Clics de signet restés sans effet d'affilée. Un seul se comprend —
+        # le signet était déjà actif ; deux disent que le clic ne porte pas.
+        self._idle_clicks = 0
 
     # ── Cycle de vie ──────────────────────────────────────────────
     def start(self) -> None:
@@ -318,6 +325,70 @@ class DesktopRecorder:
     def image(self, area: Rect) -> canvas.Image | None:
         """Pixels bruts d'une région, pour les mesurer ou dessiner dessus."""
         return self._pixels(area)
+
+    # ── Signets ───────────────────────────────────────────────────
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:
+        """
+        Applique un signet par Ctrl+clic sur son bouton, et vérifie l'effet.
+
+        Ctrl, parce qu'en mode édition Power BI Desktop sélectionne un bouton
+        cliqué au lieu de l'actionner. La souris est ensuite écartée du
+        canevas : laissée sur le bouton, elle y laisserait son survol — ou une
+        infobulle sur le visuel d'à côté — dans la capture suivante.
+
+        L'effet se lit sur le canevas. Un clic sans effet se comprend une
+        fois : le signet était déjà l'affichage en cours. Deux de suite disent
+        que le clic ne porte pas, et l'on demande plutôt que de capturer les
+        mêmes visuels sous un autre nom.
+        """
+        if self.options.manual_pages or trigger.is_empty or self._idle_clicks >= _IDLE_CLICKS:
+            return self._ask_for_bookmark(title)
+
+        before = self._print(rendered)
+        if not self._ctrl_click(_middle_point(trigger)):
+            return self._ask_for_bookmark(title)
+        _settle(self.options.settle_seconds)
+
+        if self._print(rendered) != before:
+            self._idle_clicks = 0
+            return True
+
+        self._idle_clicks += 1
+        if self._idle_clicks >= _IDLE_CLICKS:
+            console.warn(f"Signet « {title} » : le clic sur son bouton reste sans effet.")
+            return self._ask_for_bookmark(title)
+        console.detail(f"Signet « {title} » : affichage inchangé, sans doute déjà actif")
+        return True
+
+    def _ctrl_click(self, point: tuple[int, int]) -> bool:
+        """Ctrl+clic en un point de l'écran, puis la souris hors du canevas."""
+        window = self._require_window()
+        try:
+            import pywinauto.mouse  # noqa: PLC0415 — chargé avec les outils
+
+            window.set_focus()
+            window.click_input(coords=point, absolute=True, pressed="control")
+            client = self.client_frame()
+            pywinauto.mouse.move(coords=(int(client.left) + 4, int(client.bottom) - 4))
+        except Exception as e:  # noqa: BLE001 — l'échec se rattrape en demandant
+            console.detail(f"Clic en {point} non envoyé ({e})")
+            return False
+        return True
+
+    def _print(self, area: Rect) -> bytes:
+        """Empreinte d'une zone de l'écran — le canevas, pour un signet."""
+        image = self._pixels(area.rounded())
+        return hashlib.sha256(image.rgb).digest() if image is not None else b""
+
+    def _ask_for_bookmark(self, title: str) -> bool:
+        """Demande le signet à l'utilisateur, s'il y a quelqu'un pour répondre."""
+        if not _can_ask():
+            console.detail(f"Signet « {title} » non appliqué, et personne pour le faire.")
+            return False
+        console.question(f"Appliquez le signet « {title} » dans Power BI Desktop")
+        console.note("Ctrl+clic sur son bouton, ou volet Affichage › Signets.")
+        console.ask("Entrée quand l'affichage est à l'écran")
+        return True
 
     # ── Pages ─────────────────────────────────────────────────────
     def _reach(self, page: PagePlan) -> bool:
@@ -547,6 +618,11 @@ def _middle(area: Rect) -> Rect:
     """La moitié centrale d'une zone, dans les deux sens."""
     margin_x, margin_y = area.width / 4, area.height / 4
     return area.inset(margin_x, margin_y, margin_x, margin_y).rounded()
+
+
+def _middle_point(area: Rect) -> tuple[int, int]:
+    """Centre d'une zone, en pixels entiers."""
+    return (round(area.left + area.width / 2), round(area.top + area.height / 2))
 
 
 def _settle(seconds: float) -> None:

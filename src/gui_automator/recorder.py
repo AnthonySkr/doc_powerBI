@@ -1,9 +1,10 @@
 """
 Ce qu'on attend de celui qui prend les captures.
 
-Un enregistreur sait trois choses, et rien d'autre :
+Un enregistreur sait quatre choses, et rien d'autre :
 
     montrer une page        et dire où son canevas est rendu à l'écran
+    appliquer un signet     en cliquant son bouton
     prendre une région      et en retourner un PNG
     se refermer
 
@@ -51,6 +52,15 @@ class Recorder(Protocol):
 
     def grab(self, area: Rect) -> bytes:
         """Capture une région de l'écran et la retourne en PNG."""
+        ...
+
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:
+        """
+        Applique un signet de la page affichée, et dit s'il l'a été.
+
+        `trigger` est la zone **écran** du bouton qui y mène, vide si aucun
+        n'y mène ; `rendered`, celle du canevas, où l'effet doit se voir.
+        """
         ...
 
     def stop(self) -> None:

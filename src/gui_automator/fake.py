@@ -46,6 +46,7 @@ class FakeRecorder:
         # vérifier le déroulé d'une séance sans regarder les images.
         self.shown: list[str] = []
         self.grabbed: list[Rect] = []
+        self.bookmarks: list[str] = []
 
     def start(self) -> None:
         return
@@ -57,6 +58,10 @@ class FakeRecorder:
     def grab(self, area: Rect) -> bytes:
         self.grabbed.append(area)
         return solid_png(int(area.width), int(area.height), _color(area))
+
+    def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect) -> bool:  # noqa: ARG002
+        self.bookmarks.append(title)
+        return True
 
     def stop(self) -> None:
         return
