@@ -54,12 +54,13 @@ class Recorder(Protocol):
         """Capture une région de l'écran et la retourne en PNG."""
         ...
 
-    def measure(self, page: PagePlan) -> Rect:
+    def measure(self, page: PagePlan, keep: Rect | None = None) -> Rect:
         """
         Où le canevas de la page affichée est rendu **maintenant**, sans en changer.
 
         Un signet peut ouvrir ou replier le volet Filtres : le canevas se
-        redimensionne, et tout cadrage calculé avant tombe à côté.
+        redimensionne, et tout cadrage calculé avant tombe à côté. `keep` est
+        la mesure d'avant, que l'enregistreur peut garder s'il doute.
         """
         ...
 

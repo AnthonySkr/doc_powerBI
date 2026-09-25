@@ -301,7 +301,7 @@ class _Session:
         target = Rect(0, 0, 0, 0) if trigger.is_empty else place(trigger, page.canvas, rendered)
         if not self.recorder.apply_bookmark(view.title, target.rounded(), rendered, undo):
             return None
-        measured = fit(page.canvas, self.recorder.measure(page))
+        measured = fit(page.canvas, self.recorder.measure(page, rendered))
         return None if measured.is_empty else measured
 
     def shot(self, shot: Shot, page: PagePlan, rendered: Rect) -> None:

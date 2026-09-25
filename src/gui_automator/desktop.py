@@ -60,6 +60,10 @@ from src.gui_automator.recorder import CaptureError
 
 __all__ = ["DesktopOptions", "DesktopRecorder", "Insets"]
 
+# Écart de proportions toléré entre deux mesures du canevas, au-delà duquel la
+# plus juste des deux est gardée.
+_RATIO_SLACK = 0.003
+
 # Clics de signet sans effet, d'affilée, au-delà desquels on cesse de cliquer.
 _IDLE_CLICKS = 2
 
@@ -370,10 +374,23 @@ class DesktopRecorder:
         console.detail(f"Signet « {title} » : affichage inchangé, sans doute déjà actif")
         return True
 
-    def measure(self, page: PagePlan) -> Rect:
-        """Le canevas de la page affichée, cherché à nouveau dans l'image."""
+    def measure(self, page: PagePlan, keep: Rect | None = None) -> Rect:
+        """
+        Le canevas de la page affichée, cherché à nouveau dans l'image.
+
+        `keep` est la mesure d'avant un signet. Une fenêtre de filtres ouverte
+        par-dessus la page — plus haute que le canevas — peut fausser la
+        reconnaissance : une nouvelle mesure aux proportions moins justes que
+        l'ancienne ne la remplace pas.
+        """
         self._canvas_areas.clear()
-        return self.canvas_area(page.canvas)
+        found = self.canvas_area(page.canvas)
+        if keep is None or keep.is_empty or found == keep:
+            return found
+        if _ratio_error(found, page.canvas) > _ratio_error(keep, page.canvas) + _RATIO_SLACK:
+            console.detail(f"Mesure douteuse ({found.describe()}) : canevas d'avant gardé.")
+            return keep
+        return found
 
     def _ctrl_click(self, point: tuple[int, int]) -> bool:
         """Ctrl+clic en un point de l'écran, puis la souris hors du canevas."""
@@ -634,6 +651,14 @@ def _middle(area: Rect) -> Rect:
     """La moitié centrale d'une zone, dans les deux sens."""
     margin_x, margin_y = area.width / 4, area.height / 4
     return area.inset(margin_x, margin_y, margin_x, margin_y).rounded()
+
+
+def _ratio_error(area: Rect, size: Size) -> float:
+    """Écart relatif entre les proportions mesurées et celles de la page."""
+    if area.is_empty or size.is_empty:
+        return float("inf")
+    expected = size.width / size.height
+    return abs(area.width / area.height - expected) / expected
 
 
 def _middle_point(area: Rect) -> tuple[int, int]:

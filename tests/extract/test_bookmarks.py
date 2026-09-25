@@ -306,7 +306,7 @@ class PlanWithBookmarksTest(unittest.TestCase):
         """
 
         class Narrowing(FakeRecorder):
-            def measure(self, page):  # noqa: ARG002
+            def measure(self, page, keep=None):  # noqa: ARG002
                 return Rect(0, 0, 960, 540)  # la moitié de 1920 × 1080
 
         plan = capture_plan.only([self.plan], shot=CHARTS[1])

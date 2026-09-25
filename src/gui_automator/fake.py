@@ -59,7 +59,7 @@ class FakeRecorder:
         self.grabbed.append(area)
         return solid_png(int(area.width), int(area.height), _color(area))
 
-    def measure(self, page: PagePlan) -> Rect:  # noqa: ARG002
+    def measure(self, page: PagePlan, keep: Rect | None = None) -> Rect:  # noqa: ARG002
         return self.viewport
 
     def apply_bookmark(self, title: str, trigger: Rect, rendered: Rect, undo: bool = False) -> bool:  # noqa: ARG002
