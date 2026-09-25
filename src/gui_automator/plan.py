@@ -18,10 +18,11 @@ Le plan ne décide pas *ce qui* est documenté : il reçoit les pages telles que
 `core.selection` les a organisées, et les suit.
 
     Visuels superposés — un navigateur de signets fait alterner au même
-    endroit des visuels dont un seul est visible à la fois. Chaque prise est
-    rangée dans le premier **affichage** où son visuel se voit : la page
-    telle qu'elle s'ouvre, puis chaque signet (voir `View`). Un visuel
-    qu'aucun affichage ne montre est décrit, mais pas capturé.
+    endroit des visuels dont un seul est visible à la fois. La page est
+    d'abord prise telle qu'elle s'ouvre, sans rien toucher, visuels masqués
+    exclus. Puis chaque visuel masqué est pris sous un signet qui le montre,
+    aussitôt défait (voir `View`). Un visuel masqué qu'aucun signet ne montre
+    — ou qu'on ne saurait défaire — est décrit, mais pas capturé.
 
     Coordonnées d'un visuel de groupe — Power BI les écrit tantôt dans le
     repère de la page, tantôt dans celui du groupe qui le contient. La lecture
@@ -45,6 +46,7 @@ __all__ = [
     "build",
     "count",
     "only",
+    "without_bookmarks",
 ]
 
 # Ce qu'une prise cadre : la page entière, un groupe, ou un visuel seul.
@@ -91,13 +93,14 @@ class View:
     Un signet à appliquer sur la page, et où cliquer pour cela.
 
     `trigger` est une zone du canevas — la case du navigateur, ou le bouton —,
-    vide quand aucun bouton de la page ne mène à ce signet : il faut alors
-    l'appliquer à la main.
+    vide quand aucun bouton de la page ne mène à ce signet.
     """
 
     name: str
     title: str
     trigger: Rect = _NOWHERE
+    # Les signets à appliquer ensuite, pour rendre la page comme à l'ouverture.
+    undo: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -111,11 +114,11 @@ class PagePlan:
     # Rang de la page dans le rapport, onglets cachés compris. C'est lui qui
     # permet d'aller d'une page à l'autre au clavier (voir `desktop`).
     order: int = 0
-    # Les signets que les prises demandent, dans l'ordre où les appliquer.
+    # Les signets que les prises demandent, et ceux qui les défont.
     views: list[View] = field(default_factory=list)
-    # Signets qui rendent la page telle qu'elle s'ouvre, à appliquer une fois
-    # les autres parcourus. Vide s'il n'y en a pas, ou rien à rendre.
-    restore: list[str] = field(default_factory=list)
+
+    def view(self, name: str) -> View | None:
+        return next((view for view in self.views if view.name == name), None)
 
     def shots_for(self, view: str) -> list[Shot]:
         return [shot for shot in self.shots if shot.view == view]
@@ -149,66 +152,80 @@ def only(plans: list[PagePlan], page: str = "", shot: str = "") -> list[PagePlan
     return kept
 
 
+def without_bookmarks(plan: PagePlan) -> PagePlan:
+    """Le plan sans aucun clic : ce qui demandait un signet est écarté."""
+    shots = [replace(shot, view="", hidden=True) if shot.view else shot for shot in plan.shots]
+    return replace(plan, shots=shots, views=[])
+
+
 def _page_plan(page: ReportPage) -> PagePlan:
     canvas = Size(page.canvas_width, page.canvas_height)
-    shots = [_in_view(shot, page) for shot in _shots(page, canvas)]
+    undos = _undoable(page)
+    shots = [_in_view(shot, page, undos) for shot in _shots(page, canvas)]
 
     used = {shot.view for shot in shots if shot.view}
-    restore = _restoring(page, used)
+    needed = used | {name for view in used for name in undos[view]}
     views = [
-        View(view.name, view.title, Rect(*view.trigger) if view.trigger else _NOWHERE)
+        View(
+            view.name,
+            view.title,
+            Rect(*view.trigger) if view.trigger else _NOWHERE,
+            tuple(undos[view.name]) if view.name in used else (),
+        )
         for view in page.views
-        if view.name in used or view.name in restore
+        if view.name in needed
     ]
-    return PagePlan(page.name, page.display_name, canvas, shots, page.order, views, restore)
+    return PagePlan(page.name, page.display_name, canvas, shots, page.order, views)
 
 
-def _restoring(page: ReportPage, used: set[str]) -> list[str]:
+def _undoable(page: ReportPage) -> dict[str, list[str]]:
     """
-    Les signets qui rendent la page telle qu'elle s'ouvre, une fois les autres passés.
+    Les signets qu'on sait appliquer **et défaire**, avec de quoi les défaire.
 
-    Chaque signet appliqué a changé ce qu'il touche ; il faut, pour chacun de
-    ces visuels, un signet qui le remette comme à l'ouverture. Un seul n'y
-    suffit pas toujours : le signet d'un navigateur ne remet que ses
-    graphiques, pas le tableau qu'un autre bouton a échangé.
+    Un signet n'est appliqué que si un clic y mène, et si d'autres, sur la
+    même page, remettent ensuite comme à l'ouverture tout ce qu'il a changé :
+    le « Chiffrage » d'un navigateur défait son « Évolution », la croix d'une
+    fenêtre de filtres défait le bouton qui l'a ouverte. Un signet qu'on ne
+    saurait pas défaire laisserait la page masquée pour toutes les prises
+    suivantes — on ne l'applique pas.
     """
-    touched = [view for view in page.views if view.name in used]
-    remaining = set().union(*(view.touched for view in touched))
-    restoring = []
-    for view in page.views:
-        if not view.touched & remaining:
-            continue
-        if view.hidden & view.touched == page.hidden_by_default & view.touched:
-            restoring.append(view.name)
-            remaining -= view.touched
-    if len(restoring) == 1 and used == set(restoring):
-        return []  # le seul signet appliqué est déjà celui de l'ouverture
-    return restoring
+    clickable = [view for view in page.views if view.trigger]
+    undos = {}
+    for view in clickable:
+        remaining = {
+            name
+            for name in view.touched
+            if (name in view.hidden) != (name in page.hidden_by_default)
+        }
+        chosen = []
+        for other in clickable:
+            if other is view or not other.touched & remaining:
+                continue
+            if other.hidden & other.touched == page.hidden_by_default & other.touched:
+                chosen.append(other.name)
+                remaining -= other.touched
+        if not remaining:
+            undos[view.name] = chosen
+    return undos
 
 
-def _in_view(shot: Shot, page: ReportPage) -> Shot:
+def _in_view(shot: Shot, page: ReportPage, undos: dict[str, list[str]]) -> Shot:
     """
-    La prise, rangée dans le premier affichage où ce qu'elle cadre se voit.
+    La prise, rangée dans l'affichage où la prendre.
 
-    Ce que les signets de la page ne touchent pas se prend tel quel, sans
-    rien appliquer. Ce qu'ils font apparaître ou disparaître se prend sous le
-    premier signet qui le montre **explicitement** — un signet qui ne le
-    touche pas le laisse tel qu'on l'a trouvé, ce qui ne dit rien ; à défaut,
-    tel que la page s'ouvre s'il y est visible. Et ce que rien ne montre n'est
-    pas pris : ce serait prendre le visuel qui est au-dessus.
+    Ce qui est visible à l'ouverture se prend tel quel, sans rien toucher :
+    c'est le cas de presque tout. Ce qui est masqué à l'ouverture se prend
+    sous le premier signet qui le montre **explicitement** et qu'on sait
+    défaire. Le reste n'est pas pris : cadrer un visuel masqué, ce serait
+    photographier celui qui est à sa place.
     """
-    if shot.kind == PAGE:
+    if shot.kind == PAGE or shot.name not in page.hidden_by_default:
         return shot
 
-    hidden_first = shot.name in page.hidden_by_default
-    touching = [view for view in page.views if shot.name in view.touched]
-    if all((shot.name in view.hidden) == hidden_first for view in touching):
-        return replace(shot, hidden=hidden_first)
-
-    shown_by = next((view.name for view in touching if shot.name not in view.hidden), None)
-    if shown_by is not None:
-        return replace(shot, view=shown_by)
-    return replace(shot, hidden=hidden_first)
+    for view in page.views:
+        if view.name in undos and shot.name in view.touched and shot.name not in view.hidden:
+            return replace(shot, view=view.name)
+    return replace(shot, hidden=True)
 
 
 def _shots(page: ReportPage, canvas: Size) -> list[Shot]:

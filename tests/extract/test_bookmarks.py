@@ -37,7 +37,9 @@ def container(name: str, x, y, width, height, visual: dict, **extra) -> dict:
     }
 
 
-def bookmark(name: str, title: str, hidden: dict[str, bool], targets: list[str]) -> dict:
+def bookmark(
+    name: str, title: str, hidden: dict[str, bool], targets: list[str], groups=None
+) -> dict:
     """Un signet tel que Power BI l'écrit, réduit à ce qui compte ici."""
     containers = {}
     for visual, is_hidden in hidden.items():
@@ -53,7 +55,15 @@ def bookmark(name: str, title: str, hidden: dict[str, bool], targets: list[str])
         "options": {"applyOnlyToTargetVisuals": True, "targetVisualNames": targets},
         "explorationState": {
             "activeSection": PAGE,
-            "sections": {PAGE: {"visualContainers": containers}},
+            "sections": {
+                PAGE: {
+                    "visualContainers": containers,
+                    "visualContainerGroups": {
+                        group: {"isHidden": is_hidden}
+                        for group, is_hidden in (groups or {}).items()
+                    },
+                }
+            },
         },
     }
 
@@ -111,7 +121,30 @@ def sample() -> ReportWithBookmarks:
     # Deux tableaux, échangés par deux boutons à action signet.
     report.visual(container("t1", 0, 550, 800, 150, {"visualType": "tableEx"}))
     report.visual(container("t2", 0, 550, 800, 150, {"visualType": "tableEx"}, isHidden=True))
-    for name, target, x in (("b1", "secteur", 0), ("b2", "axe", 100)):
+    # Une fenêtre de filtres, masquée à l'ouverture : un bouton l'ouvre, une
+    # croix la referme.
+    report.visual(
+        {
+            "name": "modal",
+            "position": {"x": 300, "y": 100, "width": 600, "height": 500},
+            "visualGroup": {"displayName": "Filtres"},
+            "isHidden": True,
+        }
+    )
+    report.visual(
+        container("f1", 20, 20, 200, 50, {"visualType": "slicer"}, parentGroupName="modal")
+    )
+    # Et un visuel masqué que seul un signet sans retour affiche.
+    report.visual(container("orphan", 900, 0, 100, 100, {"visualType": "card"}, isHidden=True))
+
+    buttons = (
+        ("b1", "secteur", 0, 510),
+        ("b2", "axe", 100, 510),
+        ("b3", "open", 1200, 0),
+        ("b4", "close", 1200, 50),
+        ("b5", "lone", 1200, 100),
+    )
+    for name, target, x, y in buttons:
         button = {
             "visualType": "actionButton",
             "visualContainerObjects": {
@@ -126,7 +159,7 @@ def sample() -> ReportWithBookmarks:
                 ]
             },
         }
-        report.visual(container(name, x, 510, 100, 40, button))
+        report.visual(container(name, x, y, 100, 40, button))
 
     for index, (name, title) in enumerate(
         (("chiffrage", "Chiffrage Devis"), ("evolution", "Evolution"), ("pipeline", "Pipeline"))
@@ -135,6 +168,9 @@ def sample() -> ReportWithBookmarks:
         report.bookmark(bookmark(name, title, hidden, CHARTS))
     report.bookmark(bookmark("secteur", "Secteur", {"t1": False, "t2": True}, ["t1", "t2"]))
     report.bookmark(bookmark("axe", "Axe", {"t1": True, "t2": False}, ["t1", "t2"]))
+    report.bookmark(bookmark("open", "Filtres", {}, ["modal"], groups={"modal": False}))
+    report.bookmark(bookmark("close", "Fermer", {}, ["modal"], groups={"modal": True}))
+    report.bookmark(bookmark("lone", "Seul", {"orphan": False}, ["orphan"]))
     report.write(
         os.path.join(report.bookmarks, "bookmarks.json"),
         {
@@ -142,6 +178,9 @@ def sample() -> ReportWithBookmarks:
                 {"name": "graphs", "children": ["chiffrage", "evolution", "pipeline"]},
                 {"name": "secteur"},
                 {"name": "axe"},
+                {"name": "open"},
+                {"name": "close"},
+                {"name": "lone"},
             ]
         },
     )
@@ -166,15 +205,22 @@ class BookmarksTest(unittest.TestCase):
                 ("pipeline", "graphs"),
                 ("secteur", ""),
                 ("axe", ""),
+                ("open", ""),
+                ("close", ""),
+                ("lone", ""),
             ],
         )
 
     def test_ce_qui_est_masque_a_l_ouverture(self):
-        self.assertEqual(self.page.hidden_by_default, {CHARTS[1], CHARTS[2], "t2"})
+        self.assertEqual(
+            self.page.hidden_by_default, {CHARTS[1], CHARTS[2], "t2", "modal", "f1", "orphan"}
+        )
 
     def test_un_signet_ne_touche_que_ses_cibles(self):
         """Le segment, déclaré masqué mais hors cible, reste visible."""
-        self.assertEqual(self.views["evolution"].hidden, {CHARTS[0], CHARTS[2], "t2"})
+        self.assertEqual(
+            self.views["evolution"].hidden, {CHARTS[0], CHARTS[2], "t2", "modal", "f1", "orphan"}
+        )
 
     def test_la_case_du_navigateur_suit_le_rang_du_signet(self):
         """Navigateur vertical de 300 de haut, ramené à la page : trois cases de 100."""
@@ -186,7 +232,10 @@ class BookmarksTest(unittest.TestCase):
 
 
 class PlanWithBookmarksTest(unittest.TestCase):
-    """Chaque visuel superposé est pris une fois, sous le signet qui le montre."""
+    """
+    La page d'abord, telle qu'elle s'ouvre ; puis chaque visuel masqué, sous
+    un signet qui le montre et qu'on sait défaire.
+    """
 
     def setUp(self):
         report = sample()
@@ -195,31 +244,44 @@ class PlanWithBookmarksTest(unittest.TestCase):
             self.plan = capture_plan.build(parse_report(report.root).pages)[0]
         self.shots = {shot.name: shot for shot in self.plan.shots}
 
-    def test_chaque_graphique_sous_son_signet(self):
-        views = [self.shots[chart].view for chart in CHARTS]
-        self.assertEqual(views, ["chiffrage", "evolution", "pipeline"])
-        self.assertEqual((self.shots["t1"].view, self.shots["t2"].view), ("secteur", "axe"))
+    def test_ce_qui_est_visible_a_l_ouverture_se_prend_sans_rien_toucher(self):
+        for name in (CHARTS[0], "t1", "slicer", "_page"):
+            self.assertEqual(self.shots[name].view, "", name)
 
-    def test_ce_que_les_signets_ne_touchent_pas_se_prend_tel_quel(self):
-        self.assertEqual(self.shots["slicer"].view, "")
-        self.assertEqual(self.plan.shots[0].view, "")  # la page
+    def test_chaque_visuel_masque_sous_le_signet_qui_le_montre(self):
+        views = [self.shots[name].view for name in (CHARTS[1], CHARTS[2], "t2", "f1")]
+        self.assertEqual(views, ["evolution", "pipeline", "axe", "open"])
 
-    def test_la_page_est_rendue_telle_qu_elle_s_ouvre(self):
-        """Chiffrage remet les graphiques, Secteur les tableaux : il faut les deux."""
-        self.assertEqual(self.plan.restore, ["chiffrage", "secteur"])
+    def test_chaque_signet_est_aussitot_defait(self):
+        undo = {view.name: view.undo for view in self.plan.views}
+        self.assertEqual(undo["evolution"], ("chiffrage",))
+        self.assertEqual(undo["axe"], ("secteur",))
+        self.assertEqual(undo["open"], ("close",))  # la croix referme la fenêtre
 
-    def test_la_seance_applique_chaque_signet_puis_rend_la_page(self):
+    def test_un_signet_qu_on_ne_saurait_defaire_n_est_pas_applique(self):
+        self.assertTrue(self.shots["orphan"].hidden)
+        self.assertIsNone(self.plan.view("lone"))
+
+    def test_la_seance_applique_et_defait_chaque_signet_un_a_un(self):
         with tempfile.TemporaryDirectory() as directory, console.silenced():
             recorder = FakeRecorder()
             log = run_session([self.plan], recorder, CaptureLibrary(directory))
         self.assertEqual(
             recorder.bookmarks,
             [
-                *("Chiffrage Devis", "Evolution", "Pipeline", "Secteur", "Axe"),
-                *("Chiffrage Devis", "Secteur"),  # la page rendue telle qu'elle s'ouvre
+                *("Evolution", "Chiffrage Devis"),
+                *("Pipeline", "Chiffrage Devis"),
+                *("Axe", "Secteur"),
+                *("Filtres", "Fermer"),
             ],
         )
-        self.assertEqual(log.skipped, [])
+        self.assertEqual([title for title, _ in log.skipped], ["card (orphan)"])
+
+    def test_sans_signets_rien_n_est_clique(self):
+        bare = capture_plan.without_bookmarks(self.plan)
+        self.assertEqual(bare.views, [])
+        self.assertTrue(all(shot.view == "" for shot in bare.shots))
+        self.assertTrue({shot.name: shot for shot in bare.shots}["t2"].hidden)
 
 
 if __name__ == "__main__":

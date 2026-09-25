@@ -217,6 +217,10 @@ DEFAULTS: dict[str, Any] = {
         # Changer de page à la main plutôt que par automatisation : plus lent,
         # mais jamais pris en défaut.
         "manual_pages": False,
+        # Une fois la page prise telle qu'elle s'ouvre, appliquer les signets
+        # qui montrent les visuels masqués — chacun aussitôt défait. À couper
+        # pour ne jamais rien cliquer : les visuels masqués sont alors écartés.
+        "bookmarks": True,
     },
     "inputs": [],
     "sections": [],

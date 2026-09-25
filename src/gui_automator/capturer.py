@@ -95,6 +95,8 @@ def shot_plan(
     report = metadata.report
     pages = report.pages if options.every_visual else _documented(report.pages, config)
     plans = capture_plan.build(pages)
+    if not config.capture.get("bookmarks", True):
+        plans = [capture_plan.without_bookmarks(plan) for plan in plans]
     return capture_plan.only(plans, page=options.page, shot=options.shot)
 
 
@@ -129,13 +131,14 @@ def describe_plan(plans: list[PagePlan], library: CaptureLibrary) -> None:
         console.info(f"{page.title} — canevas {page.canvas.width:g} × {page.canvas.height:g}")
         for view in [None, *page.views]:
             shots = page.shots_for(view.name if view else "")
-            if view is not None:
+            if view is not None and shots:
                 console.detail(f"signet « {view.title} » · {_trigger(view)}")
             for shot in shots:
                 file = library.path(page.name, shot.name).name
                 console.detail(f"{shot.kind:6} {shot.title} · {file} · {_placement(shot)}")
-        if page.restore:
-            console.detail("puis retour à l'affichage d'ouverture de la page")
+            for name in view.undo if view is not None and shots else ():
+                undo = page.view(name)
+                console.detail(f"puis signet « {undo.title} » · {_trigger(undo)}")
 
     console.blank()
     console.done(f"{capture_plan.count(plans)} prise(s) prévue(s)")
@@ -158,7 +161,7 @@ def _center(area: Rect) -> Rect:
 
 def _placement(shot: Shot) -> str:
     if shot.hidden:
-        return "masqué, et aucun signet ne l'affiche — écarté"
+        return "masqué à l'ouverture, aucun signet sûr ne l'affiche — écarté"
     if not shot.is_placed:
         return "place non déclarée — écartée"
     area = shot.area
@@ -253,22 +256,29 @@ class _Session:
         for shot in page.shots_for(""):
             self.shot(shot, page, rendered)
 
-        applied = False
-        for view in page.views:
+        # Puis, un à un, les visuels masqués : leur signet, leurs prises, et
+        # aussitôt ce qui le défait — la page revient comme à l'ouverture
+        # avant le signet suivant.
+        for index, view in enumerate(page.views):
             shots = page.shots_for(view.name)
             if not shots:
                 continue
-            applied = True
             if not self._apply(view, page, rendered):
                 self._skip(shots, f"signet « {view.title} » non appliqué")
                 continue
             for shot in shots:
                 self.shot(shot, page, rendered)
+            if not self._undo(view, page, rendered):
+                rest = [
+                    shot for later in page.views[index + 1 :] for shot in page.shots_for(later.name)
+                ]
+                self._skip(rest, f"page non rendue après le signet « {view.title} »")
+                return
 
-        if applied:
-            for view in page.views:
-                if view.name in page.restore:
-                    self._apply(view, page, rendered)
+    def _undo(self, view: View, page: PagePlan, rendered: Rect) -> bool:
+        """Défait le signet : la page comme à l'ouverture, pour la suite."""
+        undos = [page.view(name) for name in view.undo]
+        return all(self._apply(undo, page, rendered) for undo in undos if undo is not None)
 
     def _apply(self, view: View, page: PagePlan, rendered: Rect) -> bool:
         """Applique le signet : un clic sur son bouton, ou la main de l'utilisateur."""
@@ -278,7 +288,7 @@ class _Session:
 
     def shot(self, shot: Shot, page: PagePlan, rendered: Rect) -> None:
         if shot.hidden:
-            self._skip([shot], "masqué, et aucun signet de la page ne l'affiche")
+            self._skip([shot], "masqué à l'ouverture, et aucun signet sûr ne l'affiche")
             return
         if not shot.is_placed:
             self._skip([shot], "place non déclarée par le rapport")
