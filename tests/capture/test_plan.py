@@ -148,44 +148,6 @@ class GroupShotsTest(unittest.TestCase):
         self.assertEqual(shots([built], plan.GROUP)[0].area, Rect(0, 0, 700, 500))
 
 
-class GroupCoordinatesTest(unittest.TestCase):
-    """
-    Un visuel de groupe est placé tantôt dans le repère de la page, tantôt
-    dans celui de son groupe. Le cadre déclaré du groupe tranche.
-    """
-
-    def _page(self, x: float, y: float) -> ReportPage:
-        group = VisualGroup(id="g1", name="g1", title="Indicateurs")
-        group.pos_x, group.pos_y = 400.0, 200.0
-        group.width, group.height = 500.0, 300.0
-        member = visual("v1", "CA", x=x, y=y, width=200, height=100, group="g1")
-        group.visuals = [member]
-
-        built = ReportPage(name="page_1", display_name="Ventes")
-        built.groups = [group]
-        built.visuals = [member]
-        return built
-
-    def test_des_coordonnees_de_page_sont_gardees(self):
-        taken = shots([self._page(x=450, y=250)], plan.VISUAL)[0]
-        self.assertEqual(taken.area, Rect(450, 250, 200, 100))
-
-    def test_des_coordonnees_de_groupe_sont_ramenees_a_la_page(self):
-        """Hors du cadre du groupe : c'est qu'elles partent de son coin."""
-        taken = shots([self._page(x=10, y=20)], plan.VISUAL)[0]
-        self.assertEqual(taken.area, Rect(410, 220, 200, 100))
-
-    def test_sans_cadre_declare_rien_n_est_deplace(self):
-        built = self._page(x=10, y=20)
-        built.groups[0].width, built.groups[0].height = 0.0, 0.0
-        self.assertEqual(shots([built], plan.VISUAL)[0].area, Rect(10, 20, 200, 100))
-
-    def test_un_visuel_hors_du_groupe_des_deux_facons_reste_tel_quel(self):
-        """Ni dans le cadre, ni ramené dedans : le rapport a raison, pas nous."""
-        taken = shots([self._page(x=900, y=900)], plan.VISUAL)[0]
-        self.assertEqual(taken.area, Rect(900, 900, 200, 100))
-
-
 class WithoutOrganisationTest(unittest.TestCase):
     """Le plan est aussi calculable sur un rapport tout juste lu."""
 

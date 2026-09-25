@@ -177,8 +177,10 @@ class Visual:
     elements: list[VisualElement] = field(default_factory=list)
     filters: list[VisualFilter] = field(default_factory=list)
     has_measures: bool = False
-    # Place du visuel dans le canevas de la page, telle que le rapport la
-    # déclare. C'est elle qui permet de recadrer une capture d'écran sur ce
+    # Place du visuel dans le canevas de la page. Un membre de groupe est
+    # ramené au repère de la page dès la lecture, même quand le rapport la
+    # déclare depuis le coin de son groupe (`pbi_extractor.report.layout`).
+    # C'est elle qui permet de recadrer une capture d'écran sur ce
     # seul visuel (voir `apps.capture`).
     pos_x: float = 0.0
     pos_y: float = 0.0

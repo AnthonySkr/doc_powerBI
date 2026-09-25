@@ -7,6 +7,7 @@ from typing import Any
 from src.core import console
 from src.core.models import ReportPage, Visual, VisualGroup
 from src.pbi_extractor.report.fields import parse_elements, parse_filters, parse_reference_labels
+from src.pbi_extractor.report.layout import to_page_coordinates
 
 # Titre de repli d'un groupe dont le `displayName` est vide.
 UNTITLED_GROUP = "Groupe sans nom"
@@ -47,6 +48,8 @@ def parse_page(page_path: str, folder_name: str, page_order: dict[str, int]) -> 
         elif container is not None:
             page.visuals.append(container)
 
+    # Tous les membres de groupe lus : leurs places se ramènent à la page.
+    to_page_coordinates(page)
     return page
 
 
