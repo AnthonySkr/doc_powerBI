@@ -26,11 +26,16 @@ from docx.oxml.ns import qn
 from src.report_generator.merge import markers
 
 OWNED = "owned"
-SEED = "seed"
-FREE = "free"
+"""Contenu produit par le script, réécrit à chaque génération."""
 
-# Natures de segment portant un identifiant de bloc du plan.
+SEED = "seed"
+"""Amorce : écrite une fois, puis laissée à l'utilisateur."""
+
+FREE = "free"
+"""Tout le reste : écrit par l'utilisateur, sans identité propre."""
+
 IDENTIFIED = (OWNED, SEED)
+"""Les natures de segment qui portent un identifiant de bloc du plan."""
 
 # Nature de segment correspondant à chaque marqueur d'ouverture.
 _KINDS = {markers.GENERATED: OWNED, markers.SEED: SEED}
@@ -56,6 +61,7 @@ class Segment:
 
     @property
     def identified(self) -> bool:
+        """Le segment porte-t-il un identifiant de bloc du plan ?"""
         return self.kind in IDENTIFIED
 
     @property
@@ -63,9 +69,8 @@ class Segment:
         """
         Le contenu est-il exactement celui que le script y avait mis ?
 
-        Sans empreintes — document produit par une version antérieure — on ne
-        peut pas savoir : dans le doute, ce qui s'y trouve appartient à
-        l'utilisateur.
+        Sans empreintes — document d'une version antérieure — on ne peut pas
+        savoir : dans le doute, ce qui s'y trouve appartient à l'utilisateur.
         """
         if self.digests is None:
             return False
@@ -91,6 +96,7 @@ class Block:
         return [s.block_id for s in self.segments if s.identified]
 
     def free_nodes(self) -> list:
+        """Tous les éléments libres du bloc, dans l'ordre du document."""
         return [node for segment in self.segments if segment.kind == FREE for node in segment.nodes]
 
     def identified_segments(self) -> dict[str, Segment]:
@@ -103,12 +109,12 @@ class Block:
 
     def free_after(self) -> dict[str, list]:
         """
-        Contenu libre de l'utilisateur, rangé sous le segment identifié qui le
-        précède — `""` pour ce qui ouvre le bloc (le titre, notamment).
+        Contenu libre, rangé sous le segment identifié qui le précède.
 
-        C'est ce repérage relatif qui permet de replacer la rédaction quand le
-        plan a changé : elle suit le bloc auquel elle se rapporte, pas un rang
-        absolu qui aurait glissé.
+        La clé `""` porte ce qui ouvre le bloc — le titre, notamment. Ce
+        repérage relatif est ce qui permet de replacer la rédaction quand le
+        plan a changé : elle suit le bloc auquel elle se rapporte, et non un
+        rang absolu qui aurait glissé.
         """
         placed: dict[str, list] = {}
         key = ""

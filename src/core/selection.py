@@ -5,13 +5,10 @@ Ce que le plan retient du rapport.
 documentés, comment ils sont triés, et comment les groupes de Power BI se
 réorganisent en parties du document.
 
-Cette lecture-là est **partagée** : le document s'en sert pour savoir quoi
-écrire, la capture pour savoir quoi photographier — photographier un visuel que
-le document tait serait du temps perdu —, et le questionnaire de lancement pour
-proposer la liste des visuels qu'on peut écarter.
-
-Ce qui relève de la seule mise en forme du document — tables, regroupements de
-mesures, étapes Power Query — reste dans `apps.document.filters`.
+Cette lecture est **partagée** : le document s'en sert pour savoir quoi écrire,
+et le questionnaire de lancement pour proposer la liste des visuels qu'on peut
+écarter. Ce qui relève de la seule mise en forme — tables, regroupements de
+mesures, étapes Power Query — reste dans `src.report_generator.filters`.
 """
 
 from typing import Any
@@ -42,6 +39,7 @@ def lowercase(values: Any) -> set[str]:
 
 
 def filter_pages(pages: list[ReportPage], config: DocConfig) -> list[ReportPage]:
+    """Pages retenues par `data.pages`, dans l'ordre voulu par le plan."""
     options = config.data["pages"]
     excluded = lowercase(options.get("exclude_names"))
 
@@ -61,6 +59,7 @@ def filter_pages(pages: list[ReportPage], config: DocConfig) -> list[ReportPage]
 
 
 def filter_visuals(visuals: list[Visual], config: DocConfig) -> list[Visual]:
+    """Visuels retenus par `data.visuals`, dans l'ordre voulu par le plan."""
     options = config.data["visuals"]
     excluded_types = lowercase(options.get("exclude_types"))
     excluded_titles = lowercase(options.get("exclude_titles"))
@@ -78,20 +77,17 @@ def filter_visuals(visuals: list[Visual], config: DocConfig) -> list[Visual]:
 
 def organize_page(page: ReportPage, config: DocConfig) -> None:
     """
-    Répartit les visuels documentés de la page entre groupes Power BI et
-    visuels isolés, et renseigne la légende de chaque groupe.
+    Répartit les visuels documentés de la page entre groupes et isolés.
 
-    À l'issue de l'appel :
-      `page.visuals`            visuels documentés, dans l'ordre du document ;
-      `page.groups`             groupes racines documentés, garnis ;
-      `page.ungrouped_visuals`  visuels documentés hors de tout groupe.
+    La page est renseignée sur place :
 
-    Les sous-groupes sont rattachés à leur groupe racine : un groupe imbriqué
-    ne crée pas de partie supplémentaire, son contenu rejoint la légende et le
-    détail du groupe racine en gardant trace du chemin (`member.group_path`).
+        `page.visuals`            tous les documentés, dans l'ordre du document
+        `page.groups`             groupes racines documentés, garnis
+        `page.ungrouped_visuals`  ceux qui n'appartiennent à aucun groupe
 
-    Un visuel écarté par `data.visuals` l'est partout : il ne figure ni dans le
-    détail du groupe, ni dans sa légende.
+    Un sous-groupe n'ouvre pas de partie à lui : son contenu rejoint le groupe
+    racine, qui garde trace du chemin dans `member.group_path`. Un visuel
+    écarté par `data.visuals` l'est partout, légende comprise.
     """
     options = config.data["visuals"]
     group_options = options.get("groups") or {}
@@ -152,12 +148,10 @@ def _deserves_part(visuals: list[Visual], options: dict[str, Any]) -> bool:
     """
     Un groupe mérite-t-il sa propre partie du document ?
 
-    Sans visuel documenté, il n'apporte que sa capture. Avec un seul, son titre
-    et sa légende d'une ligne ne font que redire ce que le visuel dit déjà,
-    au prix d'un niveau de plan de plus.
-
-    Dans les deux cas la partie de groupe est passée, et le visuel — s'il y en
-    a un — est documenté seul, à la suite de la page.
+    Avec un seul visuel documenté, son titre et sa légende d'une ligne ne font
+    que redire ce que le visuel dit déjà. Sans aucun, il n'y a rien à dire.
+    Dans les deux cas le visuel, s'il y en a un, est documenté à la suite de
+    la page — `keep_single` et `keep_empty` rétablissent la partie.
     """
     if not visuals:
         return bool(options.get("keep_empty"))
@@ -193,8 +187,8 @@ def _root_and_path(
     """
     Groupe racine contenant un élément, et chemin des sous-groupes traversés.
 
-    Un `parentGroupName` inconnu ne rattache à rien : l'élément est traité
-    comme isolé plutôt que rangé dans un groupe absent de la page.
+    Un `parentGroupName` inconnu ne rattache à rien : l'élément passe pour
+    isolé plutôt que rangé dans un groupe absent de la page.
     """
     chain: list[VisualGroup] = []
     seen: set[str] = set()
@@ -229,9 +223,9 @@ def documentable_titles(report: PowerBIReport, config: DocConfig) -> list[str]:
     """
     Titres des groupes et visuels que le document peut détailler.
 
-    Ils sont proposés au lancement pour être écartés de la partie « Visuels ».
-    Un bandeau d'en-tête porte le même titre sur toutes les pages : les titres
-    sont donc dédoublonnés, et en écarter un l'écarte partout à la fois.
+    Ils sont proposés au lancement pour être écartés. Un bandeau d'en-tête
+    porte le même titre sur toutes les pages : les titres sont dédoublonnés,
+    et en écarter un l'écarte partout à la fois.
     """
     titles = {group.title for page in report.pages for group in page.groups}
     for page in report.pages:

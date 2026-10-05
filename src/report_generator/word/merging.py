@@ -12,11 +12,10 @@ Deux encadrements, selon à qui le contenu appartient une fois écrit :
     seed   amorce — écrite une fois, puis laissée à l'utilisateur (`paragraph`,
            `image`, `user_fill`)
 
-Dans les deux cas le marqueur de fermeture relève l'empreinte de chaque contenu
-écrit : elle dit plus tard ce que le script avait posé là, donc ce qui a été
-ajouté ou rédigé depuis. C'est aussi cette identité qui permet à un bloc ajouté
-au plan d'apparaître dans les éléments déjà documentés : sans elle, il était
-indistinguable du contenu libre de l'utilisateur, et n'arrivait jamais.
+Dans les deux cas, le marqueur de fermeture relève l'empreinte de chaque
+contenu écrit : elle dira plus tard ce que le script avait posé là, donc ce qui
+a été ajouté ou rédigé depuis. C'est aussi ce qui permet à un bloc ajouté au
+plan d'arriver dans un document déjà généré.
 """
 
 from contextlib import contextmanager
@@ -34,7 +33,15 @@ _TABLE = qn("w:tbl")
 
 
 class MergeWriter:
+    """
+    Pose les marqueurs du document, et tient le bilan des changements.
+
+    Sans document précédent, il ne fait que marquer : le bilan reste celui
+    d'une première génération.
+    """
+
     def __init__(self, body, config: DocConfig, previous: PreviousDocument | None):
+        """Ouvre le bilan sur ce que le document précédent contenait."""
         self.body = body
         self.previous = previous or PreviousDocument()
         self.options = config.merge
@@ -54,16 +61,12 @@ class MergeWriter:
         """
         Ancre un élément documenté, et retourne son identifiant.
 
-        L'identifiant est le `bookmark:` du plan quand il en porte un
-        (`measure:Marge`, `visual:<page>:<visuel>`), sinon `section:<id>` : des
-        identifiants stables, issus de Power BI ou du plan. Une section qui n'a
-        ni l'un ni l'autre est repérée par son titre sous la partie qui la
-        contient (`<parent>><titre>`) — faute de quoi elle n'aurait aucune
-        identité, et une sous-partie ajoutée au rapport n'apparaîtrait jamais
-        dans un document déjà généré.
-
-        Le `fingerprint:` décrit l'état technique dont dépend la documentation
-        rédigée.
+        L'identifiant vient du `bookmark:` du plan quand il en porte un
+        (`measure:Marge`), sinon de son `id:` (`section:<id>`) — des repères
+        stables, issus de Power BI ou du plan. À défaut des deux, c'est le
+        titre sous la partie qui la contient (`<parent>><titre>`) : sans quoi
+        une sous-partie ajoutée n'arriverait jamais dans un document déjà
+        généré.
         """
         if self._freeform:
             return ""
@@ -83,13 +86,11 @@ class MergeWriter:
         """
         Suspend tout repérage : la partie entière appartient à l'utilisateur.
 
-        Une partie déclarée `seed:` dans le plan est écrite à la première
-        génération — ses sous-titres compris — puis laissée telle quelle. Ses
-        sous-parties ne sont donc pas ancrées et ses blocs pas encadrés : tout
-        son contenu est libre, et revient intact à chaque régénération, y
-        compris les titres que l'utilisateur a ajoutés, déplacés ou supprimés.
-
-        Seule la partie elle-même reste ancrée, pour qu'on sache où la reposer.
+        Une partie déclarée `seed:` est écrite une fois, sous-titres compris,
+        puis laissée telle quelle : ni ses sous-parties ni ses blocs ne sont
+        repérés, et tout lui revient intact — y compris les titres qu'elle a
+        gagnés ou perdus. Seule la partie elle-même reste ancrée, pour qu'on
+        sache où la reposer.
         """
         if not active:
             yield
@@ -106,15 +107,13 @@ class MergeWriter:
         """
         Encadre un bloc du plan, pour lui donner une identité.
 
-        Les blocs qui n'exposent que des données du rapport — `property` (code
-        DAX, sources, usages) et `table` (champs d'un visuel) — appartiennent
-        au script : ils sont réécrits à chaque génération. Tout le reste —
-        paragraphes, emplacements d'image, zones à compléter — est une amorce :
-        écrite à la première génération, puis laissée à l'utilisateur. Le plan
-        peut trancher explicitement avec `generated:`.
+        Les blocs qui n'exposent que des données du rapport — `property` et
+        `table` — appartiennent au script, et sont réécrits à chaque fois.
+        Tout le reste est une amorce : écrite une fois, puis laissée à
+        l'utilisateur. Le plan peut trancher avec `generated:`.
 
-        Un bloc sans `id:` n'est pas encadré : il n'a pas d'identité, et le plan
-        ne pourra ni le réécrire ni le retrouver.
+        Un bloc sans `id:` n'est pas encadré : sans identité, le plan ne
+        pourra ni le réécrire ni le retrouver.
         """
         block_id = block.get("id")
         if not self.enabled or not block_id or self._freeform:
@@ -146,6 +145,7 @@ class MergeWriter:
     def _identifier(
         self, section: dict[str, Any], context: dict[str, Any], parent: str, title: str
     ) -> str:
+        """Identifiant d'une section : son `bookmark:`, son `id:`, ou son titre."""
         if not self.enabled:
             return ""
         if section.get("bookmark"):
@@ -158,15 +158,13 @@ class MergeWriter:
         """
         Garantit qu'un identifiant n'est posé qu'une fois.
 
-        Un `id:` de section placé dans une boucle produit le même
-        `section:<id>` à chaque tour : les blocs deviendraient indistinguables
-        et la rédaction reprise irait au mauvais endroit — ou nulle part.
-
-        Les occurrences suivantes sont donc distinguées par leur titre, qui
-        vient de la donnée parcourue et ne bouge donc pas si la collection est
-        réordonnée. À défaut de titre, il ne reste que le rang, qui lui bouge :
-        c'est un pis-aller, et le cas est signalé avec la vraie réponse — un
-        `bookmark:` bâti sur la donnée parcourue.
+        Un `id:` de section placé dans une boucle reviendrait à chaque tour :
+        les blocs deviendraient indistinguables, et la rédaction reprise irait
+        au mauvais endroit. Les occurrences suivantes sont donc distinguées
+        par leur titre, qui vient de la donnée parcourue et ne bouge pas si la
+        collection est réordonnée. À défaut de titre il ne reste que le rang,
+        qui bouge : c'est un pis-aller, et le cas est signalé avec la vraie
+        réponse — un `bookmark:` bâti sur la donnée parcourue.
         """
         if not element_id:
             return ""
@@ -213,6 +211,7 @@ _GENERATED_TYPES = ("property", "table")
 
 
 def _is_generated(block: dict[str, Any]) -> bool:
+    """Le contenu du bloc appartient-il au script, ou à l'utilisateur ?"""
     if "generated" in block:
         return bool(block["generated"])
     return block.get("type") in _GENERATED_TYPES

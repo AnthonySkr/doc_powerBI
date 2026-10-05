@@ -2,7 +2,7 @@
 Lecture d'un projet Power BI : du `.pbip` aux métadonnées.
 
 Le seul module qui touche au projet : il lit, croise, et retourne un
-`PowerBiMetadata`. Il n'écrit aucun fichier et n'ouvre aucune fenêtre.
+`PowerBiMetadata`. Il n'écrit aucun fichier.
 
     extractor.py      le point d'entrée : `open_project` puis `extract`
     pbip.py           les dossiers d'un projet .pbip

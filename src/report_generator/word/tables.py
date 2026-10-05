@@ -28,8 +28,9 @@ def set_fixed_layout(table, widths: list[float | None]) -> None:
 
 def set_table_look(table, first_row: bool) -> None:
     """
-    Active la mise en forme conditionnelle du style de tableau : ligne
-    d'en-tête colorée et lignes alternées, sans bandes verticales.
+    Active la mise en forme conditionnelle du style de tableau.
+
+    Ligne d'en-tête colorée et lignes alternées, sans bandes verticales.
     """
     look = _get_or_add(table._tbl.tblPr, "w:tblLook")
     look.set(qn("w:val"), "0620" if first_row else "0420")

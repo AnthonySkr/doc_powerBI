@@ -10,8 +10,6 @@ import re
 
 from src.core import console
 
-# Mots-clés ouvrant un bloc TMDL. Ils servent de bornes : un bloc `measure`
-# s'arrête au prochain mot-clé de même niveau d'indentation.
 BLOCK_KEYWORDS = frozenset(
     {
         "column",
@@ -24,6 +22,12 @@ BLOCK_KEYWORDS = frozenset(
         "role",
     }
 )
+"""
+Mots-clés ouvrant un bloc TMDL.
+
+Ils servent de bornes : un bloc `measure` s'arrête au prochain mot-clé de même
+niveau d'indentation.
+"""
 
 _ENCODINGS = ("utf-8", "utf-8-sig", "cp1252", "latin-1")
 
@@ -66,6 +70,7 @@ def table_name(content: str) -> str:
 
 
 def indent_of(line: str) -> int:
+    """Nombre d'espaces en tête de ligne."""
     return len(line) - len(line.lstrip())
 
 
@@ -104,7 +109,9 @@ def block_header(first_line: str, keyword: str) -> tuple[str | None, str | None,
     Les apostrophes internes d'un nom quoté sont doublées en TMDL
     (`measure 'Chiffre d''affaires'`).
 
-    Retourne (nom, expression inline ou None, ouverture d'un bloc ```).
+    Returns:
+        Le nom, l'expression écrite sur la même ligne (ou None), et si la
+        ligne ouvre un bloc délimité par ```.
     """
     match = re.match(_HEADER.format(keyword=keyword), first_line)
     if not match:

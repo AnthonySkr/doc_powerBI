@@ -17,8 +17,10 @@ _IDENTIFIER = re.compile(r"(?:'[^']+'\[([^\]]+)\])|\[([^\]]+)\]")
 
 def analyze_dependencies(all_measures: dict[str, DaxMeasure]) -> None:
     """
-    Calcule les dépendances de toutes les mesures et les renseigne en place :
-    `dependent_measures`, `used_columns` et `used_by_measures`.
+    Calcule les dépendances de toutes les mesures, et les renseigne en place.
+
+    Trois attributs sont remplis sur chaque mesure : `dependent_measures`,
+    `used_columns` et `used_by_measures`.
     """
     known = set(all_measures)
 
@@ -45,7 +47,7 @@ def measures_used_in_report(report: PowerBIReport, all_measures: dict[str, DaxMe
     Mesures employées par le rapport, plus leurs dépendances transitives.
 
     Employée veut dire affichée par un visuel — étiquettes de référence d'une
-    carte comprises — ou posée en filtre, de rapport, de page ou de visuel.
+    carte comprises — ou posée en filtre.
     """
     used = report.measures_used
     dependencies = (all_measures[name].dependent_measures for name in used if name in all_measures)
@@ -67,7 +69,7 @@ def _identifiers(expression: str, known_measures: set[str]) -> tuple[set[str], s
 
 
 def _reachable(start: str, direct: dict[str, set[str]]) -> set[str]:
-    """Mesures atteignables depuis `start`, `start` compris (parcours en profondeur)."""
+    """Mesures atteignables depuis `start`, `start` compris."""
     seen: set[str] = set()
     stack = [start]
     while stack:

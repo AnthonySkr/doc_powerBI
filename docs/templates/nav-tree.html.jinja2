@@ -1,0 +1,57 @@
+{# Arborescence des modules, pour la barre de navigation.
+
+   pdoc les énumère à plat, chacun sous son nom complet :
+   `src.report_generator.merge.transplant`. Passé une quarantaine d'entrées, la
+   liste ne se lit plus et tout commence par le même préfixe.
+
+   Les mêmes modules sont ici rangés en arbre, chacun sous son seul nom —
+   `transplant`, sous `merge`, sous `report_generator`. Un paquet se replie, et
+   s'ouvre de lui-même sur le chemin de la page affichée.
+
+   `arbre` prend :
+       courant   nom complet du module affiché, ou "" sur l'accueil
+       racine    ce qui remonte au dossier du site : "", "../", "../../"…
+       ouvert    déplier tout l'arbre, quelle que soit la page #}
+
+{% macro noeud(nom, courant, racine, ouvert) %}
+    {% set enfants = niveau(nom, courant, racine, ouvert) | trim %}
+    {% set lien %}
+        <a class="{{ 'ici' if courant == nom }}"
+           href="{{ racine }}{{ nom.replace('.', '/') }}.html">{{ nom.rsplit('.', 1)[-1] }}</a>
+    {% endset %}
+    <li>
+        {% if enfants %}
+            <details{{ ' open' if ouvert or courant == nom or courant.startswith(nom ~ '.') }}>
+                <summary>{{ lien | safe }}</summary>
+                {{ enfants | safe }}
+            </details>
+        {% else %}
+            {{ lien | safe }}
+        {% endif %}
+    </li>
+{% endmacro %}
+
+{% macro niveau(parent, courant, racine, ouvert) %}
+    {% set enfants = [] %}
+    {% for nom in all_modules if '.' in nom and nom.rsplit('.', 1)[0] == parent %}
+        {% set _ = enfants.append(nom) %}
+    {% endfor %}
+    {% if enfants %}
+        <ul>
+            {% for nom in enfants | sort %}{{ noeud(nom, courant, racine, ouvert) | safe }}{% endfor %}
+        </ul>
+    {% endif %}
+{% endmacro %}
+
+{% macro arbre(courant="", racine="", ouvert=false) %}
+    {# Une racine est un module dont le parent n'est pas documenté : `main`,
+       qui n'en a pas, et les trois modules sous `src`, que le site ne couvre
+       pas lui-même. #}
+    {% set racines = [] %}
+    {% for nom in all_modules if '.' not in nom or nom.rsplit('.', 1)[0] not in all_modules %}
+        {% set _ = racines.append(nom) %}
+    {% endfor %}
+    <ul class="arbre">
+        {% for nom in racines | sort %}{{ noeud(nom, courant, racine, ouvert) | safe }}{% endfor %}
+    </ul>
+{% endmacro %}

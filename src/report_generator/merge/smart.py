@@ -20,7 +20,7 @@ rubrique ajoutée au YAML apparaît donc aussi dans les éléments déjà rédig
     note ajoutée par l'utilisateur     →   recopiée telle quelle
     [gen] tableau des champs           →   remplacé par le tableau à jour
       description écrite sous le tableau   récupérée dedans, remise à sa place
-    capture collée par l'utilisateur   →   recopiée, image comprise
+    image collée par l'utilisateur     →   recopiée, image comprise
     [gen] code DAX                     →   remplacé par la formule à jour
     [seed] zone à compléter rédigée    →   la version du document l'emporte
     [seed] amorce jamais touchée       →   reprise du plan, donc à jour
@@ -114,6 +114,8 @@ def merge(
 
 
 class _Merger:
+    """Recompose un bloc à la fois, et tient le compte de ce qu'il préserve."""
+
     def __init__(
         self,
         transplanter: Transplanter,
@@ -122,6 +124,7 @@ class _Merger:
         collector: orphans.Collector,
         promoted: dict[str, set[str]],
     ):
+        """Fixe une fois pour toutes les réglages de signalement du plan."""
         self.transplanter = transplanter
         self.log = log
         self.collector = collector
@@ -185,16 +188,12 @@ class _Merger:
         Écarte le titre qu'un élément voisin vient de reprendre à son compte.
 
         Une sous-partie sans `bookmark:` n'était pas ancrée : son titre vivait
-        comme contenu libre, à la suite de l'élément précédent. Maintenant
-        qu'elle est ancrée, le titre est écrit par son propre bloc — le
-        recopier ferait apparaître un doublon, le temps de la génération qui
-        suit la mise à jour.
+        comme contenu libre, à la suite de l'élément précédent. Ancrée, son
+        titre est écrit par son propre bloc — le recopier ferait un doublon.
 
-        Le rapprochement est délibérément étroit, et ne vaut que le temps de la
-        migration (voir `_predates_seeds`) : seul le titre d'un élément neuf est
-        écarté, et seulement du contenu libre de l'élément qui le précède
-        immédiatement. Le texte écarté n'est pas perdu pour autant — c'est
-        exactement celui que la partie nouvellement ancrée vient d'écrire.
+        Le rapprochement est étroit à dessein, et ne vaut que le temps de la
+        migration (voir `_predates_seeds`). Rien n'est perdu : le texte écarté
+        est exactement celui que la partie nouvellement ancrée vient d'écrire.
         """
         promoted = self._promoted.get(element_id)
         if not promoted:
@@ -238,18 +237,16 @@ class _Merger:
         """
         Ramène dans le tableau à jour ce qu'on avait écrit dans ses cellules.
 
-        Retourne ce qui reste à recueillir : les données retouchées qui ne sont
-        pas des tableaux, et les tableaux dont les annotations n'ont pas pu être
-        rattachées à une ligne sûre.
-
-        Le rapprochement se fait par le rang qu'occupait la donnée retouchée
+        Le rapprochement passe par le rang qu'occupait la donnée retouchée
         parmi les contenus du bloc, et non par l'ordre des tableaux : un bloc
         qui en écrit plusieurs verrait sinon l'annotation du second reposée
-        dans le premier.
+        dans le premier. Une donnée que le script réécrit à l'identique est
+        écartée d'abord (voir `_rewritten`).
 
-        Une donnée que le script réécrit à l'identique est écartée d'abord :
-        elle n'a pas été retouchée, c'est son empreinte qui n'a pas survécu au
-        passage dans Word (voir `_rewritten`).
+        Returns:
+            Ce qui reste à recueillir en annexe : les données retouchées qui
+            ne sont pas des tableaux, et les tableaux dont les annotations
+            n'ont pas trouvé de ligne sûre.
         """
         tables = {rank: node for rank, node in enumerate(content) if node.tag == _TABLE}
         return [
@@ -265,12 +262,11 @@ class _Merger:
 
     def _seed(self, fresh: Segment, old: Segment, changed: bool) -> list:
         """
-        Amorce : écrite à la première génération, puis laissée à l'utilisateur.
+        Amorce : écrite une fois, puis laissée à l'utilisateur.
 
-        Tant qu'elle n'a pas été touchée, c'est la version du plan qui est
-        reprise — une formulation améliorée dans le YAML atteint ainsi les
-        documents existants. Dès qu'on y a écrit, le document l'emporte, et il
-        garde ses propres délimiteurs : eux seuls décrivent ce qu'il contient.
+        Intacte, c'est la version du plan qui est reprise — une formulation
+        améliorée dans le YAML atteint ainsi les documents existants. Touchée,
+        le document l'emporte, avec ses propres délimiteurs.
         """
         if old.untouched:
             return list(fresh.nodes)
@@ -280,9 +276,8 @@ class _Merger:
         """
         Contenu du script remis à jour, autour de ce qu'on a écrit dedans.
 
-        Les données reviennent telles que le script vient de les produire ;
-        les contenus rédigés retrouvés à l'intérieur sont reposés au rang
-        qu'ils occupaient, entre les mêmes données qu'avant.
+        Les données reviennent telles que le script vient de les produire, et
+        ce qui avait été glissé entre elles y retrouve son rang.
         """
         pending: dict[int, list] = {}
         for rank, node in salvaged:
@@ -319,12 +314,11 @@ class _Merger:
     # ── Signalement visuel ────────────────────────────────────────
     def _mark_review(self, node, changed: bool) -> None:
         """
-        Surligne un contenu utilisateur dont l'élément a changé techniquement.
+        Surligne un contenu rédigé dont l'élément a changé techniquement.
 
-        Le surlignage posé par le script est retiré d'abord : il portait sur la
-        version d'avant et n'a plus lieu d'être si plus rien n'a bougé. Celui
-        que l'utilisateur a posé lui-même est reconnaissable — il ne porte pas
-        les couleurs du signalement — et reste en place.
+        Le surlignage posé par le script est retiré d'abord : il portait sur
+        la version d'avant. Celui de l'utilisateur, qui n'emploie pas les
+        couleurs du signalement, reste en place.
         """
         if node.tag != _PARAGRAPH or _is_heading(node):
             return
@@ -395,31 +389,27 @@ def _rewritten(node, content: list) -> bool:
     """
     La donnée retrouvée est-elle celle que le script vient d'écrire à nouveau ?
 
-    L'empreinte relevée à la génération précédente est le seul témoin de ce que
-    le script avait posé, et elle ne survit pas à tout : Word recoupe les runs,
-    perd une espace de bord, réécrit un lien interne sous forme de champ. La
-    donnée passe alors pour retouchée à la main, et sa version d'avant part en
-    annexe — un code DAX auquel personne n'a touché, recopié en fin de document
-    à chaque génération.
+    L'empreinte de la génération précédente ne survit pas à tout : Word recoupe
+    les runs, perd une espace, réécrit un lien en champ. La donnée passerait
+    pour retouchée, et un code DAX intact serait recopié en annexe à chaque
+    génération.
 
-    Le contenu du bloc neuf, lui, est là : si le script s'apprête à réécrire ce
-    même contenu, il n'y a rien à recueillir. La comparaison porte sur le bloc
-    entier plutôt que sur le seul rang correspondant — le nombre de contenus
-    qu'un bloc écrit peut avoir changé entre deux versions du plan, et ce qui
-    compte est qu'aucun texte ne se perde.
+    Le bloc neuf, lui, est là : si le script réécrit ce même contenu, il n'y a
+    rien à recueillir. La comparaison porte sur le bloc entier plutôt que sur
+    le seul rang — le nombre de contenus d'un bloc peut avoir changé.
     """
     return any(markers.same_content(node, fresh) for fresh in content)
 
 
 def _renames(fresh: list[Block], old: dict[str, Block]) -> list[tuple[str, str]]:
     """
-    Rapproche un élément apparu d'un élément disparu, par son état technique.
+    Rapproche un élément apparu d'un élément disparu, par son empreinte.
 
-    Renommer une mesure dans Power BI change son identifiant : le document
-    voyait une suppression suivie d'un ajout, et la rédaction ne suivait pas.
-    Or l'empreinte, elle, ne bouge pas — c'est la même formule DAX. Le
-    rapprochement n'est fait que s'il est **sans ambiguïté** : une seule
-    disparition et une seule apparition portant cette empreinte.
+    Renommer une mesure dans Power BI change son identifiant : le document y
+    verrait une suppression suivie d'un ajout, et la rédaction ne suivrait pas.
+    L'empreinte, elle, ne bouge pas — c'est la même formule. Le rapprochement
+    n'est fait que **sans ambiguïté** : une seule disparition et une seule
+    apparition portant cette empreinte.
     """
     present = {block.element_id for block in fresh if block.element_id}
     appeared = _by_fingerprint(
@@ -463,8 +453,7 @@ def _promoted_headings(fresh: list[Block], old: dict[str, Block]) -> dict[str, s
 
     Une sous-partie que le plan n'ancrait pas encore voit son titre passer du
     contenu libre à un bloc en propre. Le temps d'une génération, le document
-    porte les deux : l'ancien exemplaire traîne à la suite de l'élément
-    précédent, où il vivait. Ces empreintes disent lequel écarter, et où.
+    porte les deux : ces empreintes disent lequel écarter, et où.
     """
     promoted: dict[str, set[str]] = {}
     for position, block in enumerate(fresh):
@@ -517,6 +506,7 @@ def _is_heading(paragraph) -> bool:
 
 
 def _run_properties(run):
+    """Propriétés d'un run (`w:rPr`), créées au besoin."""
     properties = run.find(qn("w:rPr"))
     if properties is None:
         properties = OxmlElement("w:rPr")
@@ -525,6 +515,7 @@ def _run_properties(run):
 
 
 def _clear_highlight(paragraph, colors: set[str]) -> None:
+    """Retire du paragraphe les surlignages que le script avait posés."""
     for run in paragraph.iter(qn("w:r")):
         properties = run.find(qn("w:rPr"))
         if properties is None:
@@ -535,6 +526,7 @@ def _clear_highlight(paragraph, colors: set[str]) -> None:
 
 
 def _set_highlight(paragraph, color: str) -> None:
+    """Surligne le texte du paragraphe, sans toucher aux runs vides."""
     for run in paragraph.iter(qn("w:r")):
         if not any((text.text or "").strip() for text in run.iter(qn("w:t"))):
             continue

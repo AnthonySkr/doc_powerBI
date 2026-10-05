@@ -25,12 +25,14 @@ class ChangeLog:
     preserved: int = 0  # contenus de l'utilisateur repris tels quels
 
     def __post_init__(self) -> None:
+        """Prépare les tables d'états et de titres, tenues au fil de l'écriture."""
         self._status: dict[str, str] = {}
         # Titre de chaque élément ancré : c'est lui qu'on affiche, l'identifiant
         # technique (`visual:page_ventes:v_evolution`) ne disant rien au lecteur.
         self._titles: dict[str, str] = {}
 
     def record(self, element_id: str, status: str, title: str = "") -> None:
+        """Note l'état d'un élément au moment où il est écrit."""
         self._status[element_id] = status
         if title:
             self._titles[element_id] = title
@@ -41,6 +43,7 @@ class ChangeLog:
         return self._titles.get(element_id) or element_id
 
     def status_of(self, element_id: str) -> str:
+        """État d'un élément : nouveau, modifié, ou inchangé."""
         return self._status.get(element_id, UNCHANGED)
 
     def record_rename(self, before: str, after: str) -> None:
@@ -57,10 +60,12 @@ class ChangeLog:
 
     @property
     def written_ids(self) -> set[str]:
+        """Identifiants de tous les éléments écrits cette fois-ci."""
         return set(self._status)
 
     @property
     def has_changes(self) -> bool:
+        """Le rapport a-t-il bougé depuis la génération précédente ?"""
         return bool(self.new or self.changed or self.removed or self.renamed)
 
     def summary(self) -> str:
@@ -85,9 +90,8 @@ class ChangeLog:
         """
         Lignes de détail affichées sous le résumé.
 
-        Les ajouts et les modifications sont énumérés au complet, par leur
-        titre : ce sont eux qu'il faut aller relire dans le document, et le
-        document ne les signale plus lui-même.
+        Ajouts et modifications sont énumérés au complet, par leur titre : ce
+        sont eux qu'il faut aller relire, et le document ne les signale pas.
         """
         lines = []
         for label, titles in (

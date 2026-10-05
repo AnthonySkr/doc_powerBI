@@ -514,8 +514,8 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-2.0.0-windows.zip
-└── powerbi-doc-2.0.0-windows/
+powerbi-doc-0.6-windows.zip
+└── powerbi-doc-0.6-windows/
     ├── powerbi-doc.exe          l'application, autonome
     ├── config.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
@@ -539,6 +539,26 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
 
+### La version vient du dernier tag
+
+Rien à corriger dans le code pour numéroter une livraison : **`git tag v0.8`
+suffit**. La version affichée au lancement, et celle du nom du `.zip`, sont
+relevées sur le dernier tag `v…` du dépôt.
+
+C'est le dernier tag *du dépôt*, et non le dernier tag atteignable depuis la
+branche courante : les versions sont posées sur `main`, qu'une branche de
+travail ne voit pas. Le tri est celui des versions — `v0.10` passe après
+`v0.9`.
+
+Un exécutable, lui, n'emporte pas le dépôt avec lui : `task build` relève la
+version et l'embarque dans un fichier `VERSION`, que le programme lit à défaut
+de git. Une fois gelé, il ne consulte jamais git — un exe déposé dans le dépôt
+de quelqu'un d'autre en prendrait la version. Tout cela vit dans
+`src/core/version.py`.
+
+Sans tag ni fichier — un dépôt fraîchement cloné en surface, par exemple — la
+version vaut `0.0`, qui ne se fait pas passer pour une vraie.
+
 ### Étapes séparées
 
 | Commande | Effet |
@@ -551,24 +571,23 @@ La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
 un fichier à embarquer, une icône (`icon=`) ou un module manquant
 (`hiddenimports`).
 
-## Un programme, trois modules
+## Un programme, deux modules
 
-Le projet est **un seul programme**, découpé en trois modules qui ont chacun
+Le projet est **un seul programme**, découpé en deux modules qui ont chacun
 une responsabilité et une seule :
 
 ```
-.pbip  ──►  pbi_extractor  ──►  [ gui_automator ]  ──►  report_generator  ──►  .docx
+.pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
 ```
 
 | Module | Sa seule responsabilité |
 | --- | --- |
 | `pbi_extractor` | Lire le projet `.pbip` et retourner ce qu'il contient |
-| `gui_automator` | Piloter Power BI Desktop et enregistrer des images |
-| `report_generator` | Écrire le `.docx` à partir de ces données et de ces images |
+| `report_generator` | Écrire le `.docx` à partir de ces données |
 
-Ils vivent sous `src/`. Aucun des trois ne connaît les autres : ils ne
-partagent que `src/core`, et les données qui passent de l'un à l'autre.
-`main.py`, à la racine, les enchaîne — c'est tout ce qu'il fait.
+Ils vivent sous `src/`. Aucun des deux ne connaît l'autre : ils ne partagent
+que `src/core`, et les données qui passent de l'un à l'autre. `main.py`, à la
+racine, les enchaîne — c'est tout ce qu'il fait.
 
 ### Ce qui circule
 
@@ -576,7 +595,6 @@ Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `src/core/models.p
 
 ```python
 metadata = extract(project)  # produit par l'extraction
-capturer.capture(metadata, config, options)  # enrichi de ses images
 write_document(metadata, config, inputs, output_dir)  # lu par le document
 ```
 
@@ -585,7 +603,7 @@ Rien ne transite par le disque entre deux étapes : pas de fichier intermédiair
 
 ### Le socle commun — `src/core/`
 
-Ce que les trois partagent, et rien de plus :
+Ce que les deux partagent, et rien de plus :
 
 | Module | Rôle |
 | --- | --- |
@@ -600,12 +618,8 @@ Ce que les trois partagent, et rien de plus :
 | `paths.py` | La localisation des fichiers livrés (exécutable compris) |
 | `window.py` | La fenêtre console de l'exécutable : attente et plantages |
 
-**`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
-jamais les uns des autres.**
-
-`selection.py` y vit parce que deux modules le consultent : le document pour
-savoir quoi écrire, la capture pour savoir quoi photographier — photographier
-un visuel que le document tait serait du temps perdu.
+**`core` ne dépend d'aucun des deux modules ; les deux dépendent de lui, et
+jamais l'un de l'autre.**
 
 ### Lire la documentation du code
 
@@ -614,10 +628,58 @@ Les docstrings et les annotations du code sont servies comme un site, par
 
 ```bash
 task docs                    # tout le projet, sur http://127.0.0.1:8080
-task docs -- extractor       # le seul module d'extraction
-task docs -- capturer        # … ou capturer, writer, core, main
 task docs-build              # le site statique, dans docs/site/
 ```
+
+Le site couvre toujours le projet entier : une page qui renverrait vers un
+module absent ne vaudrait pas la commande qui l'aurait évitée.
+
+La barre de gauche range les modules **en arbre**, chacun sous son seul nom :
+
+```
+core                  report_generator
+    config                context
+    console               merge
+    models                    markers
+    …                         smart
+                          word
+                              builder
+```
+
+Un paquet se replie, et s'ouvre de lui-même sur le chemin de la page affichée —
+de quoi s'y retrouver à quarante-quatre modules, là où la liste à plat de pdoc
+les nommait tous `src.report_generator.merge.…`.
+
+#### Ce que les pages montrent
+
+**Les fonctions internes sont documentées, pas seulement l'interface.** pdoc
+cache par défaut tout nom commençant par `_` : c'est la bonne règle pour une
+bibliothèque, dont le site publie un contrat. Ce projet n'en est pas une —
+personne n'importe `main._extract` — et son site s'adresse à qui vient reprendre
+le code. Un `generate` qui « enchaîne les trois étapes » sans qu'aucune des
+trois ne paraisse n'apprend rien.
+
+Trois conséquences pour qui écrit du code ici :
+
+| | |
+| --- | --- |
+| Une fonction ou une classe privée | est publiée si elle a une docstring. `@private` dans la docstring l'en retire |
+| Une **constante** privée | reste cachée : les cent `_TABLE = qn("w:tbl")` du projet noieraient le reste |
+| Une constante **publique** | se documente par une docstring **sous** l'affectation — pdoc ne lit pas le commentaire au-dessus |
+
+```python
+STEPS = 3
+"""Lecture du rapport, questions, écriture du document."""
+```
+
+`__all__` ne vit plus que sur les `__init__.py`, où il déclare ce qu'un paquet
+ré-exporte. Sur un module feuille il ne redisait que ce que le préfixe `_` dit
+déjà — et il privait sa page pdoc de ses fonctions internes, pdoc écartant ces
+membres avant même d'arriver au gabarit.
+
+Enfin, **un nom entre backticks devient un lien** vers le membre correspondant :
+c'est de quoi ouvrir un module sur le déroulé de son code, comme le fait
+`main.py`.
 
 Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
 à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
@@ -827,15 +889,15 @@ demande à chaque page.
 
 Chaque module a une responsabilité unique ; ce qu'il expose est déclaré par son
 `__init__.py`, et un seul fichier en porte le point d'entrée — `extractor.py`,
-`capturer.py`, `writer.py`. Les tests sont rassemblés sous `tests/`.
+`writer.py`. Les tests sont rassemblés sous `tests/`.
 
 ```
-main.py                       le chef d'orchestre : enchaîne les trois modules
+main.py                       le chef d'orchestre : enchaîne les deux modules
 config.yaml                   le plan du document
 template-doc-pbib.docx        le template Word
 
 src/
-  core/                       le socle commun — aucun module n'en dépend d'un autre
+  core/                       le socle commun, dont aucun module ne dépend
       models.py               les structures qui circulent, dont PowerBiMetadata
       config.py               le plan : chargement, valeurs par défaut, accès
       expressions.py          variables {{ }}, listes `over:`, conditions `when:`
@@ -846,6 +908,7 @@ src/
       answers.py              mémoire des réponses d'une génération à l'autre
       paths.py                localisation des fichiers livrés (exe compris)
       window.py               fenêtre de l'exécutable : attente et plantages
+      version.py              la version, lue sur le dernier tag du dépôt
 
   pbi_extractor/              le .pbip ──► PowerBiMetadata
       extractor.py            le point d'entrée : les trois sources croisées
@@ -904,12 +967,11 @@ src/
           transplant.py         recopie d'un contenu et de ses dépendances
           changes.py            bilan des ajouts / modifications / retraits
 
-assets/                       destination des captures (voir assets/README.md)
-tests/                        core/, extract/, capture/, document/, et le
-                              parcours complet sur le plan livré
+tests/                        core/, extract/, document/, et le parcours
+                              complet sur le plan livré
 tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
-docs/templates/               habillage du site de documentation
+docs/templates/               accueil et arborescence du site pdoc
 powerbi-doc.spec              recette de construction de l'exécutable
 ```
 
@@ -922,13 +984,13 @@ powerbi-doc.spec              recette de construction de l'exécutable
 | exposer une donnée au plan | `src/core/models.py` puis `src/report_generator/context.py` |
 | ajouter un filtre `data:` | `src/core/selection.py` ou `src/report_generator/filters.py` |
 | ajouter un type de question | `src/core/questions.py`, branché dans `src/core/prompts.py` → `_ask` |
-| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `src/gui_automator/recorder.py`) |
-| corriger un cadrage de capture | `src/gui_automator/geometry.py`, et ses tests |
 | changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `src/core/models.py` |
 | changer l'enchaînement des étapes | `main.py` → `generate` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `src/pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
+| publier une nouvelle version | `git tag v0.8` — rien d'autre |
+| changer l'accueil ou l'arbre du site pdoc | `docs/templates/` |
 
 ## Notes
 
@@ -948,11 +1010,4 @@ task build      # construire l'exécutable
 task package    # construire le zip à distribuer
 task clean      # nettoyer les caches et les artefacts de construction
 task docs       # servir la documentation du code
-```
-
-Mise au point des captures, sans écrire de document :
-
-```bash
-task capture-plan -- rapport.pbip     # ce qui serait capturé
-task calibrate    -- rapport.pbip     # régler le cadrage de la fenêtre
 ```

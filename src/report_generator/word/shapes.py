@@ -1,19 +1,17 @@
 """
-Repères numérotés à faire glisser sur une capture.
+Repères numérotés à faire glisser sur une image.
 
 Sous chaque capture de visuel, un tableau numérote les champs affichés — et ces
-numéros n'ont de sens qu'une fois reportés sur l'image. Jusqu'ici c'était à
-faire à la main, en dessinant une pastille par ligne du tableau.
+numéros n'ont de sens qu'une fois reportés sur l'image. Le script dessine donc
+les pastilles lui-même, alignées sous l'emplacement : il ne reste qu'à les
+attraper à la souris et à les déposer au bon endroit.
 
-Le script les dessine donc lui-même, alignés sous l'emplacement de la capture :
-il ne reste qu'à les attraper à la souris et à les déposer au bon endroit de
-l'image. Ce sont des formes **flottantes** (`wrapNone`, `allowOverlap`) : elles
-se posent par-dessus la capture sans déplacer une ligne du document, et les
-flèches du clavier les ajustent au pixel près.
+Ce sont des formes **flottantes** (`wrapNone`, `allowOverlap`) : elles se
+posent par-dessus l'image sans déplacer une ligne du document, et les flèches
+du clavier les ajustent au pixel près.
 
-Deux écritures de la même forme, comme Word le fait lui-même : la moderne
-(`wps`, Word 2010 et plus) et, en repli, la forme héritée (VML) pour les
-lecteurs qui ne connaissent que celle-là.
+Deux écritures de la même forme, comme Word le fait : la moderne (`wps`, Word
+2010 et plus) et, en repli, la forme héritée (VML).
 """
 
 import math
@@ -45,8 +43,8 @@ class MarkerStyle:
     """
     Aspect et disposition d'une rangée de repères, tels que le plan les déclare.
 
-    Les longueurs sont déjà converties en EMU : `rendering.image_placeholder`
-    les exprime en centimètres, la conversion appartient à qui lit le plan.
+    Les longueurs sont déjà en EMU : `rendering.image_placeholder` les exprime
+    en centimètres, et la conversion revient à qui lit le plan.
     """
 
     size: Emu
@@ -63,8 +61,9 @@ def draw_row(paragraph, labels: list[str], style: MarkerStyle, first_id: int) ->
     """
     Pose une rangée de repères sur le paragraphe, repliée au-delà de `per_row`.
 
-    Retourne le dernier identifiant de forme employé : Word refuse deux formes
-    de même identifiant, la rangée suivante reprend donc au-dessus.
+    Returns:
+        Le dernier identifiant de forme employé. Word refuse deux formes de
+        même identifiant : la rangée suivante reprend au-dessus.
     """
     # Les repères flottent : sans hauteur réservée, ils déborderaient sur ce
     # qui suit la capture. Le paragraphe porte donc celle de leurs rangées.
@@ -108,9 +107,8 @@ def last_id(doc) -> int:
     """
     Plus grand identifiant de forme déjà présent dans le document.
 
-    Word tient les identifiants de formes pour uniques : deux `wp:docPr` de
-    même `id` lui font signaler un document illisible. Les repères se
-    numérotent donc au-dessus de ce que le template contient déjà.
+    Deux `wp:docPr` de même `id` font signaler à Word un document illisible :
+    les repères se numérotent au-dessus de ce que le template porte déjà.
     """
     ids = [
         int(element.get("id") or 0)
@@ -132,6 +130,7 @@ def _positions(count: int, style: MarkerStyle) -> list[tuple[Emu, Emu]]:
 
 
 def _escape(value: str) -> str:
+    """Échappe ce qui irait dans un fragment XML."""
     return (
         str(value)
         .replace("&", "&amp;")

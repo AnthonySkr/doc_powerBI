@@ -1,1 +1,0 @@
-"""Tests du module capture."""

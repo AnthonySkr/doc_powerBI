@@ -1,21 +1,15 @@
 """
 Écriture des contenus à la fin du corps du document.
 
-python-docx place chaque paragraphe et chaque tableau *devant* `w:sectPr`, les
-propriétés de section qui ferment le corps. Pour trouver cette place, il
-parcourt tous les enfants du corps — à chaque écriture. Le coût d'un contenu
-croît donc avec ce qui a déjà été écrit, et celui d'un document avec le carré
-de sa taille : 1,7 s pour 50 mesures, 37 s pour 200, et plus d'aboutissement du
-tout au-delà.
+python-docx insère chaque paragraphe et chaque tableau *devant* `w:sectPr`, et
+reparcourt tous les enfants du corps pour trouver cette place — à chaque
+écriture. Le coût d'un document croît donc avec le carré de sa taille : 1,7 s
+pour 50 mesures, 37 s pour 200, et plus rien d'abouti au-delà.
 
-`Body` retient `w:sectPr` une fois pour toutes et insère juste devant : la
-place est la même, le parcours n'a plus lieu. Le document produit est
+`Body` retient `w:sectPr` une fois pour toutes et insère juste devant : même
+place, sans le parcours. Les identifiants de styles sont relevés de même à
+l'ouverture, plutôt que retrouvés à chaque paragraphe. Le document produit est
 identique, à ceci près qu'il s'écrit en temps constant.
-
-Les styles suivent le même principe. `paragraph.style = "Titre"` demande à
-python-docx l'identifiant du style, qui compare le style au style par défaut du
-template en reparcourant toute sa table — pour chaque paragraphe. Les
-identifiants sont ici relevés une fois à l'ouverture.
 """
 
 from docx.enum.style import WD_STYLE_TYPE
@@ -34,6 +28,7 @@ class Body:
     """Ajoute paragraphes et tableaux à la fin du corps, en temps constant."""
 
     def __init__(self, doc):
+        """Relève les propriétés de section et la table des styles."""
         self.doc = doc
         self._body = doc.element.body
         self._section = self._body.find(_SECTION)

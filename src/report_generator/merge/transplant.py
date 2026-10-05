@@ -1,10 +1,10 @@
 """
 Recopie d'un contenu d'un document Word vers un autre.
 
-Copier le XML ne suffit pas. Un paragraphe ne se suffit pas à lui-même : il
-renvoie à des *parties* du fichier .docx qui vivent ailleurs.
+Copier le XML ne suffit pas : un paragraphe renvoie à des *parties* du fichier
+`.docx` qui vivent ailleurs.
 
-    une capture d'écran, un lien externe   une relation (`r:embed`, `r:id`)
+    une image, un lien externe             une relation (`r:embed`, `r:id`)
     une liste à puces ou numérotée         `numbering.xml`
     un style créé dans le document         `styles.xml`
     un commentaire de révision             `comments.xml`
@@ -53,6 +53,7 @@ class Transplanter:
     """Recopie des éléments depuis un document source vers un document cible."""
 
     def __init__(self, source_document, target_document, first_bookmark_id: int = 10_000):
+        """Relève une fois pour toutes les parties liées des deux documents."""
         self.source = source_document.part if source_document is not None else None
         self.target = target_document.part
         self._relations: dict[str, str] = {}
@@ -85,6 +86,7 @@ class Transplanter:
 
     # ── Relations : images, objets, liens externes ────────────────
     def _remap_relations(self, clone) -> None:
+        """Rattache au document cible chaque partie que la copie désigne."""
         if self.source is None:
             return
 
@@ -315,6 +317,7 @@ def _insert_abstract(root, abstract) -> None:
 
 
 def _remove(element) -> None:
+    """Détache un élément de son parent, s'il en a un."""
     parent = element.getparent()
     if parent is not None:
         parent.remove(element)

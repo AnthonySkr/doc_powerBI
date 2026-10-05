@@ -1,10 +1,25 @@
 """
 Génération de la documentation Word d'un rapport Power BI (`.pbip`).
 
-Le chef d'orchestre : il enchaîne les trois modules, il ne travaille pas.
+Le chef d'orchestre : il enchaîne les étapes.
+
+    .pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
 
 Un seul objet circule d'un bout à l'autre, le `PowerBiMetadata` : rien ne
 transite par le disque entre deux étapes.
+
+## Le déroulé
+
+`main` tient la fenêtre et le code de sortie, `parse_args` lit la ligne de
+commande, et `generate` enchaîne les trois étapes :
+
+1. `_extract` — le `.pbip` devient un `PowerBiMetadata` ;
+2. `_ask` — les questions du plan, et la mémoire des réponses ;
+3. `_document` — les métadonnées deviennent un `.docx`.
+
+Le reste sert ces trois-là : `_config` et `_project` ouvrent ce qu'on leur
+donne, `_announce` le rappelle à l'écran, `_rewriter` propose la relecture des
+textes du plan.
 """
 
 import argparse
@@ -18,7 +33,6 @@ from src.core import __version__, answers, console, prompts, questions
 from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
 from src.core.models import PowerBiMetadata
 from src.core.window import ConsoleWindow
-from src.gui_automator import CaptureError, capturer
 from src.pbi_extractor import ExtractError, PbipProject, extract, open_project
 from src.report_generator import (
     DocumentError,
@@ -44,7 +58,10 @@ MODES = {
 # Ce qui doit être prêt avant de lancer, mode par mode. Une capture prise
 # sans eux échoue, ou photographie autre chose que le rapport. Chaque entrée
 # est une consigne seule, ou un couple (consigne, ce qui la précise).
-_WORD_CLOSED = ("Le document Word fermé, s'il est ouvert", "sinon il ne peut pas être réécrit")
+_WORD_CLOSED = (
+    "Le document Word fermé, s'il est ouvert",
+    "sinon il ne peut pas être réécrit",
+)
 _CAPTURE_READY = (
     "Power BI Desktop ouvert sur ce rapport, en vue Rapport",
     ("Le pointillé autour de la page visible sur ses quatre côtés",),
@@ -66,28 +83,24 @@ class PipelineError(Exception):
     """Erreur bloquante, à afficher à l'utilisateur avant de sortir."""
 
 
-class Steps:
-    """Le rang de l'étape en cours, sur le nombre d'étapes de l'exécution."""
-
-    def __init__(self, total: int):
-        self.total = total
-        self.done = 0
-
-    def next(self) -> tuple[int, int]:
-        self.done += 1
-        return self.done, self.total
-
-
 @dataclass(frozen=True)
 class Options:
     """Ce que la ligne de commande demande."""
 
     pbip_path: str
+    """Chemin du fichier `.pbip` à documenter."""
+
     config_path: str = DEFAULT_CONFIG_PATH
+    """Chemin du plan YAML."""
+
     interactive: bool = True
+    """Poser les questions du plan, plutôt que prendre ses défauts."""
+
     pause: bool = True
     mode: str = TEXT
-    capture_options: capturer.CaptureOptions = field(default_factory=capturer.CaptureOptions)
+    capture_options: capturer.CaptureOptions = field(
+        default_factory=capturer.CaptureOptions
+    )
     show_capture_plan: bool = False
     calibrate: bool = False
 
@@ -190,8 +203,12 @@ def _captures_wanted(options: Options) -> bool:
     if not options.interactive:
         return False
     console.blank()
-    console.info("Le document est écrit. Les captures peuvent y être ajoutées maintenant.")
-    if not questions.confirm("Prendre les captures et les insérer dans le document ?", False):
+    console.info(
+        "Le document est écrit. Les captures peuvent y être ajoutées maintenant."
+    )
+    if not questions.confirm(
+        "Prendre les captures et les insérer dans le document ?", False
+    ):
         return False
     _check_prerequisites(PREREQUISITES[FULL])
     return True
@@ -265,7 +282,9 @@ def _capture(
         console.warn(f"Captures abandonnées ({e}) — le document réservera leur place.")
 
 
-def _inspect_captures(metadata: PowerBiMetadata, config: DocConfig, options: Options) -> None:
+def _inspect_captures(
+    metadata: PowerBiMetadata, config: DocConfig, options: Options
+) -> None:
     """`--capture-plan` et `--calibrate` : ils n'écrivent aucun document."""
     directory = capturer.captures_dir(metadata, config)
     try:
@@ -279,25 +298,21 @@ def _inspect_captures(metadata: PowerBiMetadata, config: DocConfig, options: Opt
 
 
 def _ask(
-    metadata: PowerBiMetadata, config: DocConfig, interactive: bool, steps: Steps
+    metadata: PowerBiMetadata, config: DocConfig, interactive: bool
 ) -> dict[str, Any]:
     """
-    Les questions du plan, entre la lecture et l'écriture.
+    Deuxième **étape** : les réponses aux questions du plan.
 
-    Les réponses de la dernière génération sont reproposées : re-cocher à
-    l'identique une liste de visuels écartés n'est pas une chose à confier à la
-    mémoire de l'utilisateur. Elles vivent à côté du `.pbip`, et non dans le
-    dossier de sortie — que l'une d'elles désigne.
+    Celles de la génération précédente sont reproposées, puis réécrites. Elles
+    restent à côté du `.pbip`, et non dans le dossier de sortie.
     """
+    console.step("Renseignements", 2, STEPS)
     context = prompts.base_context(metadata.report, config)
     path = answers.path(config, {"report": metadata.report}, metadata.project_dir)
     remembered = answers.read(path)
 
-    if interactive:
-        given = prompts.ask_inputs(config, context, remembered, step=steps.next())
-    else:
-        steps.next()
-        given = prompts.default_inputs(config, context, remembered)
+    ask = prompts.ask_inputs if interactive else prompts.default_inputs
+    given = ask(config, context, remembered)
 
     answers.write(path, given)
     return given
@@ -317,7 +332,7 @@ def _document(
     output_dir: Path,
     rewrite: prompts.TextProvider | None,
 ) -> None:
-    """Dernière étape : les métadonnées deviennent un `.docx`."""
+    """Troisième **étape** : les métadonnées deviennent un `.docx`."""
     try:
         result = write_document(metadata, config, inputs, output_dir, rewrite)
     except DocumentError as e:
@@ -326,12 +341,20 @@ def _document(
     report_result(result)
 
 
+def _rewriter(options: Options, inputs: dict[str, Any]) -> prompts.TextProvider | None:
+    """Relecture des textes types du plan, si l'utilisateur l'a demandée."""
+    return prompts.make_text_provider(
+        options.interactive and bool(inputs.get("editer_textes", False))
+    )
+
+
 # ─────────────────────────────────────────────────────────────
 #  Détails
 # ─────────────────────────────────────────────────────────────
 
 
 def _announce(project: PbipProject, config: DocConfig) -> None:
+    """Rappelle à l'écran ce qui va être documenté, et avec quel plan."""
     console.blank()
     console.field("Rapport", project.name)
     console.field("Projet", str(project.directory))
@@ -341,6 +364,7 @@ def _announce(project: PbipProject, config: DocConfig) -> None:
 
 
 def _config(path: str) -> DocConfig:
+    """Charge le plan, ou dit pourquoi il est inutilisable."""
     try:
         return load_config(path)
     except (FileNotFoundError, ValueError) as e:
@@ -348,6 +372,7 @@ def _config(path: str) -> DocConfig:
 
 
 def _project(pbip_path: str) -> PbipProject:
+    """Ouvre le projet `.pbip`, ou dit pourquoi il est inutilisable."""
     try:
         return open_project(pbip_path)
     except ExtractError as e:
@@ -360,6 +385,7 @@ def _project(pbip_path: str) -> PbipProject:
 
 
 def parse_args(argv: list[str] | None = None) -> Options:
+    """Lit la ligne de commande, et demande le `.pbip` s'il n'y figure pas."""
     parser = argparse.ArgumentParser(
         prog="main.py",
         description="Génère la documentation Word d'un rapport Power BI (.pbip).",
@@ -388,7 +414,9 @@ def parse_args(argv: list[str] | None = None) -> Options:
         "--mode",
         choices=list(MODES),
         help="Ce que produit l'exécution — sans cette option, la question est posée : "
-        + " ; ".join(f"{name} = {label.split(' — ')[0].lower()}" for name, label in MODES.items()),
+        + " ; ".join(
+            f"{name} = {label.split(' — ')[0].lower()}" for name, label in MODES.items()
+        ),
     )
 
     captures = parser.add_argument_group("captures d'écran (facultatives)")
@@ -422,8 +450,12 @@ def parse_args(argv: list[str] | None = None) -> Options:
         action="store_true",
         help="Capturer tout le rapport, sans suivre ce que le plan retient",
     )
-    captures.add_argument("--page", default="", help="Ne capturer que les pages nommées ainsi")
-    captures.add_argument("--shot", default="", help="Ne capturer que les prises nommées ainsi")
+    captures.add_argument(
+        "--page", default="", help="Ne capturer que les pages nommées ainsi"
+    )
+    captures.add_argument(
+        "--shot", default="", help="Ne capturer que les prises nommées ainsi"
+    )
     args = parser.parse_args(argv)
 
     pbip_path = (args.pbip or _ask_pbip()).strip().strip('"').strip("'")
@@ -433,7 +465,12 @@ def parse_args(argv: list[str] | None = None) -> Options:
         config_path=args.config,
         interactive=not args.no_input,
         pause=not args.no_pause,
-        mode=_mode(args.mode, args.captures or args.fake_captures, not args.no_input, inspecting),
+        mode=_mode(
+            args.mode,
+            args.captures or args.fake_captures,
+            not args.no_input,
+            inspecting,
+        ),
         capture_options=capturer.CaptureOptions(
             fake=args.fake_captures,
             manual_pages=args.manual_pages,
@@ -446,7 +483,9 @@ def parse_args(argv: list[str] | None = None) -> Options:
     )
 
 
-def _mode(given: str | None, captures: bool, interactive: bool, inspecting: bool) -> str:
+def _mode(
+    given: str | None, captures: bool, interactive: bool, inspecting: bool
+) -> str:
     """
     Le mode demandé par l'option, ou à défaut par l'utilisateur.
 
@@ -500,7 +539,9 @@ def main(argv: list[str] | None = None) -> int:
         return window.close(130)
 
     console.blank()
-    console.banner("Captures prises" if options.mode == CAPTURES else "Documentation générée")
+    console.banner(
+        "Captures prises" if options.mode == CAPTURES else "Documentation générée"
+    )
     console.field("Dossier", str(output_dir))
     return window.close(0)
 

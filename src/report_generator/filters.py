@@ -3,7 +3,7 @@ Mise en forme des données du modèle, telle que `data:` la déclare.
 
 Les tables documentées, les regroupements de mesures et les étapes Power Query
 retenues : ce qui n'intéresse que le document. La sélection des pages et des
-visuels, elle, est partagée avec la capture — voir `shared.selection`.
+visuels, partagée avec le questionnaire, vit dans `src.core.selection`.
 """
 
 import re
@@ -25,6 +25,7 @@ _GENERATED_STEP_NAME = re.compile(r"^[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}$"
 
 
 def filter_tables(tables: list[ModelTable], config: DocConfig) -> list[ModelTable]:
+    """Tables retenues par `data.tables`, source et étapes déjà filtrées."""
     options = config.data["tables"]
     excluded = lowercase(options.get("exclude_names"))
 
@@ -58,9 +59,11 @@ def group_measures(
     config: DocConfig,
 ) -> list[MeasureGroup]:
     """
-    Sélectionne les mesures à documenter et les regroupe (par table ou par
-    dossier d'affichage). Les mesures retenues sont aussi rattachées à leur
-    table, pour la partie « Table de données » du plan.
+    Sélectionne les mesures à documenter et les regroupe.
+
+    Le regroupement suit `data.measures.group_by` : par table, ou par dossier
+    d'affichage. Chaque mesure retenue est en outre rattachée à sa table, pour
+    la partie « Table de données » du plan.
     """
     options = config.data["measures"]
 
@@ -98,11 +101,10 @@ def _add_referenced(
     used_in_report: set[str],
 ) -> None:
     """
-    Complète la sélection avec toute mesure référencée mais écartée par les
-    filtres (mesure masquée, dépendance d'une mesure documentée...).
+    Rattrape les mesures référencées qu'un filtre avait écartées.
 
-    Sans cela, une mention pointerait vers une définition absente du document :
-    le lien interne serait mort.
+    Une mesure masquée, ou la dépendance d'une mesure documentée, doit figurer
+    au document : sans elle, le lien interne qui la mentionne serait mort.
     """
     pending = [name for name in used_in_report if name not in selected]
     pending += [
@@ -130,13 +132,11 @@ def filter_steps(
     steps: list[TransformationStep], options: dict[str, Any]
 ) -> list[TransformationStep]:
     """
-    Ne garde d'un script Power Query que les étapes qui apprennent quelque
-    chose au lecteur.
+    Ne garde d'un script Power Query que les étapes qui apprennent quelque chose.
 
-    Sont écartées les étapes auxquelles personne n'a donné de nom (Power BI les
-    nomme d'un GUID), et celles dont le nom est routinier — la navigation dans
-    la source, un changement de type, un renommage de colonnes... Ce sont des
-    gestes de mise en forme, pas des règles de traitement.
+    Sont écartées celles auxquelles personne n'a donné de nom — Power BI les
+    nomme d'un GUID — et celles au nom routinier : navigation, changement de
+    type, renommage de colonnes. Des gestes de mise en forme, pas des règles.
     """
     excluded = lowercase(options.get("exclude_names"))
     prefixes = tuple(lowercase(options.get("exclude_prefixes")))
