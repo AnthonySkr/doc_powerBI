@@ -24,7 +24,9 @@ class TemplateLookupTest(unittest.TestCase):
     def setUp(self):
         self._directory = tempfile.TemporaryDirectory()
         self.addCleanup(self._directory.cleanup)
-        self.directory = self._directory.name
+        # Forme longue : sous Windows, le dossier temporaire peut venir en nom
+        # court (`ASKRZY~1`), que la résolution du code déplie.
+        self.directory = os.path.realpath(self._directory.name)
 
         # Dossier courant sans rapport, comme après un glisser-déposer.
         self._cwd = os.getcwd()

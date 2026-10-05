@@ -26,7 +26,9 @@ DOCUMENT = "documentation_Rapport.docx"
 
 class ModesTest(unittest.TestCase):
     def setUp(self):
-        temp = tempfile.mkdtemp()
+        # Forme longue : sous Windows, le dossier temporaire peut venir en nom
+        # court (`ASKRZY~1`), que la lecture du projet déplie.
+        temp = os.path.realpath(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, temp, ignore_errors=True)
         self.project = os.path.join(temp, "rapport_test")
         shutil.copytree(FIXTURE, self.project)
