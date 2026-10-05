@@ -60,10 +60,6 @@ include = ["src*"]
 [tool.setuptools.dynamic]
 version = { attr = "src.core.__version__" }
 
-# La version est déclarée dans `src/__init__.py`, seul endroit où elle vit.
-[tool.setuptools.dynamic]
-version = { attr = "src.__version__" }
-
 [tool.ruff]
 line-length = 100
 target-version = "py314"
