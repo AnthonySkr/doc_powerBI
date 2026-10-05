@@ -8,3 +8,6 @@ Galeries imbriquées.docx
 build
 dist
 .versions
+assets/*
+!assets/README.md
+docs/site

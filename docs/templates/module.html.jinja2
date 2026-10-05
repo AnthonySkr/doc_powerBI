@@ -1,0 +1,32 @@
+{# Page d'un module : celle de pdoc, avec de quoi savoir où l'on est. #}
+{% extends "default/module.html.jinja2" %}
+
+{% block title %}{{ module.modulename }} — Documentation du code{% endblock %}
+
+{% block module_list_link %}
+    {% set parentmodule = ".".join(module.modulename.split(".")[:-1]) %}
+    {% if parentmodule and parentmodule in all_modules %}
+        <a class="pdoc-button module-list-button" href="../{{ parentmodule.split(".")[-1] }}.html">
+            {% include "resources/box-arrow-in-left.svg" %}
+            &nbsp;{{ parentmodule }}
+        </a>
+    {% endif %}
+    <a class="pdoc-button module-list-button" href="{{ "../" * module.modulename.count(".") }}index.html">
+        {% include "resources/box-arrow-in-left.svg" %}
+        &nbsp;Accueil
+    </a>
+{% endblock %}
+
+{% block nav_footer %}
+    <footer>
+        {% if module.modulename.startswith("src.apps.") %}
+            <div class="belongs">Application <strong>{{ module.modulename.split(".")[2] }}</strong></div>
+        {% elif module.modulename.startswith("src.shared") %}
+            <div class="belongs">Noyau commun <strong>shared</strong></div>
+        {% elif module.modulename.startswith("src.cli") %}
+            <div class="belongs">Interface <strong>cli</strong></div>
+        {% elif module.modulename == "src.pipeline" %}
+            <div class="belongs">Le <strong>chef d'orchestre</strong></div>
+        {% endif %}
+    </footer>
+{% endblock %}

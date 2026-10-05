@@ -1,0 +1,114 @@
+"""
+L'écriture du document, à partir des métadonnées et de rien d'autre.
+
+Ce qui vient d'avant — le rapport lu, les captures prises — est déjà dans le
+`PowerBiMetadata` ; ce qui vient de l'utilisateur — les réponses, la réécriture
+des textes — est passé en argument.
+"""
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from src.core import console
+from src.core.config import DEFAULT_CAPTURES_DIR, DEFAULT_OUTPUT_DIR, DocConfig
+from src.core.expressions import render
+from src.core.models import PowerBiMetadata
+from src.core.prompts import TextProvider
+from src.gui_automator.library import CaptureLibrary
+from src.report_generator.context import build_context
+from src.report_generator.word import DocumentError, generate_word_documentation
+
+__all__ = [
+    "DocumentError",
+    "DocumentResult",
+    "document_path",
+    "output_directory",
+    "report_result",
+    "write_document",
+]
+
+
+@dataclass
+class DocumentResult:
+    """Ce que l'écriture a produit."""
+
+    path: Path
+    summary: str
+    details: list[str]
+    # Mesures que le document ne documente pas : l'écart est nommé en fin
+    # d'exécution plutôt que subi.
+    undocumented: list[str]
+
+
+def output_directory(metadata: PowerBiMetadata, config: DocConfig, inputs: dict[str, Any]) -> str:
+    """Dossier de sortie déclaré par le plan, une fois les réponses connues."""
+    context = {"report": metadata.report, "inputs": inputs}
+    return render(config.document.get("output_dir"), context) or DEFAULT_OUTPUT_DIR
+
+
+def write_document(
+    metadata: PowerBiMetadata,
+    config: DocConfig,
+    inputs: dict[str, Any],
+    output_dir: str | Path,
+    rewrite: TextProvider | None = None,
+) -> DocumentResult:
+    """Écrit le document Word et retourne son bilan."""
+    report = metadata.report
+    context = _context(metadata, config, inputs)
+    path = _path(config, context, output_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    log = generate_word_documentation(config, context, str(path), rewrite)
+    return DocumentResult(
+        path=path,
+        summary=log.summary(),
+        details=log.details(),
+        undocumented=list(report.undocumented_measures),
+    )
+
+
+def document_path(
+    metadata: PowerBiMetadata,
+    config: DocConfig,
+    inputs: dict[str, Any],
+    output_dir: str | Path,
+) -> Path:
+    """Chemin du document que `write_document` écrirait — qu'il existe ou non."""
+    return _path(config, _context(metadata, config, inputs), output_dir)
+
+
+def _context(metadata: PowerBiMetadata, config: DocConfig, inputs: dict[str, Any]) -> dict:
+    report = metadata.report
+    context = build_context(report, report.all_measures, config, inputs)
+    # Le dossier des captures, que les blocs `image` fouillent : une image
+    # prise par `--captures`, ou déposée à la main, y est trouvée d'elle-même.
+    captures = str(config.capture.get("directory") or DEFAULT_CAPTURES_DIR)
+    context["captures"] = CaptureLibrary(metadata.project_dir / captures)
+    return context
+
+
+def _path(config: DocConfig, context: dict[str, Any], output_dir: str | Path) -> Path:
+    name = render(config.document.get("output_name"), context) or (
+        f"documentation_{context['report'].name}.docx"
+    )
+    return Path(output_dir) / name
+
+
+def report_result(result: DocumentResult) -> None:
+    """Affiche le bilan de l'écriture."""
+    console.blank()
+    console.done(result.summary)
+    for line in result.details:
+        console.detail(line)
+
+    if not result.undocumented:
+        return
+
+    console.blank()
+    console.info(
+        f"{len(result.undocumented)} mesure(s) du modèle non documentée(s) — non utilisée(s) :"
+    )
+    for name in result.undocumented:
+        console.detail(f"· {name}")

@@ -5,16 +5,26 @@
 Cet outil lit votre rapport Power BI et rédige à votre place tout ce qui peut
 l'être : la liste des pages, des visuels, des champs affichés, des tables, des
 sources de données et le code de chaque mesure. Il vous rend un document Word,
-qu'il ne vous reste plus qu'à compléter.
+qu'il ne vous reste plus qu'à compléter et à mettre à vos couleurs.
 
 **Rien à installer** — ni Python, ni Power BI, ni quoi que ce soit d'autre.
 Tout ce qui est nécessaire se trouve dans ce dossier.
 
 ---
 
-## Prérequis
+## Avant de commencer
 
-### 1. Windows + Word
+Quatre points à vérifier. Les deux premiers sont indispensables, les deux
+suivants font toute la différence entre un document utilisable et un document
+qu'il faudra reprendre partout.
+
+### 1. Il vous faut Windows et Microsoft Word
+
+L'outil produit un fichier `.docx`. Word sert à l'ouvrir, le compléter et
+l'imprimer. Pour le texte seul, vous n'avez pas besoin de Power BI Desktop sur
+ce poste : l'outil lit des fichiers, il ne se connecte à rien. Pour les
+captures d'écran, Power BI Desktop doit être ouvert sur le rapport, en mode
+Rapport.
 
 ### 2. Le rapport doit être enregistré au **format projet** (`.pbip`)
 
@@ -34,6 +44,13 @@ Mon rapport.SemanticModel/     ← le modèle : tables, mesures, sources
 Mon rapport.Report/            ← les pages, les visuels, les filtres
 ```
 
+Si vous ne voyez pas les deux sous-dossiers, l'enregistrement n'a pas été fait
+au bon format : recommencez. Ne renommez ni ne déplacez l'un des trois
+séparément — ils vont ensemble.
+
+> Le format projet est aussi ce qui permet de suivre un rapport dans un outil
+> de versionnement. Si votre rapport y est déjà, vous n'avez rien à faire.
+
 ### 3. Chaque visuel doit porter un titre
 
 **C'est le point qui décide de la qualité du document.** L'outil reprend le
@@ -44,7 +61,6 @@ rapport.
 
 Dans Power BI, pour chaque visuel : volet **Mettre en forme le visuel** →
 **Général** → **Titre** → renseignez le **Texte**.
-Ou dans la barre d'outils **Afficher** -> **Sélection**. Ici vous retrouverez tout les visuels par titre, vous pouvez les modifier ici.
 
 Un titre renseigné mais *masqué* convient parfaitement : l'outil le lit quand
 même. Vous pouvez donc nommer proprement un visuel dont le titre n'a pas à
@@ -59,7 +75,7 @@ nom). Sans cela il apparaît comme « Groupe sans nom ».
 | Fichier | À quoi il sert |
 | --- | --- |
 | `powerbi-doc.exe` | L'application |
-| `config_doc_pbi.yaml` | Le plan du document : titres, ordre des parties, questions posées |
+| `config.yaml` | Le plan du document : titres, ordre des parties, questions posées |
 | `template-doc-pbib.docx` | L'apparence : styles, page de garde, en-tête et pied de page |
 
 Copiez le dossier entier où vous voulez, mais ne séparez pas les trois
@@ -74,11 +90,32 @@ fichiers : l'application cherche les deux autres à côté d'elle.
    *À défaut :* double-cliquez sur `powerbi-doc.exe`, puis déposez le `.pbip`
    dans la fenêtre qui s'ouvre (ou collez son chemin) et appuyez sur Entrée.
 
-2. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
-   accepter la valeur proposée entre crochets.
+2. **Choisissez ce que l'outil doit produire :**
 
-3. **Récupérez le document.** Il est écrit à côté de votre `.pbip`, dans un
-   sous-dossier `doc` par défaut.
+   | Choix | Ce qu'il fait | Power BI ouvert |
+   | --- | --- | --- |
+   | 1. Texte seul | le document, sans prendre de captures | non |
+   | 2. Captures seules | les images, dans le dossier `assets` à côté du `.pbip` ; pas de document | oui |
+   | 3. Mise à jour des images | de nouvelles captures, remplacées dans le document déjà généré — sans question, votre rédaction est gardée | oui |
+   | 4. Complet | captures et document : pour un premier passage, ou tout remettre à jour | oui |
+
+   Après le texte seul, l'outil vous propose d'ajouter les captures
+   aussitôt : ouvrez Power BI sur le rapport, répondez *oui*.
+
+   L'outil affiche ensuite ce qui doit être prêt avant de continuer. Pour
+   les captures : Power BI Desktop ouvert sur le rapport, en vue Rapport, et
+   **le pointillé qui entoure la page visible sur ses quatre côtés**
+   (Affichage › Ajuster à la page) — sans lui, les captures échouent. Ne
+   touchez ni la souris ni le clavier pendant les captures. Si l'outil a
+   besoin de vous (une page à afficher), sa fenêtre revient d'elle-même au
+   premier plan.
+
+3. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
+   accepter la valeur proposée entre crochets. La mise à jour des images et
+   les captures seules n'en posent pas.
+
+4. **Récupérez le document.** Il est écrit à côté de votre `.pbip`, dans un
+   sous-dossier `doc`.
 
 La fenêtre reste ouverte à la fin : lisez le compte rendu, puis Entrée pour la
 fermer.
@@ -118,7 +155,7 @@ vous pourrez réécrire avant qu'ils ne soient posés dans le document.
 > suivant : une suite d'Entrée les reconduit à l'identique. C'est important
 > pour la liste des visuels écartés — la ressaisir de mémoire à chaque fois
 > serait une source d'erreurs. Les entrées déjà retenues sont marquées
-> « retenu » dans la liste.
+> « retenu » dans la liste. Supprimez ce fichier pour repartir de zéro.
 
 ---
 
@@ -127,9 +164,11 @@ vous pourrez réécrire avant qu'ils ne soient posés dans le document.
 Le document est complet côté technique : tout ce qui vient de Power BI y est
 déjà. Trois choses vous attendent.
 
-**Les emplacements de captures.** L'outil n'insère pas d'images : il réserve la
-place par une ligne 🖼 décrivant la capture attendue, suivie de sa légende
-numérotée. Remplacez cette ligne par votre capture d'écran.
+**Les emplacements de captures.** Les captures prises par l'outil — ou
+déposées par vous dans le dossier `assets` — sont insérées à leur place. Celles
+qui manquent, et les images que l'outil ne sait pas prendre, gardent une ligne
+🖼 décrivant la capture attendue, suivie de sa légende numérotée : remplacez
+cette ligne par votre capture d'écran.
 
 **Les pastilles numérotées.** Sous un emplacement de capture, une rangée de
 pastilles rondes porte les numéros du tableau qui suit. Attrapez-en une à la
@@ -181,12 +220,41 @@ Ce dossier n'est jamais nettoyé automatiquement : videz-le de temps en temps.
 
 ---
 
+## Obtenir un meilleur document (facultatif)
+
+Ces habitudes, prises dans Power BI, se retrouvent directement dans le
+document :
+
+**Nommez vos étapes Power Query.** Dans « Synthétisation du traitement »,
+l'outil ne retient que les étapes qui portent une règle de gestion. Les étapes
+que vous n'avez pas nommées — Power BI les nomme d'un code sans signification —
+et les gestes de mise en forme courants (`Source`, `Navigation`,
+`Type modifié`, `Colonnes renommées`…) sont écartés. Renommer une étape
+« Exclusion des commandes annulées » la fait apparaître, et elle se
+documentera toute seule.
+
+**Renseignez la description de vos mesures**, dans Power BI. Elle est reprise
+dans le document.
+
+**Rangez vos mesures en dossiers d'affichage** : l'outil peut regrouper la
+partie « Mesures » par dossier plutôt que par table.
+
+**Masquez ce qui n'a pas à être documenté.** Les tables masquées du modèle sont
+écartées d'office.
+
+**Ne documentez que ce qui sert.** Par défaut, seules les mesures réellement
+employées par le rapport — affichées dans un visuel ou posées en filtre — sont
+documentées, avec leurs dépendances. Les autres sont simplement nommées à la
+fin de l'exécution, pour que vous puissiez vérifier qu'aucune ne manque à tort.
+
+---
+
 ## Adapter le document à vos usages
 
-**`config_doc_pbi.yaml`** décrit le plan : les titres, l'ordre des parties, les
+**`config.yaml`** décrit le plan : les titres, l'ordre des parties, les
 textes types, les questions posées au lancement, ce qui est documenté ou
-écarté. C'est un fichier texte : ouvrez-le dans le Bloc-notes ou un éditeur de code, 
-modifiez-le, relancez. Aucune reconstruction n'est nécessaire.
+écarté. C'est un fichier texte, abondamment commenté : ouvrez-le dans le
+Bloc-notes, modifiez-le, relancez. Aucune reconstruction n'est nécessaire.
 
 **`template-doc-pbib.docx`** fournit l'apparence : les styles, la page de
 garde, l'en-tête et le pied de page. Ouvrez-le dans Word et modifiez-le comme
@@ -205,6 +273,9 @@ un, l'outil vous signalera qu'il ne le trouve plus.
 | `Dossier Report introuvable` | Même cause, même remède. |
 | `Template introuvable` | `template-doc-pbib.docx` doit rester à côté de l'exécutable. Le message liste les emplacements consultés. |
 | `Style ... absent du template` | Un style nommé a été renommé ou supprimé dans le template. Le document est produit malgré tout, avec un style de remplacement. |
-| `Configuration : YAML illisible` | Une faute de frappe dans `config_doc_pbi.yaml`. Le message donne la ligne. |
+| `Configuration : YAML illisible` | Une faute de frappe dans `config.yaml`. Le message donne la ligne. |
 | `Impossible d'enregistrer le document` | Le document est ouvert dans Word. Fermez-le et relancez. |
 | Des visuels nommés `barChart (a1b2c3d4)` | Ces visuels n'ont pas de titre dans Power BI (voir le prérequis n° 3). |
+
+Si la fenêtre affiche une erreur inattendue, le détail complet y est écrit :
+joignez-le à votre demande d'aide.

@@ -1,0 +1,110 @@
+{# Page d'accueil du site : la chaîne, puis les modules.
+
+   Le site est engendré par `tools/docs.py`. La liste des modules reste celle
+   de pdoc — ce qui est ajouté ici, c'est de quoi savoir par où entrer.
+
+   Tous les modules descendant de `src`, pdoc renverrait par défaut vers la page
+   de `src` sans s'arrêter ici. `root_module_name` à faux lui fait rendre cette
+   page-ci : c'est la manière que son propre gabarit indique. #}
+{% set root_module_name = false %}
+{% extends "default/index.html.jinja2" %}
+
+{# Les parties du projet, dans l'ordre de la chaîne. Une partie que le site ne
+   documente pas — `tools/docs.py extract` n'en construit qu'une — n'est pas
+   affichée : ses liens ne mèneraient nulle part. #}
+{% set parts = [
+    ("src.apps.extract", "extract",
+     "Lit le projet <code>.pbip</code> — modèle sémantique, rapport, dépendances entre
+      mesures — et écrit <code>1-rapport.json</code>.",
+     "python -m src.apps.extract rapport.pbip"),
+    ("src.apps.capture", "capture",
+     "Photographie les visuels dans Power&nbsp;BI Desktop et range les images.
+      Facultative&nbsp;: sans elle, le document garde ses emplacements réservés.",
+     "python -m src.apps.capture --fake"),
+    ("src.apps.document", "document",
+     "Écrit le <code>.docx</code> en suivant le plan YAML, et reprend ce qui avait été
+      rédigé dans la version précédente.",
+     "python -m src.apps.document"),
+    ("src.shared", "shared",
+     "Le noyau commun&nbsp;: console, chemins, modèles, fichier d'échange, plan YAML. Une
+      application peut en dépendre&nbsp;; aucune ne dépend d'une autre.", ""),
+    ("src.pipeline", "pipeline",
+     "Le chef d'orchestre&nbsp;: il enchaîne les applications, décide où vivent les fichiers
+      d'échange, et pose les questions du plan. Il ne travaille pas.", ""),
+    ("src.cli", "cli",
+     "L'interface du programme complet&nbsp;: arguments, questionnaire, fenêtre de
+      l'exécutable et affichage des plantages.", ""),
+] %}
+{% set shown = parts | selectattr("0", "in", all_modules) | list %}
+
+{% block title %}Documentation du code — Power BI Doc{% endblock %}
+
+{% block nav %}
+    {% if shown %}
+        <h2>Par partie</h2>
+        <ul class="apps">
+            {% for module, name, _, _ in shown %}
+                <li><a href="{{ module.replace(".", "/") }}.html">{{ name }}</a></li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+    <h2>Tous les modules</h2>
+    <ul>
+        {% for submodule in all_modules if "._" not in submodule and not submodule.startswith("_") %}
+            <li><a href="{{ submodule.replace(".","/") }}.html">{{ submodule }}</a></li>
+        {% endfor %}
+    </ul>
+{% endblock %}
+
+{% block content %}
+    <main class="pdoc landing">
+        <h1>Documentation du code</h1>
+        <p class="lead">
+            Générateur de documentation Word pour un rapport Power BI&nbsp;(<code>.pbip</code>).
+            Le projet n'est pas un programme mais <strong>trois, enchaînés par un
+            quatrième</strong>&nbsp;: chacun vit dans son dossier, se lance seul, et ne parle
+            au suivant que par un fichier.
+        </p>
+
+        <pre class="chain">.pbip  ──►  extract  ──►  [ capture ]  ──►  document  ──►  .docx
+               1-rapport.json      2-captures.json</pre>
+
+        <div class="cards">
+            {% for module, name, description, run in shown %}
+                <a class="card" href="{{ module.replace(".", "/") }}.html">
+                    <h3>{{ name }}</h3>
+                    <p>{{ description | safe }}</p>
+                    {% if run %}<code class="run">{{ run }}</code>{% endif %}
+                </a>
+            {% endfor %}
+        </div>
+
+        {% if "src.shared.exchange" in all_modules %}
+            <h2>Ce qui circule d'une application à l'autre</h2>
+            <p>
+                Un <a href="src/shared/exchange.html">fichier d'échange</a> en JSON, que chacune
+                lit, enrichit, réécrit — puis <strong>supprime</strong>. Le dossier
+                <code>.echange/</code> est donc vide entre deux exécutions&nbsp;: un fichier qui
+                traîne ne peut jamais passer pour le dernier état du rapport.
+                <code>--keep</code> le conserve quand on met au point l'étape suivante.
+            </p>
+        {% endif %}
+
+        <h2>Où sont les tests</h2>
+        <p>
+            Avec le code qu'ils éprouvent — <code>src/apps/extract/tests/</code>,
+            <code>src/shared/tests/</code>, et ainsi de suite. Ils ne figurent pas sur ce
+            site&nbsp;: leurs pages noieraient celles qui décrivent le programme. Seul le
+            parcours complet vit à part, dans <code>tests/</code> à la racine.
+        </p>
+
+        <p class="hint">
+            Ces pages sont engendrées par <code>tools/docs.py</code> à partir des docstrings et
+            des annotations du code&nbsp;: elles ne peuvent pas se périmer sans que le code
+            change. <code>task docs</code> les sert avec rechargement à chaud.
+        </p>
+    </main>
+    {% if search %}
+        {% include "search.html.jinja2" %}
+    {% endif %}
+{% endblock %}

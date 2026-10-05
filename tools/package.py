@@ -14,16 +14,18 @@ import shutil
 import sys
 import zipfile
 
+from src.core import (
+    __version__,
+)
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-# Le dépôt doit d'abord être sur le chemin d'import (voir sys.path ci-dessus).
-from src import __version__
 
 DIST = os.path.join(ROOT, "dist")
 
 # Fichiers livrés à côté de l'exécutable, et modifiables par l'utilisateur.
-PAYLOAD = ("config_doc_pbi.yaml", "template-doc-pbib.docx")
+PAYLOAD = ("config.yaml", "template-doc-pbib.docx")
 
 # Mode d'emploi joint au dossier livré.
 README = "README.md"
@@ -67,7 +69,7 @@ def _executable() -> str | None:
 
 def _write_readme(folder: str, version: str) -> None:
     """Recopie le mode d'emploi en y inscrivant la version."""
-    with open(os.path.join(ROOT, "tools", README), "r", encoding="utf-8") as f:
+    with open(os.path.join(ROOT, "tools", README), encoding="utf-8") as f:
         # `replace` et non `format` : le mode d'emploi parle de la
         # configuration, où les accolades sont de mise (`{{ report.name }}`).
         # Un gabarit les prendrait pour des champs et échouerait le jour où
