@@ -102,6 +102,14 @@ fichiers : l'application cherche les deux autres à côté d'elle.
    Après le texte seul, l'outil vous propose d'ajouter les captures
    aussitôt : ouvrez Power BI sur le rapport, répondez *oui*.
 
+   L'outil affiche ensuite ce qui doit être prêt avant de continuer. Pour
+   les captures : Power BI Desktop ouvert sur le rapport, en vue Rapport, et
+   **le pointillé qui entoure la page visible sur ses quatre côtés**
+   (Affichage › Ajuster à la page) — sans lui, les captures échouent. Ne
+   touchez ni la souris ni le clavier pendant les captures. Si l'outil a
+   besoin de vous (une page à afficher), sa fenêtre revient d'elle-même au
+   premier plan.
+
 3. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
    accepter la valeur proposée entre crochets. La mise à jour des images et
    les captures seules n'en posent pas.

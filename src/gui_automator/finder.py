@@ -32,9 +32,11 @@ from src.gui_automator.recorder import CaptureError
 
 __all__ = [
     "WindowInfo",
+    "bring_forward",
     "choose",
     "claim_real_pixels",
     "client_box",
+    "foreground",
     "locate",
     "maximize",
     "mentions",
@@ -62,6 +64,8 @@ _MAX_PATH = 32768
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 _SW_RESTORE = 9
 _SW_MAXIMIZE = 3
+_VK_MENU = 0x12
+_KEYEVENTF_KEYUP = 0x0002
 
 # Dire à Windows que le script travaille en vrais pixels, du plus précis au
 # plus ancien : contexte par écran (Windows 10 1703 et au-delà), conscience
@@ -217,6 +221,54 @@ def maximize(handle: int) -> None:
     api = _api()
     if api is not None:
         api.user32.ShowWindow(handle, _SW_MAXIMIZE)
+
+
+def foreground() -> int:
+    """
+    La fenêtre au premier plan, ou à défaut celle de la console. 0 hors de Windows.
+
+    Prise avant d'amener Power BI devant, c'est la fenêtre où l'utilisateur
+    vient de répondre : celle du terminal — la console classique comme
+    Windows Terminal, dont `GetConsoleWindow` ne rend qu'une fenêtre cachée.
+    """
+    api = _api()
+    if api is None:
+        return 0
+    return int(api.user32.GetForegroundWindow() or api.kernel32.GetConsoleWindow() or 0)
+
+
+def bring_forward(handle: int) -> bool:
+    """
+    Amène une fenêtre au premier plan, dépliée si elle est réduite.
+
+    Windows ne cède le premier plan qu'au processus qui a reçu la dernière
+    saisie, et ce n'est pas le script quand on vient de cliquer dans Power BI.
+    Deux gestes le lui rendent, comme le fait `pywinauto` : une frappe
+    d'Alt simulée, et le rattachement momentané à la file de saisie de la
+    fenêtre qui tient la main. Dit si la fenêtre est passée devant.
+    """
+    api = _api()
+    if api is None or not handle:
+        return False
+
+    user32 = api.user32
+    if user32.IsIconic(handle):
+        user32.ShowWindow(handle, _SW_RESTORE)
+
+    user32.keybd_event(_VK_MENU, 0, 0, 0)
+    user32.keybd_event(_VK_MENU, 0, _KEYEVENTF_KEYUP, 0)
+
+    current = user32.GetForegroundWindow()
+    theirs = user32.GetWindowThreadProcessId(current, None) if current else 0
+    ours = api.kernel32.GetCurrentThreadId()
+    attached = bool(theirs and theirs != ours and user32.AttachThreadInput(ours, theirs, True))
+    try:
+        user32.BringWindowToTop(handle)
+        user32.SetForegroundWindow(handle)
+    finally:
+        if attached:
+            user32.AttachThreadInput(ours, theirs, False)
+    return int(user32.GetForegroundWindow() or 0) == handle
 
 
 def client_box(handle: int) -> tuple[int, int, int, int] | None:
@@ -407,6 +459,16 @@ def _declare(user32, kernel32, wintypes, enumproc) -> None:
     user32.ClientToScreen.restype = wintypes.BOOL
     user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
     user32.GetWindowThreadProcessId.restype = wintypes.DWORD
+    user32.GetForegroundWindow.argtypes = []
+    user32.GetForegroundWindow.restype = wintypes.HWND
+    user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+    user32.SetForegroundWindow.restype = wintypes.BOOL
+    user32.BringWindowToTop.argtypes = [wintypes.HWND]
+    user32.BringWindowToTop.restype = wintypes.BOOL
+    user32.AttachThreadInput.argtypes = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+    user32.AttachThreadInput.restype = wintypes.BOOL
+    user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ctypes.c_size_t]
+    user32.keybd_event.restype = None
 
     kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
     kernel32.OpenProcess.restype = wintypes.HANDLE
@@ -419,3 +481,7 @@ def _declare(user32, kernel32, wintypes, enumproc) -> None:
     kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
     kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
     kernel32.CloseHandle.restype = wintypes.BOOL
+    kernel32.GetConsoleWindow.argtypes = []
+    kernel32.GetConsoleWindow.restype = wintypes.HWND
+    kernel32.GetCurrentThreadId.argtypes = []
+    kernel32.GetCurrentThreadId.restype = wintypes.DWORD

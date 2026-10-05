@@ -41,6 +41,14 @@ Au lancement, le script demande ce qu'il doit produire :
 | 3. Mise à jour des images (`images`) | nouvelles captures, puis le document existant réécrit sans question : chaque image non retouchée cède la place à la nouvelle, tout ce que vous avez écrit est gardé | oui |
 | 4. Complet (`complet`) | captures puis documentation : pour initialiser, ou tout mettre à jour | oui |
 
+Le mode choisi, le script affiche ce qui doit être prêt et attend Entrée :
+le document Word fermé, et pour les captures Power BI Desktop ouvert sur le
+rapport en vue Rapport, le pointillé qui entoure la page visible sur ses quatre
+côtés (la reconnaissance du canevas s'appuie dessus), sans toucher souris ni
+clavier pendant la séance. Quand la séance attend l'utilisateur — une page ou
+un signet à afficher —, le terminal revient de lui-même au premier plan, puis
+Power BI dès la réponse donnée ; il revient aussi en fin de séance.
+
 Après le texte seul, le script propose d'ajouter les captures dans la foulée :
 Power BI ouvert sur le rapport, il les prend et réécrit le document avec les
 mêmes réponses. La mise à jour des images s'arrête avant d'ouvrir Power BI

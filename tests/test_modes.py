@@ -111,3 +111,30 @@ class ModeChoiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class PrerequisitesTest(unittest.TestCase):
+    """Ce qui doit être prêt est dit après le choix du mode, et attendu."""
+
+    def test_chaque_mode_a_ses_prerequis(self):
+        self.assertEqual(set(main.PREREQUISITES), set(main.MODES))
+
+    def test_les_captures_demandent_power_bi(self):
+        for mode in (CAPTURES, PICTURES, FULL):
+            self.assertTrue(any("Power BI" in item for item, _ in main.PREREQUISITES[mode]))
+        self.assertFalse(any("Power BI" in item for item, _ in main.PREREQUISITES[TEXT]))
+
+    def test_l_utilisateur_valide_avant_de_continuer(self):
+        with mock.patch("src.core.console.ask") as asked, console.silenced():
+            main._check_prerequisites(main.PREREQUISITES[FULL])
+        asked.assert_called_once()
+
+    def test_captures_ajoutees_apres_le_texte_rappellent_les_prerequis(self):
+        options = Options(pbip_path="r.pbip", interactive=True)
+        with (
+            mock.patch("src.core.questions.confirm", return_value=True),
+            mock.patch("main._check_prerequisites") as checked,
+            console.silenced(),
+        ):
+            self.assertTrue(main._captures_wanted(options))
+        checked.assert_called_once_with(main.PREREQUISITES[FULL])

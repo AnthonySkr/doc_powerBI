@@ -225,13 +225,14 @@ def run_session(plans: list[PagePlan], recorder: Recorder, library: CaptureLibra
     """Déroule le plan de capture et retourne son bilan."""
     session = _Session(recorder, library)
 
-    recorder.start()
     try:
+        recorder.start()
         for page in plans:
             session.page(page)
     finally:
         # Power BI reste ouvert si l'utilisateur l'avait ouvert lui-même ;
-        # l'enregistreur sait ce qu'il a lancé, et ne ferme que cela.
+        # l'enregistreur sait ce qu'il a lancé, et ne ferme que cela. Arrêté
+        # même si le démarrage a échoué : le terminal revient devant.
         recorder.stop()
 
     return session.log
@@ -355,8 +356,8 @@ def calibrate(config: DocConfig, directory: Path, plans: list[PagePlan] | None =
         raise CaptureError("Le calibrage ne concerne que la capture réelle.")
 
     page = (plans or [None])[0]
-    recorder.start()
     try:
+        recorder.start()
         written = _calibration_images(recorder, library, page)
         verdict = _verdict(recorder, page)
     finally:
