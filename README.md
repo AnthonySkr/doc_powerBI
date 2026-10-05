@@ -28,6 +28,33 @@ Options :
 | --- | --- |
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
+| `-m`, `--mode` | `texte`, `captures`, `images` ou `complet` — sans elle, la question est posée |
+
+### Les quatre modes
+
+Au lancement, le script demande ce qu'il doit produire :
+
+| Mode | Ce qu'il fait | Power BI ouvert |
+| --- | --- | --- |
+| 1. Texte seul (`texte`) | la documentation ; les captures déjà dans le dossier y sont insérées, aucune n'est prise | non |
+| 2. Captures seules (`captures`) | les images, dans le dossier des captures (`assets/`) ; aucun document | oui |
+| 3. Mise à jour des images (`images`) | nouvelles captures, puis le document existant réécrit sans question : chaque image non retouchée cède la place à la nouvelle, tout ce que vous avez écrit est gardé | oui |
+| 4. Complet (`complet`) | captures puis documentation : pour initialiser, ou tout mettre à jour | oui |
+
+Le mode choisi, le script affiche ce qui doit être prêt et attend Entrée :
+le document Word fermé, et pour les captures Power BI Desktop ouvert sur le
+rapport en vue Rapport, le pointillé qui entoure la page visible sur ses quatre
+côtés (la reconnaissance du canevas s'appuie dessus), sans toucher souris ni
+clavier pendant la séance. Quand la séance attend l'utilisateur — une page ou
+un signet à afficher —, le terminal revient de lui-même au premier plan, puis
+Power BI dès la réponse donnée ; il revient aussi en fin de séance.
+
+Après le texte seul, le script propose d'ajouter les captures dans la foulée :
+Power BI ouvert sur le rapport, il les prend et réécrit le document avec les
+mêmes réponses. La mise à jour des images s'arrête avant d'ouvrir Power BI
+s'il n'y a pas encore de document — lancez d'abord le texte seul ou le mode
+complet. Sans question possible (`--no-input`), le mode par défaut est le texte
+seul ; `--captures` équivaut à `--mode complet`.
 
 Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
 demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
@@ -47,10 +74,10 @@ demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
 7. Si une documentation existait déjà, en reprend tout ce que vous y avez
    écrit et signale ce qui a changé (voir « Regénération » plus bas).
 
-Les captures d'écran ne sont pas insérées : le script réserve l'emplacement
-avec un texte descriptif (`[IMAGE] ...`) qu'il suffit de remplacer par la
-capture correspondante une fois le document généré. Une régénération les
-retrouve et les remet en place.
+Les captures d'écran prises par `--captures` sont insérées à leur place :
+la page, chaque groupe et chaque visuel documenté. Celles qui manquent — et
+les images que le script ne sait pas prendre, comme les schémas de navigation
+— gardent un emplacement décrit (`[IMAGE] ...`), à remplacer à la main.
 
 ### Groupes de visuels
 
@@ -133,7 +160,7 @@ Types de blocs :
 | Type | Effet |
 | --- | --- |
 | `paragraph` | Texte fixe ; `editable: true` propose sa modification au lancement |
-| `image` | Emplacement réservé pour une capture, avec sa description ; `markers:` y ajoute les repères numérotés à glisser sur l'image |
+| `image` | Capture insérée depuis le dossier des captures (`capture:`), ou à défaut son emplacement réservé, avec sa description ; `markers:` y ajoute les repères numérotés à glisser sur l'image |
 | `user_fill` | Zone laissée vide (`[À compléter]`) à rédiger après génération ; `hint:` remplace cette amorce par ce qu'on attend à cet endroit ; `show_placeholder: false` laisse une ligne vraiment vide |
 | `property` | Sous-titre + valeur, ou liste de valeurs (`value_list`) |
 | `table` | Tableau construit à partir des données extraites ; `label:` ajoute un sous-titre |
@@ -445,6 +472,7 @@ repris par la configuration :
 | `table_data` | `Tableau Donnees` | Tableau neutre, disponible pour d'autres tableaux du plan |
 | `ref_header` / `ref_number` / `ref_role` / `ref_value` | `Ref Entete` / `Ref Numero` / `Ref Role` / `Ref Valeur` | Les quatre styles de ce tableau |
 | `image` | `Image Placeholder` | Encadré pointillé réservant la capture |
+| `picture` | `Normal` | Paragraphe (centré) qui porte une capture insérée |
 | `caption` | `Legende` | Légende numérotée sous l'emplacement |
 | `todo` | `A completer` | Zones à rédiger après génération |
 | `technical_id` | `Id technique` | Type du visuel affiché en gris à la suite du titre |
@@ -486,8 +514,8 @@ task package     # vérifie, construit, assemble et zippe
 Résultat dans `dist/` :
 
 ```
-powerbi-doc-0.6-windows.zip
-└── powerbi-doc-0.6-windows/
+powerbi-doc-2.0.0-windows.zip
+└── powerbi-doc-2.0.0-windows/
     ├── powerbi-doc.exe          l'application, autonome
     ├── config.yaml      le plan du document, modifiable
     ├── template-doc-pbib.docx   la charte Word, modifiable
@@ -511,26 +539,6 @@ livrés ont été supprimés ou déplacés. L'ordre de recherche est dans
 2. à côté de l'exécutable — le cas normal ;
 3. à l'intérieur de l'exécutable — copie de secours.
 
-### La version vient du dernier tag
-
-Rien à corriger dans le code pour numéroter une livraison : **`git tag v0.8`
-suffit**. La version affichée au lancement, et celle du nom du `.zip`, sont
-relevées sur le dernier tag `v…` du dépôt.
-
-C'est le dernier tag *du dépôt*, et non le dernier tag atteignable depuis la
-branche courante : les versions sont posées sur `main`, qu'une branche de
-travail ne voit pas. Le tri est celui des versions — `v0.10` passe après
-`v0.9`.
-
-Un exécutable, lui, n'emporte pas le dépôt avec lui : `task build` relève la
-version et l'embarque dans un fichier `VERSION`, que le programme lit à défaut
-de git. Une fois gelé, il ne consulte jamais git — un exe déposé dans le dépôt
-de quelqu'un d'autre en prendrait la version. Tout cela vit dans
-`src/core/version.py`.
-
-Sans tag ni fichier — un dépôt fraîchement cloné en surface, par exemple — la
-version vaut `0.0`, qui ne se fait pas passer pour une vraie.
-
 ### Étapes séparées
 
 | Commande | Effet |
@@ -543,23 +551,24 @@ La recette de construction est dans `powerbi-doc.spec` : c'est là qu'on ajoute
 un fichier à embarquer, une icône (`icon=`) ou un module manquant
 (`hiddenimports`).
 
-## Un programme, deux modules
+## Un programme, trois modules
 
-Le projet est **un seul programme**, découpé en deux modules qui ont chacun
+Le projet est **un seul programme**, découpé en trois modules qui ont chacun
 une responsabilité et une seule :
 
 ```
-.pbip  ──►  pbi_extractor  ──►  report_generator  ──►  .docx
+.pbip  ──►  pbi_extractor  ──►  [ gui_automator ]  ──►  report_generator  ──►  .docx
 ```
 
 | Module | Sa seule responsabilité |
 | --- | --- |
 | `pbi_extractor` | Lire le projet `.pbip` et retourner ce qu'il contient |
-| `report_generator` | Écrire le `.docx` à partir de ces données |
+| `gui_automator` | Piloter Power BI Desktop et enregistrer des images |
+| `report_generator` | Écrire le `.docx` à partir de ces données et de ces images |
 
-Ils vivent sous `src/`. Aucun des deux ne connaît l'autre : ils ne partagent
-que `src/core`, et les données qui passent de l'un à l'autre. `main.py`, à la
-racine, les enchaîne — c'est tout ce qu'il fait.
+Ils vivent sous `src/`. Aucun des trois ne connaît les autres : ils ne
+partagent que `src/core`, et les données qui passent de l'un à l'autre.
+`main.py`, à la racine, les enchaîne — c'est tout ce qu'il fait.
 
 ### Ce qui circule
 
@@ -567,6 +576,7 @@ Un seul objet, d'un bout à l'autre : le `PowerBiMetadata` de `src/core/models.p
 
 ```python
 metadata = extract(project)  # produit par l'extraction
+capturer.capture(metadata, config, options)  # enrichi de ses images
 write_document(metadata, config, inputs, output_dir)  # lu par le document
 ```
 
@@ -575,7 +585,7 @@ Rien ne transite par le disque entre deux étapes : pas de fichier intermédiair
 
 ### Le socle commun — `src/core/`
 
-Ce que les deux partagent, et rien de plus :
+Ce que les trois partagent, et rien de plus :
 
 | Module | Rôle |
 | --- | --- |
@@ -590,8 +600,12 @@ Ce que les deux partagent, et rien de plus :
 | `paths.py` | La localisation des fichiers livrés (exécutable compris) |
 | `window.py` | La fenêtre console de l'exécutable : attente et plantages |
 
-**`core` ne dépend d'aucun des deux modules ; les deux dépendent de lui, et
-jamais l'un de l'autre.**
+**`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
+jamais les uns des autres.**
+
+`selection.py` y vit parce que deux modules le consultent : le document pour
+savoir quoi écrire, la capture pour savoir quoi photographier — photographier
+un visuel que le document tait serait du temps perdu.
 
 ### Lire la documentation du code
 
@@ -600,58 +614,10 @@ Les docstrings et les annotations du code sont servies comme un site, par
 
 ```bash
 task docs                    # tout le projet, sur http://127.0.0.1:8080
+task docs -- extractor       # le seul module d'extraction
+task docs -- capturer        # … ou capturer, writer, core, main
 task docs-build              # le site statique, dans docs/site/
 ```
-
-Le site couvre toujours le projet entier : une page qui renverrait vers un
-module absent ne vaudrait pas la commande qui l'aurait évitée.
-
-La barre de gauche range les modules **en arbre**, chacun sous son seul nom :
-
-```
-core                  report_generator
-    config                context
-    console               merge
-    models                    markers
-    …                         smart
-                          word
-                              builder
-```
-
-Un paquet se replie, et s'ouvre de lui-même sur le chemin de la page affichée —
-de quoi s'y retrouver à quarante-quatre modules, là où la liste à plat de pdoc
-les nommait tous `src.report_generator.merge.…`.
-
-#### Ce que les pages montrent
-
-**Les fonctions internes sont documentées, pas seulement l'interface.** pdoc
-cache par défaut tout nom commençant par `_` : c'est la bonne règle pour une
-bibliothèque, dont le site publie un contrat. Ce projet n'en est pas une —
-personne n'importe `main._extract` — et son site s'adresse à qui vient reprendre
-le code. Un `generate` qui « enchaîne les trois étapes » sans qu'aucune des
-trois ne paraisse n'apprend rien.
-
-Trois conséquences pour qui écrit du code ici :
-
-| | |
-| --- | --- |
-| Une fonction ou une classe privée | est publiée si elle a une docstring. `@private` dans la docstring l'en retire |
-| Une **constante** privée | reste cachée : les cent `_TABLE = qn("w:tbl")` du projet noieraient le reste |
-| Une constante **publique** | se documente par une docstring **sous** l'affectation — pdoc ne lit pas le commentaire au-dessus |
-
-```python
-STEPS = 3
-"""Lecture du rapport, questions, écriture du document."""
-```
-
-`__all__` ne vit plus que sur les `__init__.py`, où il déclare ce qu'un paquet
-ré-exporte. Sur un module feuille il ne redisait que ce que le préfixe `_` dit
-déjà — et il privait sa page pdoc de ses fonctions internes, pdoc écartant ces
-membres avant même d'arriver au gabarit.
-
-Enfin, **un nom entre backticks devient un lien** vers le membre correspondant :
-c'est de quoi ouvrir un module sur le déroulé de son code, comme le fait
-`main.py`.
 
 Le serveur **recharge à chaud** : on modifie un docstring, on rafraîchit, c'est
 à jour. Chaque page porte le code source déplié, un bouton vers GitHub, une
@@ -661,21 +627,215 @@ Ces pages ne peuvent pas se périmer sans que le code change — c'est tout
 l'intérêt par rapport à une documentation écrite à côté.
 
 `tools/docs.py` s'occupe d'énumérer les modules (un paquet qui déclare `__all__`
-cache ses sous-modules à pdoc) ; `docs/templates/` porte l'accueil et l'arbre.
+cache ses sous-modules à pdoc) et de découper par module.
+
+## Captures d'écran des visuels
+
+`gui_automator` prend les captures ; le document les insère, et réserve la
+place de celles qui manquent.
+**Les deux ne se connaissent que par un dossier d'images** — celui que
+`capture.directory` désigne, à côté du `.pbip` :
+
+```
+assets/
+    page_ventes/
+        page.png              ← la page entière
+        g_indicateurs.png     ← un groupe : son cadre, visuels compris
+        v_evolution.png       ← nom technique du visuel, pas son titre
+```
+
+Une image par emplacement que le document réserve : **une par page, une par
+groupe, une par visuel documenté** — y compris les visuels d'un groupe, que le
+document détaille un à un sous la capture d'ensemble.
+`--capture-plan` les énumère avec leur nom de fichier, avant toute capture.
+
+C'est tout le contrat. Renommer un visuel dans Power BI ne perd pas sa capture,
+et remplacer une image par une meilleure — retouchée, prise autrement — revient
+à écrire dans ce dossier, puis à régénérer.
+
+Dans le plan, c'est `capture:` qui relie un bloc `image` à son fichier :
+
+```yaml
+- type: image
+  id: visuel_capture
+  description: "Capture du visuel « {{ visual.title }} »"
+  capture:
+    page: "{{ page.name }}"
+    shot: "{{ visual.name }}"     # "_page" pour la page, "{{ group.name }}" pour un groupe
+```
+
+Une capture insérée garde sa taille d'écran sans dépasser la largeur du texte
+ni `rendering.image_placeholder.max_height_cm`. À la régénération, une image
+que vous n'avez pas touchée est remplacée par la capture du jour.
+
+### Comment ça marche
+
+Power BI Desktop ne rend pas ses visuels comme des contrôles Windows : le
+canevas est une surface dessinée d'un bloc, dont aucune API ne sait extraire
+« l'image du visuel X ». Ce qui est possible, en revanche, c'est de
+**photographier l'écran et de recadrer d'après le rapport** — qui déclare la
+place de chaque visuel dans un canevas logique de 1280 × 720.
+
+    pywinauto   piloter la fenêtre : l'amener devant, changer de page
+    mss         photographier une région de l'écran, et la rendre en PNG
+
+Les deux sont en option : `pip install -e ".[capture]"`.
+
+### Reconnaître la fenêtre
+
+La fenêtre du rapport se reconnaît au **processus** qui la porte —
+`PBIDesktop.exe`, ou `PBIDesktopStore.exe` pour la version du Microsoft Store —
+et non à son titre. C'est volontaire : le titre change d'une version à l'autre,
+et les versions récentes n'y écrivent plus que le nom du rapport.
+
+    Ventes 2024 - Power BI Desktop      les versions anciennes
+    Ventes 2024 - Power BI              certaines versions intermédiaires
+    Ventes 2024                         les versions récentes — le rapport seul
+
+`capture.window.title` reste lisible, mais il n'est plus un critère : il ne
+sert qu'à désigner **un rapport parmi plusieurs ouverts en même temps**. Laissé
+vide — sa valeur par défaut —, la fenêtre de Power BI trouvée est retenue ;
+s'il y en a plusieurs, la plus grande, c'est-à-dire le rapport plutôt que
+l'écran de démarrage.
+
+```yaml
+capture:
+  window:
+    title: "Ventes 2024"   # facultatif : seulement si plusieurs rapports sont ouverts
+```
+
+Quand rien n'est trouvé, le message d'erreur énumère les fenêtres vues et
+l'exécutable de chacune : de quoi voir tout de suite si Power BI était ouvert,
+et sous quel nom. Une fenêtre réduite dans la barre des tâches est dépliée
+avant la capture — sinon les images seraient celles du bureau.
+
+### Tester module par module
+
+Chaque étape s'éprouve seule, de la plus sûre à la moins sûre :
+
+| Commande | Ce qu'elle vérifie | Besoin de Power BI |
+| --- | --- | --- |
+| `task test` | le cadrage, le plan, le dossier, le déroulé d'une séance | non |
+| `python main.py <rapport> --capture-plan` | ce qui serait capturé, et à quelles dimensions | non |
+| `python main.py <rapport> --fake-captures` | la chaîne entière, en rectangles unis | non |
+| `python main.py <rapport> --calibrate` | le cadrage du canevas dans la fenêtre | oui |
+| `python main.py <rapport> --captures --manual-pages` | les vraies captures, pages changées à la main | oui |
+| `python main.py <rapport> --captures` | tout, y compris le changement de page | oui |
+
+`--page` et `--shot` restreignent à une page ou à une prise : de quoi reprendre
+une seule capture sans redérouler le rapport.
+
+### Où le canevas est rendu
+
+Tout le cadrage découle d'un seul rectangle : celui où Power BI dessine le
+canevas à l'écran. Il est **cherché dans l'image**, pas déduit de mesures
+déclarées, et par deux chemins (voir `src/gui_automator/canvas.py`) :
+
+| Chemin | Ce qu'il regarde | Quand il sert |
+| --- | --- | --- |
+| le pourtour | le canevas est ce qui n'est pas de la couleur du fond | habillage distinct des pages |
+| la bordure | les quatre côtés du pointillé dont Power BI entoure le canevas | habillage de la couleur des pages |
+
+Le second existe parce que le premier ne voit rien d'un rapport dont
+l'habillage (*wallpaper*) est de la couleur de ses pages : page et fond se
+confondent, il n'y a plus de pourtour du tout. Le pointillé, lui, est toujours
+là. Il est cherché pixel par pixel : il alterne deux points pleins et deux
+vides, et un balayage plus rapide le voyait ou non selon l'endroit où la
+fenêtre commençait.
+
+Le rectangle trouvé n'est retenu, d'un chemin comme de l'autre, que s'il a les
+proportions que la page déclare (1280 × 720, ou ce qu'elle dit). Sinon le
+script ne devine pas : il revient aux marges déclarées et le signale. Ce
+contrôle attrape du même coup le rapport qui n'est pas en « Ajuster à la
+page », ou dont on a zoomé — deux états où **aucun** calcul de cadrage ne peut
+être juste.
+
+La recherche porte sur deux zones, de la plus étroite à la plus large : ce que
+les marges de `capture.window` retiennent, puis la zone utile de la fenêtre
+entière, ruban et volets compris. La seconde est ce qui rattrape des marges
+trop larges — elles coupaient le canevas, la reconnaissance n'y trouvait plus
+les proportions annoncées, et le cadrage retombait sur ces mêmes marges
+fausses. Ces marges ne servent donc plus que de **dernier recours**, quand le
+canevas n'a pas été reconnu du tout ; `--calibrate` dit celles qui
+conviennent à l'écran qu'il voit.
+
+```yaml
+capture:
+  directory: assets      # où ranger les images, à côté du .pbip
+  window:
+    maximize: true       # agrandir la fenêtre : cadrage reproductible, image nette
+    detect_canvas: true  # chercher le canevas dans l'image (recommandé)
+    inset_top: 130       # ruban            ─┐ cadrage de secours, si le canevas
+    inset_right: 340     # volets            │ n'a pas été reconnu : `--calibrate`
+    inset_bottom: 60     # barre des onglets ─┘ donne les valeurs de votre écran
+```
+
+Ces marges se comptent depuis la zone utile de la fenêtre, et non depuis son
+cadre : une fenêtre agrandie déborde de l'écran de l'épaisseur de sa poignée
+de redimensionnement, une dizaine de pixels dont la capture d'écran ne ramène
+que du noir.
+
+### Régler le cadrage
+
+`--calibrate` écrit trois images dans `assets/_calibrage/` :
+
+| Image | Ce qu'elle montre |
+| --- | --- |
+| `fenetre.png` | la fenêtre entière, telle qu'elle est à l'écran |
+| `canevas.png` | ce que le script retient comme canevas |
+| `reperes.png` | la même fenêtre, **canevas et visuels entourés** |
+
+`reperes.png` est celle qui répond à « pourquoi mes captures sont mal
+cadrées ». Trois couleurs :
+
+| Repère | Ce qu'il entoure |
+| --- | --- |
+| vert | chaque visuel, tel qu'il sera capturé |
+| rouge | le canevas retenu — celui dont tout le cadrage découle |
+| bleu | la zone que les marges déclarées désignent |
+
+Les rectangles verts doivent tomber sur les visuels, le rouge sur le canevas.
+Voir le bleu à côté du rouge dit d'où vient le cadrage : confondus, il vient
+des marges ; distincts, il vient de l'image — et le bleu ne sert alors à rien.
+La console, elle, donne les marges qui tomberaient sur le canevas mesuré, à
+reporter dans le plan pour que le secours soit juste lui aussi.
+
+Les repères sont ceux de la première page du plan — affichez-la dans Power BI
+avant de lancer le calibrage.
+
+### Changer de page
+
+Trois voies, essayées dans cet ordre, parce qu'aucune ne marche partout :
+
+1. **l'onglet**, cliqué par l'automatisation — les versions récentes dessinent
+   leurs onglets dans le canevas et n'en exposent aucun ([le problème est
+   connu](https://stackoverflow.com/questions/71948392/pywinauto-automate-power-bi-desktop-tabs)) ;
+2. **le clavier** : `Ctrl+Page suivante` / `Ctrl+Page précédente`. Le rapport
+   donne le rang de chaque page, onglets cachés compris : d'un rang connu au
+   suivant, il n'y a qu'à compter les pas. Le script remonte d'abord à la
+   première page pour savoir d'où il part, après avoir éprouvé une fois que le
+   raccourci fonctionne ;
+3. **vous**, à qui le script demande d'afficher la page.
+
+Chaque voie est **vérifiée** : le script compare ce qui est à l'écran avant et
+après. Rien n'a changé, la page n'a pas été atteinte — et il préfère demander,
+ou écarter les prises de cette page, plutôt que de photographier une autre page
+en croyant tenir celle-là. `--manual-pages` court-circuite tout cela et
+demande à chaque page.
 
 ## Structure du projet
 
 Chaque module a une responsabilité unique ; ce qu'il expose est déclaré par son
 `__init__.py`, et un seul fichier en porte le point d'entrée — `extractor.py`,
-`writer.py`. Les tests sont rassemblés sous `tests/`.
+`capturer.py`, `writer.py`. Les tests sont rassemblés sous `tests/`.
 
 ```
-main.py                       le chef d'orchestre : enchaîne les deux modules
+main.py                       le chef d'orchestre : enchaîne les trois modules
 config.yaml                   le plan du document
 template-doc-pbib.docx        le template Word
 
 src/
-  core/                       le socle commun, dont aucun module ne dépend
+  core/                       le socle commun — aucun module n'en dépend d'un autre
       models.py               les structures qui circulent, dont PowerBiMetadata
       config.py               le plan : chargement, valeurs par défaut, accès
       expressions.py          variables {{ }}, listes `over:`, conditions `when:`
@@ -686,7 +846,6 @@ src/
       answers.py              mémoire des réponses d'une génération à l'autre
       paths.py                localisation des fichiers livrés (exe compris)
       window.py               fenêtre de l'exécutable : attente et plantages
-      version.py              la version, lue sur le dernier tag du dépôt
 
   pbi_extractor/              le .pbip ──► PowerBiMetadata
       extractor.py            le point d'entrée : les trois sources croisées
@@ -701,6 +860,18 @@ src/
       report/                 rapport PBIR
           pages.py              pages, groupes et visuels
           fields.py             projections et filtres
+
+  gui_automator/              Power BI Desktop ──► les PNG
+      capturer.py             le point d'entrée : une séance, de bout en bout
+      geometry.py             du repère du rapport à celui de l'écran
+      plan.py                 ce qu'il y a à capturer, sans rien ouvrir
+      library.py              où vivent les images, et sous quel nom
+      canvas.py               où le canevas est rendu, cherché dans l'image
+      png.py                  écrire une image, sans bibliothèque d'images
+      finder.py               quelle fenêtre du bureau est le rapport
+      recorder.py             le contrat d'un preneur de captures
+      fake.py                 un preneur qui n'ouvre rien : rectangles unis
+      desktop.py              le vrai : Power BI Desktop (pywinauto + mss)
 
   report_generator/           PowerBiMetadata ──► le .docx
       writer.py               le point d'entrée : l'écriture et son bilan
@@ -733,11 +904,12 @@ src/
           transplant.py         recopie d'un contenu et de ses dépendances
           changes.py            bilan des ajouts / modifications / retraits
 
-tests/                        core/, extract/, document/, et le parcours
-                              complet sur le plan livré
+assets/                       destination des captures (voir assets/README.md)
+tests/                        core/, extract/, capture/, document/, et le
+                              parcours complet sur le plan livré
 tools/docs.py                 documentation du code (pdoc)
 tools/package.py              assemblage du dossier distribué
-docs/templates/               accueil et arborescence du site pdoc
+docs/templates/               habillage du site de documentation
 powerbi-doc.spec              recette de construction de l'exécutable
 ```
 
@@ -750,13 +922,13 @@ powerbi-doc.spec              recette de construction de l'exécutable
 | exposer une donnée au plan | `src/core/models.py` puis `src/report_generator/context.py` |
 | ajouter un filtre `data:` | `src/core/selection.py` ou `src/report_generator/filters.py` |
 | ajouter un type de question | `src/core/questions.py`, branché dans `src/core/prompts.py` → `_ask` |
+| capturer autrement qu'avec Power BI Desktop | écrire un `Recorder` (voir `src/gui_automator/recorder.py`) |
+| corriger un cadrage de capture | `src/gui_automator/geometry.py`, et ses tests |
 | changer ce qui passe d'un module à l'autre | `PowerBiMetadata`, dans `src/core/models.py` |
 | changer l'enchaînement des étapes | `main.py` → `generate` |
 | changer où sont mémorisées les réponses | `document.answers_file` du YAML |
 | lire une nouvelle propriété TMDL | `src/pbi_extractor/tmdl/measures.py` → `_PROPERTIES` |
 | changer ce qui déclenche une alerte de mise à jour | le `fingerprint:` de la section, dans le YAML |
-| publier une nouvelle version | `git tag v0.8` — rien d'autre |
-| changer l'accueil ou l'arbre du site pdoc | `docs/templates/` |
 
 ## Notes
 
@@ -776,4 +948,11 @@ task build      # construire l'exécutable
 task package    # construire le zip à distribuer
 task clean      # nettoyer les caches et les artefacts de construction
 task docs       # servir la documentation du code
+```
+
+Mise au point des captures, sans écrire de document :
+
+```bash
+task capture-plan -- rapport.pbip     # ce qui serait capturé
+task calibrate    -- rapport.pbip     # régler le cadrage de la fenêtre
 ```

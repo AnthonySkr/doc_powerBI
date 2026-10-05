@@ -1,8 +1,22 @@
 """
 Affichage console du script.
 
-Tous les messages passent par ici : le reste du code n'appelle jamais `print`
-ni `input`.
+Tous les messages passent par ce module : le reste du code n'appelle jamais
+`print` ni `input` directement, ce qui laisse un seul endroit à modifier pour
+changer la présentation.
+
+La sortie est celle d'une petite application de terminal : un bandeau, des
+étapes numérotées, des questions encadrées et un bilan final. Trois choses la
+rendent lisible partout où l'exécutable est lancé — un terminal Windows moderne,
+une vieille console `cmd`, ou une sortie redirigée vers un fichier :
+
+  - les couleurs ne sont écrites que si la sortie est un vrai terminal, et
+    jamais si `NO_COLOR` est renseigné (convention `no-color.org`) ;
+  - les caractères de dessin sont remplacés par leurs équivalents ASCII quand
+    l'encodage de la console ne sait pas les porter — sans quoi la génération
+    s'arrêterait sur un `UnicodeEncodeError`, après tout le travail ;
+  - rien de tout cela n'est décidé à chaque ligne : les deux réponses sont
+    calculées une fois, à l'import.
 """
 
 import os
@@ -12,7 +26,6 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 
 WIDTH = 66
-"""Largeur du dessin, en caractères."""
 
 
 @dataclass
@@ -56,7 +69,6 @@ def _enable_windows_ansi() -> bool:
 
 
 def _supports_color() -> bool:
-    """La sortie est-elle un terminal qui accepte les couleurs ?"""
     if os.environ.get("NO_COLOR"):
         return False
     if not hasattr(sys.stdout, "isatty") or not sys.stdout.isatty():
@@ -67,7 +79,7 @@ def _supports_color() -> bool:
 
 
 def _supports_unicode() -> bool:
-    """La console sait-elle écrire les caractères de dessin ?"""
+    """La console sait-elle écrire les caractères de dessin employés ici ?"""
     encoding = getattr(sys.stdout, "encoding", "") or ""
     try:
         "─│╭╮╰╯✓✗•›»".encode(encoding)
@@ -102,7 +114,6 @@ _GLYPHS = {
 
 
 def glyph(name: str) -> str:
-    """Caractère de dessin, dans sa forme Unicode ou ASCII selon la console."""
     unicode_form, ascii_form = _GLYPHS[name]
     return unicode_form if _UNICODE else ascii_form
 
@@ -120,7 +131,7 @@ _STYLES = {
 
 
 def paint(text: str, style: str) -> str:
-    """Applique une couleur, ou retourne le texte tel quel si elles sont inaplicables."""
+    """Applique une couleur, ou retourne le texte tel quel si elles sont hors jeu."""
     if not _COLOR or not text:
         return text
     return f"{_STYLES[style]}{text}{_STYLES['reset']}"
@@ -145,23 +156,23 @@ def _write(line: str = "") -> None:
     """
     Écrit une ligne, sans jamais faire échouer le script sur un caractère.
 
-    Un nom venu de Power BI peut porter n'importe quoi : perdre un document
-    déjà produit sur un `UnicodeEncodeError` d'affichage serait absurde. Les
-    caractères qui ne passent pas sont remplacés, et la ligne est écrite.
+    Le choix des caractères de dessin tient déjà compte de l'encodage de la
+    console, mais pas le texte des messages : un nom de mesure venu de Power BI
+    peut porter n'importe quoi. Une console incapable de l'écrire ferait
+    remonter un `UnicodeEncodeError` — et perdrait un document déjà produit
+    pour un caractère d'affichage. Les caractères qui ne passent pas sont donc
+    remplacés, et la ligne est écrite quand même.
     """
     if not _output.enabled:
         return
     try:
-        print(line)  # noqa: T201
+        print(line)  # noqa: T201 — l'un des deux seuls `print` du projet
     except UnicodeEncodeError:
         encoding = getattr(sys.stdout, "encoding", "") or "ascii"
-        print(  # noqa: T201
-            line.encode(encoding, "replace").decode(encoding, "replace")
-        )
+        print(line.encode(encoding, "replace").decode(encoding, "replace"))  # noqa: T201
 
 
 def blank() -> None:
-    """Ligne vide."""
     _write()
 
 
@@ -182,11 +193,7 @@ def title(text: str, subtitle: str = "") -> None:
     body = f"{label}{' ' * max(padding, 1)}{subtitle}  "
 
     _write(paint(top, "frame"))
-    _write(
-        paint(side, "frame")
-        + paint(body[:inner].ljust(inner), "bold")
-        + paint(side, "frame")
-    )
+    _write(paint(side, "frame") + paint(body[:inner].ljust(inner), "bold") + paint(side, "frame"))
     _write(paint(bottom, "frame"))
 
 
@@ -198,19 +205,18 @@ def banner(text: str, ok: bool = True) -> None:
 
     _write(paint(glyph("tl") + glyph("h") * inner + glyph("tr"), "frame"))
     _write(
-        paint(glyph("v"), "frame")
-        + paint(body, "ok" if ok else "ko")
-        + paint(glyph("v"), "frame")
+        paint(glyph("v"), "frame") + paint(body, "ok" if ok else "ko") + paint(glyph("v"), "frame")
     )
     _write(paint(glyph("bl") + glyph("h") * inner + glyph("br"), "frame"))
 
 
 def step(text: str, number: int | None = None, total: int | None = None) -> None:
     """
-    Titre d'étape, précédé de son rang lorsqu'il est connu.
+    Titre d'étape.
 
-    Sur un gros rapport, la lecture du modèle prend le temps qu'il faut : mieux
-    vaut « 1/3 » qu'une fenêtre muette.
+    Le rang de l'étape est affiché lorsqu'il est connu : sur un rapport
+    volumineux, la lecture du modèle prend le temps qu'il faut, et savoir qu'on
+    en est à la première étape sur quatre vaut mieux qu'une fenêtre muette.
     """
     counter = f" {number}/{total} " if number and total else " "
     head = f"{glyph('h') * 2}{counter}{glyph('step')} "
@@ -238,7 +244,6 @@ def field(label: str, value: str, width: int = 14) -> None:
 
 
 def info(message: str) -> None:
-    """Message courant, sans marque particulière."""
     _write(f"  {message}")
 
 
@@ -271,8 +276,9 @@ def ask(label: str, default: str = "") -> str:
     """
     Pose une question et retourne la réponse brute.
 
-    La valeur proposée s'affiche entre crochets : un Entrée la valide, et
-    reconduit ainsi les réponses de la génération précédente.
+    La valeur proposée est affichée entre crochets : la valider d'un Entrée est
+    le geste attendu, et c'est celui qui reconduit à l'identique les réponses de
+    la génération précédente.
     """
     suffix = paint(f" [{default}]", "dim") if default else ""
     return _prompt(f"  {label}{suffix} {paint(glyph('arrow'), 'frame')} ")
@@ -287,8 +293,9 @@ def option(number: int, text: str, retained: bool = False) -> None:
     """
     Une entrée numérotée d'une question à choix.
 
-    Celles retenues la dernière fois sont marquées : on les reconduit d'un
-    Entrée, plutôt que de les ressaisir de mémoire.
+    Les entrées déjà retenues la dernière fois sont marquées : c'est ce qui
+    permet de les reconduire d'un Entrée, plutôt que de les ressaisir de
+    mémoire — et d'en oublier une.
     """
     mark = paint(f"   {glyph('ok')} retenu", "ok") if retained else ""
     _write(f"    {paint(str(number).rjust(3) + '.', 'key')} {text}{mark}")
@@ -302,10 +309,11 @@ def question(label: str) -> None:
 
 def _prompt(text: str) -> str:
     """
-    Lit une réponse au terminal.
+    Lit une réponse.
 
     L'invite passe par `stdout` plutôt que par l'argument de `input`, qui
-    l'écrit sur `stderr` : une sortie redirigée porte ainsi les questions.
+    l'écrit sur `stderr` : redirigée, la sortie du script porte ainsi les
+    questions posées, et non des réponses sans intitulé.
     """
     if _output.enabled:
         print(text, end="", flush=True)  # noqa: T201 — l'autre, pour l'invite

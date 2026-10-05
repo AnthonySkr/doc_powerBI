@@ -1,11 +1,18 @@
 """
 Mémoire des réponses données au lancement.
 
-Les questions de `inputs:` se reposent à chaque génération.
+Les questions de `inputs:` se reposent à chaque génération. Certaines n'ont
+pas de conséquence — le titre de l'en-tête. Une autre en a une lourde : les
+visuels qu'on écarte de la documentation. Oublier d'en re-cocher un le fait
+réapparaître, en cocher un de plus fait disparaître la partie correspondante,
+et la rédaction qui allait avec part en annexe.
 
-Les réponses sont conservées à côté du projet et reproposées ensuite : un
-Entrée les reconduit. Le fichier est en clair et se modifie à la main ;
-le supprimer repart du plan.
+Les réponses sont donc conservées à côté du projet, et proposées par défaut à
+la génération suivante : on valide en pressant Entrée. En mode `--no-input`, ce
+sont elles qui servent, plutôt que les valeurs figées du YAML.
+
+Le fichier est en clair et se modifie à la main ; le supprimer revient à
+repartir des valeurs du plan.
 """
 
 from pathlib import Path
@@ -17,6 +24,8 @@ from src.core import console
 from src.core.config import DocConfig
 from src.core.expressions import render
 
+__all__ = ["path", "read", "write"]
+
 _DEFAULT_NAME = "reponses_{{ report.name }}.yaml"
 
 _HEADER = (
@@ -25,10 +34,8 @@ _HEADER = (
 )
 
 
-def path(
-    config: DocConfig, context: dict[str, Any], directory: str | Path
-) -> Path | None:
-    """Fichier des réponses dans ce dossier, ou None si la mémoire est coupée."""
+def path(config: DocConfig, context: dict[str, Any], directory: str | Path) -> Path | None:
+    """Emplacement du fichier des réponses, ou None si la mémoire est désactivée."""
     document = config.document
     if not document.get("remember_answers", True):
         return None

@@ -16,11 +16,20 @@ import yaml
 from src.core import paths
 from src.core.expressions import resolve_options
 
-DEFAULT_CONFIG_PATH = "config.yaml"
-"""Le plan, cherché à côté de l'exécutable."""
+__all__ = [
+    "DEFAULTS",
+    "DEFAULT_CAPTURES_DIR",
+    "DEFAULT_CONFIG_PATH",
+    "DEFAULT_OUTPUT_DIR",
+    "DocConfig",
+    "load_config",
+]
 
+# Retenus faute de mieux : le plan cherché à côté de l'exécutable, et les deux
+# dossiers créés à côté du `.pbip`.
+DEFAULT_CONFIG_PATH = "config.yaml"
 DEFAULT_OUTPUT_DIR = "doc"
-"""Le dossier de sortie, créé à côté du `.pbip`."""
+DEFAULT_CAPTURES_DIR = "assets"
 
 
 DEFAULTS: dict[str, Any] = {
@@ -46,6 +55,7 @@ DEFAULTS: dict[str, Any] = {
         "bullet": "List Bullet",
         "code": "Code DAX",
         "image": "Image Placeholder",
+        "picture": "Normal",
         "caption": "Legende",
         "todo": "A completer",
         "table": "Tableau Reference",
@@ -66,6 +76,9 @@ DEFAULTS: dict[str, Any] = {
             "numbering": "auto",
             "sequence": "Figure",
             "empty_paragraph_after": True,
+            # Hauteur maximale d'une capture insérée : une page entière, plus
+            # haute que large, tient ainsi sur une page du document.
+            "max_height_cm": 18,
             "markers": {
                 "shape": "ellipse",
                 "size_cm": 0.62,
@@ -114,11 +127,7 @@ DEFAULTS: dict[str, Any] = {
         },
     },
     "data": {
-        "pages": {
-            "exclude_hidden": True,
-            "exclude_names": [],
-            "sort_by": "report_order",
-        },
+        "pages": {"exclude_hidden": True, "exclude_names": [], "sort_by": "report_order"},
         "visuals": {
             "exclude_types": [],
             "exclude_titles": [],
@@ -127,7 +136,9 @@ DEFAULTS: dict[str, Any] = {
             "groups": {
                 "enabled": True,
                 "keep_empty": False,
-                # Un groupe d'un seul visuel ne mérite pas sa propre partie
+                # Un groupe d'un seul visuel ne mérite pas sa propre partie :
+                # son titre et sa légende d'une ligne redisent ce que le visuel
+                # dit déjà, au prix d'un niveau de plan de plus.
                 "keep_single": False,
                 "exclude_titles": [],
                 "sort_by": "position",
@@ -158,45 +169,74 @@ DEFAULTS: dict[str, Any] = {
         "keep_user_text": True,
         "backup": True,
         "backup_dir": ".versions",
+        # Aucune mise en forme dans le document : ce qui a été ajouté ou
+        # modifié est nommé dans le résumé de fin d'exécution.
         "highlight_changed": "none",
         "highlight_new": "none",
         # Annexe recueillant, en fin de document, ce qui n'a pas pu être
         # replacé : élément disparu du rapport, bloc retiré du plan, donnée du
-        # script retouchée à la main.
+        # script retouchée à la main. Rien n'est jeté en silence.
         "orphans": {
             "enabled": True,
             "title": "Contenu non replacé",
             "intro": "",
         },
     },
+    # Captures d'écran des visuels (`--captures`). Le document ne les prend pas
+    # lui-même : il les trouve dans `directory` si elles y sont, et réserve
+    # leur place sinon.
+    "capture": {
+        "directory": DEFAULT_CAPTURES_DIR,
+        # Fenêtre de Power BI Desktop, et cadrage du canevas. Le canevas est
+        # reconnu dans l'image (`detect_canvas`), cherché sur toute la zone
+        # utile de la fenêtre : les marges ci-dessous ne sont qu'un cadrage de
+        # secours, pour le cas où il ne s'y reconnaîtrait pas.
+        # `--calibrate` montre ce que le script voit, et dit les marges qui
+        # conviennent à l'écran qu'il a sous les yeux.
+        "window": {
+            # La fenêtre se reconnaît à son processus (PBIDesktop.exe), pas à
+            # son titre : selon la version, celui-ci ne porte que le nom du
+            # rapport. Ce fragment ne sert donc qu'à désigner un rapport parmi
+            # plusieurs ouverts en même temps ; vide, le premier trouvé.
+            "title": "",
+            # Cadrage de secours : la zone utile de la fenêtre, moins le
+            # ruban, les volets de droite et la barre d'onglets. Le canevas y
+            # est alors supposé ajusté et centré, comme avant que la
+            # reconnaissance existe — d'où l'intérêt de les régler juste, avec
+            # les valeurs que `--calibrate` affiche.
+            "inset_left": 0,
+            "inset_top": 130,
+            "inset_right": 340,
+            "inset_bottom": 60,
+            # Agrandir la fenêtre avant de capturer : le cadrage ne dépend
+            # plus de la taille qu'elle avait, et le canevas est rendu au plus
+            # grand — donc les captures au plus net.
+            "maximize": True,
+            # Reconnaître le canevas dans l'image plutôt que de le déduire des
+            # marges. À couper pour revenir au calcul déclaré.
+            "detect_canvas": True,
+        },
+        # Temps laissé au rendu après un changement de page, en secondes.
+        "settle_seconds": 1.5,
+        # Changer de page à la main plutôt que par automatisation : plus lent,
+        # mais jamais pris en défaut.
+        "manual_pages": False,
+        # Une fois la page prise telle qu'elle s'ouvre, appliquer les signets
+        # qui montrent les visuels masqués — chacun aussitôt défait. À couper
+        # pour ne jamais rien cliquer : les visuels masqués sont alors écartés.
+        "bookmarks": True,
+    },
     "inputs": [],
     "sections": [],
 }
-"""
-Le plan entier, dans ses valeurs par défaut.
-
-Toute clé absente du fichier de l'utilisateur est reprise d'ici : son fichier
-n'a besoin de porter que ce qu'il change.
-"""
 
 
 class DocConfig:
-    """
-    Accès typé aux grandes parties du plan.
-
-    Les clés absentes du fichier de l'utilisateur sont complétées par
-    `DEFAULTS` : chaque propriété ci-dessous est donc toujours servie.
-
-    `raw` porte le plan complet, défauts compris, et `path` le fichier dont il
-    vient — None quand il ne vient d'aucun.
-    """
+    """Accès typé aux différentes parties du fichier de configuration."""
 
     def __init__(
-        self,
-        raw: dict[str, Any] | None = None,
-        path: str | Path | None = DEFAULT_CONFIG_PATH,
+        self, raw: dict[str, Any] | None = None, path: str | Path | None = DEFAULT_CONFIG_PATH
     ):
-        """Complète le plan de ses valeurs par défaut."""
         self.raw = _merge_defaults(raw or {}, DEFAULTS)
         # `None` quand le plan ne vient d'aucun fichier : `Path("")` vaudrait
         # `.`, et ferait passer le dossier courant pour celui du plan.
@@ -205,56 +245,54 @@ class DocConfig:
     # ── Sections principales ──────────────────────────────────────
     @property
     def document(self) -> dict[str, Any]:
-        """Template, dossier et nom de sortie, page de garde, en-tête."""
         return self.raw["document"]
 
     @property
     def styles(self) -> dict[str, str]:
-        """Clés de style du plan → noms des styles du template."""
         return self.raw["styles"]
 
     @property
     def rendering(self) -> dict[str, Any]:
-        """Mise en forme commune : sauts de page, images, liens, sommaire."""
         return self.raw["rendering"]
 
     @property
     def data(self) -> dict[str, Any]:
-        """Ce que le plan retient du rapport : pages, visuels, tables, mesures."""
         return self.raw["data"]
 
     @property
     def merge(self) -> dict[str, Any]:
-        """Régénération au-dessus d'une documentation existante."""
         return self.raw["merge"]
 
     @property
+    def capture(self) -> dict[str, Any]:
+        return self.raw["capture"]
+
+    @property
     def inputs(self) -> list[dict[str, Any]]:
-        """Les questions posées au lancement."""
         return self.raw["inputs"]
 
     @property
     def sections(self) -> list[dict[str, Any]]:
-        """Le plan du document, section par section."""
         return self.raw["sections"]
 
     # ── Helpers ───────────────────────────────────────────────────
     def resolve_data(self, context: dict[str, Any]) -> DocConfig:
         """
-        Copie du plan dont les `{{ ... }}` de `data:` sont substitués.
+        Retourne la configuration dont les filtres `data:` sont résolus.
 
-        Les filtres peuvent ainsi dépendre des réponses au lancement — écarter
-        les visuels que l'utilisateur a désignés. Le reste est inchangé.
+        Ils peuvent ainsi dépendre des réponses au lancement — écarter les
+        visuels que l'utilisateur a désignés, par exemple. Le reste de la
+        configuration est inchangé.
         """
         raw = {**self.raw, "data": resolve_options(self.data, context)}
         return DocConfig(raw, self.path)
 
     def find_section(self, section_id: str) -> dict[str, Any] | None:
-        """Section du plan portant cet `id`, sous-sections comprises."""
+        """Retourne une section du plan par son id (recherche récursive)."""
         return _find_section(self.sections, section_id)
 
     def section_options(self, section_id: str) -> dict[str, Any]:
-        """Bloc `options:` d'une section, ou {} s'il n'en porte pas."""
+        """Retourne le bloc `options` d'une section, ou {} s'il n'existe pas."""
         section = self.find_section(section_id) or {}
         return section.get("options") or {}
 
@@ -275,9 +313,7 @@ def load_config(path: str | Path = DEFAULT_CONFIG_PATH) -> DocConfig:
         raise ValueError(f"Configuration illisible : {e}") from e
 
     if raw is not None and not isinstance(raw, dict):
-        raise ValueError(
-            f"Configuration invalide dans '{found}' : un dictionnaire est attendu."
-        )
+        raise ValueError(f"Configuration invalide dans '{found}' : un dictionnaire est attendu.")
 
     return DocConfig(raw or {}, found)
 
@@ -294,10 +330,7 @@ def _merge_defaults(value: dict[str, Any], defaults: dict[str, Any]) -> dict[str
     return merged
 
 
-def _find_section(
-    sections: list[dict[str, Any]], section_id: str
-) -> dict[str, Any] | None:
-    """Première section de l'arbre portant cet `id`, ou None."""
+def _find_section(sections: list[dict[str, Any]], section_id: str) -> dict[str, Any] | None:
     for section in sections:
         if section.get("id") == section_id:
             return section

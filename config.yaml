@@ -8,7 +8,10 @@
 #  section : un titre (h1/h2/h3) + une liste de `blocks` + des `sections` filles
 #  block   : un élément de contenu. Types disponibles :
 #     paragraph        texte fixe (éventuellement proposé à l'édition)
-#     image            emplacement réservé pour une capture (texte descriptif)
+#     image            capture d'écran, ou sa place réservée (texte descriptif)
+#                      (`capture:` = page et prise à chercher dans le dossier
+#                       des captures — trouvée, l'image est insérée ; sinon
+#                       sa place est réservée)
 #                      (`markers:` = repères numérotés à glisser sur l'image)
 #     user_fill        zone laissée vide, à compléter par l'utilisateur ensuite
 #                      (`hint:` = ce qu'on attend, écrit en guise d'amorce)
@@ -90,6 +93,7 @@ styles:
   bullet: "List Bullet"
   code: "Code DAX"
   image: "Image Placeholder"   # encadré pointillé réservant la capture
+  picture: "Normal"            # paragraphe qui porte une capture insérée
   caption: "Legende"           # légende sous l'emplacement d'image
   todo: "A completer"
   table: "Tableau Reference"   # tableau des références d'un visuel
@@ -109,8 +113,10 @@ rendering:
   # Un titre 1 démarre toujours sur une nouvelle page.
   page_break_before_heading_1: true
 
-  # Emplacements d'images : le script n'insère aucune image, il réserve la
-  # place et décrit la capture attendue. L'utilisateur remplace ensuite.
+  # Captures : un bloc `image` qui porte `capture:` insère l'image trouvée
+  # dans le dossier des captures (`capture.directory`, rempli par
+  # `--captures`). Sinon — ou si l'image manque —, le script réserve la place
+  # et décrit la capture attendue : l'utilisateur la colle ensuite.
   image_placeholder:
     text_format: "🖼  {description}"
     caption_format: "Figure {n} — {description}"
@@ -124,6 +130,9 @@ rendering:
     numbering: auto
     sequence: "Figure"         # nom de la séquence Word — celui de ses légendes
     empty_paragraph_after: false
+    # Une capture insérée garde sa taille d'écran, sans dépasser la largeur
+    # du texte ni cette hauteur : une page entière tient sur une page.
+    max_height_cm: 18
 
     # Repères à faire glisser sur la capture. Un bloc `image` qui porte
     # `markers:` (voir la partie 7) fait dessiner une pastille par ligne du
@@ -601,6 +610,9 @@ sections:
             - type: image
               id: page_capture
               description: "Capture complète de la page « {{ page.display_name }} »"
+              capture:
+                page: "{{ page.name }}"
+                shot: "_page"
 
             # --- Groupes Power BI de la page -----------------------------
             # Un groupe rassemble ses visuels dans une même partie : capture
@@ -623,6 +635,9 @@ sections:
                   - type: image
                     id: groupe_capture
                     description: "Capture du groupe « {{ group.title }} »"
+                    capture:
+                      page: "{{ page.name }}"
+                      shot: "{{ group.name }}"
                     # Un repère par ligne de la légende ci-dessous, à faire
                     # glisser sur la capture (voir rendering.image_placeholder).
                     markers:
@@ -684,6 +699,9 @@ sections:
                         - type: image
                           id: visuel_capture
                           description: "Capture du visuel « {{ visual.title }} »"
+                          capture:
+                            page: "{{ page.name }}"
+                            shot: "{{ visual.name }}"
                           # Un repère par ligne du tableau ci-dessous, à faire
                           # glisser sur la capture pour situer chaque champ.
                           markers:

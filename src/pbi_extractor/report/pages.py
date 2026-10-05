@@ -5,11 +5,12 @@ import os
 from typing import Any
 
 from src.core import console
-from src.core.models import ReportPage, Visual, VisualGroup
+from src.core.models import BookmarkControl, ReportPage, Visual, VisualGroup
 from src.pbi_extractor.report.fields import parse_elements, parse_filters, parse_reference_labels
+from src.pbi_extractor.report.layout import to_page_coordinates
 
+# Titre de repli d'un groupe dont le `displayName` est vide.
 UNTITLED_GROUP = "Groupe sans nom"
-"""Titre de repli d'un groupe dont le `displayName` est vide."""
 
 
 def load_page_order(pages_dir: str) -> dict[str, int]:
@@ -46,7 +47,12 @@ def parse_page(page_path: str, folder_name: str, page_order: dict[str, int]) -> 
             page.groups.append(container)
         elif container is not None:
             page.visuals.append(container)
+            control = parse_bookmark_control(container, os.path.join(visuals_dir, folder))
+            if control is not None:
+                page.bookmark_controls.append(control)
 
+    # Tous les membres de groupe lus : leurs places se ramènent à la page.
+    to_page_coordinates(page)
     return page
 
 
@@ -55,8 +61,8 @@ def parse_container(visual_json_path: str, folder_name: str) -> Visual | VisualG
     Parse un `visual.json`.
 
     Le fichier décrit soit un visuel (`visual`), soit un conteneur de groupe
-    (`visualGroup`) — les deux clés s'excluent. Tous sont lus : le tri revient
-    à `data.visuals`.
+    (`visualGroup`) — les deux clés s'excluent. Les visuels sont tous lus : le
+    tri revient à `data.visuals`.
     """
     data = read_json(visual_json_path)
     if data is None:
@@ -68,7 +74,7 @@ def parse_container(visual_json_path: str, folder_name: str) -> Visual | VisualG
 
 
 def parse_group(data: dict, folder_name: str) -> VisualGroup:
-    """Conteneur de groupe : pas de contenu propre, mais un nom et une place."""
+    """Conteneur de groupe : pas de contenu propre, mais un nom et un cadre."""
     node = data.get("visualGroup") or {}
     position = data.get("position") or {}
 
@@ -78,8 +84,14 @@ def parse_group(data: dict, folder_name: str) -> VisualGroup:
         title=(node.get("displayName") or "").strip() or UNTITLED_GROUP,
         group_mode=node.get("groupMode", ""),
         parent_group_name=data.get("parentGroupName", ""),
-        pos_x=float(position.get("x") or 0),
-        pos_y=float(position.get("y") or 0),
+        is_hidden=bool(data.get("isHidden")),
+        pos_x=_length(position.get("x"), 0.0),
+        pos_y=_length(position.get("y"), 0.0),
+        # Le cadre du groupe, quand il est déclaré : il vaut mieux que
+        # l'étendue de ses visuels, qui ignore ce que le groupe laisse de vide
+        # autour d'eux.
+        width=_length(position.get("width"), 0.0),
+        height=_length(position.get("height"), 0.0),
     )
 
 
@@ -109,15 +121,62 @@ def parse_visual(data: dict, folder_name: str) -> Visual | None:
         height=_length(position.get("height"), 0.0),
         name=data.get("name") or folder_name,
         parent_group_name=data.get("parentGroupName", ""),
+        is_hidden=bool(data.get("isHidden")),
     )
+
+
+def parse_bookmark_control(visual: Visual, folder: str) -> BookmarkControl | None:
+    """
+    Le visuel applique-t-il des signets ? Navigateur, ou bouton à action signet.
+
+    Le `visual.json` est relu : ce qui fait un navigateur (son groupe, son
+    orientation) ou l'action d'un bouton ne sert qu'ici, pas à la
+    documentation du visuel.
+    """
+    data = read_json(os.path.join(folder, "visual.json")) or {}
+    node = data.get("visual") or {}
+    if visual.visual_type == "bookmarkNavigator":
+        objects = node.get("objects") or {}
+        return BookmarkControl(
+            visual,
+            group=_literal(objects, "bookmarks", "bookmarkGroup"),
+            orientation=_literal(objects, "layout", "orientation"),
+            selected=_literal(objects, "bookmarks", "selectedBookmark"),
+        )
+
+    link = node.get("visualContainerObjects") or {}
+    if _literal(link, "visualLink", "type").lower() != "bookmark":
+        return None
+    if _literal(link, "visualLink", "show").lower() == "false":
+        return None
+    bookmark = _literal(link, "visualLink", "bookmark")
+    return BookmarkControl(visual, bookmark=bookmark) if bookmark else None
+
+
+def _literal(objects: dict, section: str, prop: str) -> str:
+    """
+    Valeur littérale d'une propriété de mise en forme, guillemets et suffixe ôtés.
+
+    Power BI écrit `'2ed511c2'` pour une chaîne, `1D` pour un nombre, `true`
+    pour un booléen : on rend `2ed511c2`, `1`, `true`.
+    """
+    for entry in objects.get(section) or []:
+        expr = ((entry.get("properties") or {}).get(prop) or {}).get("expr") or {}
+        value = str((expr.get("Literal") or {}).get("Value", ""))
+        if value:
+            if len(value) > 1 and value[0] == value[-1] == "'":
+                return value[1:-1]
+            return value.rstrip("DLM") if value[:1].isdigit() else value
+    return ""
 
 
 def _length(value: Any, default: float) -> float:
     """
     Longueur déclarée par le rapport, ou `default` si elle ne l'est pas.
 
-    Un `visual.json` retouché à la main peut en porter une aberrante : une
-    longueur illisible vaut absente, et n'arrête pas la lecture du rapport.
+    Ces valeurs sont écrites par Power BI, mais un `visual.json` retouché à la
+    main peut en porter une aberrante : une longueur illisible vaut absente,
+    ce n'est pas de quoi arrêter la lecture du rapport.
     """
     if value is None:
         return default

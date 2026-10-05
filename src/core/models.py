@@ -1,9 +1,9 @@
 """
-Les structures de données qui circulent entre les modules.
+Les structures de données qui circulent entre les trois modules.
 
 Ce sont ces objets que le plan YAML manipule : `{{ measure.name }}`,
-`over: page.visuals`, `{{ table.transformation_steps }}`… Tout attribut ajouté
-ici devient donc utilisable dans la configuration.
+`over: page.visuals`, `{{ table.transformation_steps }}`... Tout attribut
+ajouté ici devient donc utilisable dans la configuration.
 """
 
 from dataclasses import dataclass, field
@@ -18,7 +18,6 @@ class DocLink:
     target: str
 
     def __str__(self) -> str:
-        """Le texte seul : c'est lui qu'un `{{ ... }}` écrit."""
         return self.text
 
 
@@ -38,19 +37,17 @@ class DaxMeasure:
     description: str = ""
     format_string: str = ""
     is_hidden: bool = False
-    # Renseignés par `src.pbi_extractor.dependencies` :
+    # Renseignés par `apps.extract.dependencies` :
     dependent_measures: set[str] = field(default_factory=set)
     used_columns: set[str] = field(default_factory=set)
     used_by_measures: set[str] = field(default_factory=set)
-    # Renseigné par `src.report_generator.references` : visuels l'affichant.
+    # Renseigné par `apps.document.references` : visuels affichant la mesure.
     usages: list[DocLink] = field(default_factory=list)
 
     def __hash__(self) -> int:
-        """Le nom d'une mesure l'identifie dans le modèle."""
         return hash(self.name)
 
     def __eq__(self, other: object) -> bool:
-        """Deux mesures de même nom sont la même mesure."""
         return isinstance(other, DaxMeasure) and self.name == other.name
 
 
@@ -64,7 +61,6 @@ class TransformationStep:
     raw_expression: str = ""
 
     def __str__(self) -> str:
-        """`nom = expression`, tel que le document l'écrit."""
         return f"{self.name} = {self.expression}"
 
 
@@ -76,7 +72,6 @@ class CalculatedColumn:
     expression: str
 
     def __str__(self) -> str:
-        """`nom = expression`, tel que le document l'écrit."""
         return f"{self.name} = {self.expression}"
 
 
@@ -150,7 +145,6 @@ class VisualFilter:
     measure_name: str = ""
 
     def to_string(self) -> str:
-        """Le filtre en une ligne : champ, type et valeurs."""
         if self.filter_type == "Comparison":
             return f"{self.field_name} ({self.operator} {', '.join(self.values)})"
         return f"{self.field_name} ({self.filter_type}: {', '.join(self.values)})"
@@ -183,8 +177,11 @@ class Visual:
     elements: list[VisualElement] = field(default_factory=list)
     filters: list[VisualFilter] = field(default_factory=list)
     has_measures: bool = False
-    # Place du visuel dans le canevas de la page, telle que le rapport la
-    # déclare : c'est elle qui donne l'ordre de lecture à l'écran.
+    # Place du visuel dans le canevas de la page. Un membre de groupe est
+    # ramené au repère de la page dès la lecture, même quand le rapport la
+    # déclare depuis le coin de son groupe (`pbi_extractor.report.layout`).
+    # C'est elle qui permet de recadrer une capture d'écran sur ce
+    # seul visuel (voir `apps.capture`).
     pos_x: float = 0.0
     pos_y: float = 0.0
     width: float = 0.0
@@ -194,7 +191,9 @@ class Visual:
     name: str = ""
     # `parentGroupName` : nom du groupe Power BI qui contient le visuel.
     parent_group_name: str = ""
-    # Renseigné par `src.report_generator.references` : le tableau du visuel.
+    # `isHidden` : masqué à l'ouverture de la page. Un signet peut l'afficher.
+    is_hidden: bool = False
+    # Renseigné par `generators.references` : lignes du tableau des références.
     references: list[VisualReference] = field(default_factory=list)
 
     @property
@@ -202,8 +201,8 @@ class Visual:
         """
         Description stable des champs affichés par le visuel.
 
-        Empreinte de la régénération : si elle change, la rédaction reprise
-        porte peut-être sur une version périmée.
+        Sert d'empreinte à la régénération : si elle change, la documentation
+        rédigée pour ce visuel porte peut-être sur une version périmée.
         """
         return " ".join(
             sorted(f"{element.role}:{element.model_name}" for element in self.elements)
@@ -216,9 +215,9 @@ class VisualGroupMember:
     """
     Ligne de la légende d'un groupe.
 
-    La légende numérote les visuels documentés du groupe : le lecteur relie
-    ainsi chaque numéro reporté sur l'image au visuel détaillé plus bas. Ceux
-    que `data.visuals` écarte n'y figurent pas.
+    La légende fait le lien entre la capture du groupe et son contenu : elle
+    liste les visuels documentés du groupe. Ceux que `data.visuals` écarte
+    (habillage, boutons, visuels présentés ailleurs) n'y figurent pas.
     """
 
     number: str
@@ -237,10 +236,10 @@ class VisualGroup:
     """
     Groupe de visuels d'une page (`visualGroup` d'un `visual.json`).
 
-    Un groupe est documenté comme un tout : un emplacement d'image, la légende
-    de son contenu, puis le détail de chacun de ses visuels. Les sous-groupes
-    rejoignent leur groupe racine — la structure du document reste
-    page → groupe → visuel.
+    Un groupe est documenté comme un tout : une capture, une légende de son
+    contenu, puis le détail de chacun de ses visuels documentés. Les
+    sous-groupes éventuels sont rattachés à leur groupe racine : la structure
+    du document reste page → groupe → visuel.
     """
 
     id: str
@@ -248,9 +247,17 @@ class VisualGroup:
     title: str  # `displayName` du groupe
     group_mode: str = ""  # ScaleMode | ScrollMode
     parent_group_name: str = ""  # groupe parent, pour les groupes imbriqués
+    # Place du groupe dans le canevas. Power BI déclare le cadre entier —
+    # origine et dimensions —, mais un rapport ancien ou retouché peut n'en
+    # donner que l'origine : `apps.capture` retombe alors sur l'étendue des
+    # visuels du groupe.
     pos_x: float = 0.0
     pos_y: float = 0.0
-    # Renseignés par `src.core.selection.organize_page` :
+    width: float = 0.0
+    height: float = 0.0
+    # `isHidden` : groupe masqué à l'ouverture de la page, contenu compris.
+    is_hidden: bool = False
+    # Renseignés par `apps.document.filters` :
     visuals: list[Visual] = field(default_factory=list)  # visuels du groupe
     members: list[VisualGroupMember] = field(default_factory=list)  # légende du groupe
     subgroups: list[VisualGroup] = field(default_factory=list)  # sous-groupes directs
@@ -260,10 +267,59 @@ class VisualGroup:
         """
         Description stable du contenu du groupe.
 
-        Empreinte de la régénération : si un visuel entre ou sort du groupe,
-        la rédaction reprise porte peut-être sur une version périmée.
+        Sert d'empreinte à la régénération : si un visuel entre ou sort du
+        groupe, la rédaction reprise porte peut-être sur une version périmée.
         """
         return " ".join(sorted(f"{m.title}:{m.visual_type}" for m in self.members))
+
+
+@dataclass
+class BookmarkControl:
+    """
+    Ce qui, sur une page, applique un signet d'un clic.
+
+    Deux sortes : un navigateur de signets (`bookmarkNavigator`), qui aligne
+    un bouton par signet de son groupe, et un bouton simple dont l'action est
+    un signet. La place est celle du visuel qui les porte, lue — et ramenée au
+    repère de la page — avec les autres.
+    """
+
+    visual: Visual
+    group: str = ""  # navigateur : groupe de signets affiché, vide pour tous
+    orientation: str = ""  # navigateur : 0 horizontal, 1 vertical, 2 grille
+    bookmark: str = ""  # bouton : le signet qu'il applique
+    # Navigateur : le signet sélectionné à l'enregistrement du rapport, celui
+    # dont l'affichage est donc à l'écran à l'ouverture de la page.
+    selected: str = ""
+
+    @property
+    def is_navigator(self) -> bool:
+        return not self.bookmark
+
+
+@dataclass
+class PageView:
+    """
+    Un affichage de la page, tel qu'un signet le produit.
+
+    `hidden` est ce qui est masqué une fois le signet appliqué, visuels et
+    groupes, par nom technique — ce que masque un groupe masqué compris.
+    `touched` est ce dont le signet fixe la visibilité — le reste garde celle
+    qu'il avait avant qu'on l'applique, quelle qu'elle soit.
+    `trigger` est la zone du canevas où cliquer pour l'appliquer, `None` si
+    aucun bouton de la page n'y mène.
+    """
+
+    name: str  # nom technique du signet
+    title: str  # `displayName`
+    hidden: set[str] = field(default_factory=set)
+    touched: set[str] = field(default_factory=set)
+    trigger: tuple[float, float, float, float] | None = None  # x, y, largeur, hauteur
+    # Signet sélectionné, à l'ouverture, sur le navigateur qui mène à celui-ci
+    # — vide pour un bouton, ou pour le signet sélectionné lui-même.
+    selected: str = ""
+    # Pourquoi aucun bouton n'a été trouvé, quand `trigger` est vide.
+    note: str = ""
 
 
 @dataclass
@@ -281,11 +337,17 @@ class ReportPage:
     canvas_height: float = 720.0
     filters: list[VisualFilter] = field(default_factory=list)
     visuals: list[Visual] = field(default_factory=list)
-    # Conteneurs lus par le parseur, puis organisés par
-    # `src.core.selection.organize_page` : groupes racines documentés.
+    # Conteneurs de groupe lus par le parseur, puis organisés par
+    # `generators.filters` : groupes racines documentés de la page.
     groups: list[VisualGroup] = field(default_factory=list)
     # Visuels documentés n'appartenant à aucun groupe.
     ungrouped_visuals: list[Visual] = field(default_factory=list)
+    # Signets : ce qui les applique, ce qui est masqué à l'ouverture de la
+    # page (visuels et groupes, par nom, un groupe masqué emportant son
+    # contenu), et chaque affichage qu'un signet produit sur cette page.
+    bookmark_controls: list[BookmarkControl] = field(default_factory=list)
+    hidden_by_default: set[str] = field(default_factory=set)
+    views: list[PageView] = field(default_factory=list)
 
 
 @dataclass
@@ -300,8 +362,8 @@ class PowerBIReport:
     # Filtres posés sur le rapport entier (`report.json`), au-dessus des
     # filtres de page et de visuel.
     filters: list[VisualFilter] = field(default_factory=list)
-    # Renseigné par `src.report_generator.context` : mesures du modèle
-    # qu'aucun visuel ni aucun filtre n'emploie, et qui ne sont pas documentées.
+    # Renseigné par `apps.document.context` : mesures du modèle qu'aucun visuel ni
+    # aucun filtre n'emploie, et que le document ne documente donc pas.
     undocumented_measures: list[str] = field(default_factory=list)
 
     @property
@@ -320,8 +382,9 @@ class PowerBIReport:
         """
         Mesures employées comme filtre — de rapport, de page ou de visuel.
 
-        Filtrer sur une mesure est une façon de s'en servir : sans ce relevé,
-        une mesure qui ne sert qu'à filtrer passerait pour inutilisée.
+        Filtrer sur une mesure est une façon de s'en servir, au même titre que
+        l'afficher : sans ce relevé, une mesure qui ne sert qu'à filtrer
+        passerait pour inutilisée.
         """
         applied = list(self.filters)
         for page in self.pages:
@@ -346,17 +409,21 @@ class PowerBiMetadata:
     """
     Tout ce que l'on sait du rapport, d'un bout à l'autre de la génération.
 
-    L'extraction le produit, l'écriture du document le lit : ni l'une ni
-    l'autre n'a à retourner à la source.
+    L'extraction le produit, la capture y ajoute l'inventaire de ses images, le
+    document s'en sert : aucun des trois n'a à retourner à la source.
     """
 
     report: PowerBIReport
-    """Le rapport lu, pages et modèle sémantique compris."""
-
     source: Path = Path()
-    """Chemin du fichier `.pbip` dont il a été tiré."""
+    # {page: {prise: chemin}}, relatifs au dossier du projet — un projet
+    # déplacé ne perd pas ses images.
+    captures: dict[str, dict[str, str]] = field(default_factory=dict)
 
     @property
     def project_dir(self) -> Path:
-        """Dossier du projet, où vivent les réponses mémorisées."""
+        """Dossier du projet, où vivent les images et les réponses mémorisées."""
         return self.source.parent
+
+    def capture_of(self, page: str, shot: str) -> str:
+        """Chemin de la capture d'une prise, ou chaîne vide s'il n'y en a pas."""
+        return (self.captures.get(page) or {}).get(shot, "")

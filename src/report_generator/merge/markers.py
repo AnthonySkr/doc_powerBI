@@ -17,27 +17,34 @@ l'utilisateur du reste.**
                                           `gen`, politique inverse — c'est la
                                           version du document qui l'emporte
 
-Les encadrements donnent une identité aux blocs du plan : sans elle, un bloc
-ajouté ne se distinguerait pas du contenu libre de l'utilisateur, et
-n'arriverait jamais dans un document déjà généré. Tout ce qui se trouve entre
-deux ancres sans être encadré lui appartient.
+Les deux encadrements donnent une identité aux blocs du plan. Sans elle, un
+bloc ajouté au plan ne pouvait pas être distingué du contenu libre de
+l'utilisateur, et n'apparaissait jamais dans les éléments déjà documentés.
+
+Tout ce qui se trouve entre deux ancres sans être encadré appartient à
+l'utilisateur : titre reformulé, note ajoutée, capture collée, mise en forme.
 
 À la régénération, un contenu `gen` est toujours réécrit — c'est une donnée du
-rapport. Une amorce `seed` ne l'est que si personne n'y a touché. Les
-empreintes du marqueur de fin disent, contenu par contenu, ce que le script
-avait écrit : c'est ainsi qu'on rend à l'utilisateur ce qu'on retrouve en plus
-à l'intérieur d'un encadrement (voir `merge.salvage`).
+rapport. Une amorce `seed` ne l'est que si personne n'y a touché : dès qu'on y
+a écrit, c'est la version du document qui l'emporte. Les empreintes du marqueur
+de fin disent, contenu par contenu, ce que le script avait écrit : elles
+permettent de reconnaître cette différence, et de rendre à l'utilisateur ce
+qu'on retrouve en plus à l'intérieur de l'encadrement (voir `merge.salvage`).
 
-Un marqueur occupe un paragraphe à lui, masqué de bout en bout — texte *et*
-marque de paragraphe (`w:vanish`). C'est la seconde qui compte pour la mise en
-page : sans elle, Word garde la ligne vide et l'écart du style, soit une bonne
-respiration de trop entre deux blocs. Marque masquée, le marqueur ne prend plus
-aucune place ; ses écarts nuls et sa petite taille ne servent qu'à le laisser
-lisible quand l'utilisateur affiche le texte masqué (voir `collapse`).
+Les marqueurs occupent un paragraphe à eux, masqué de bout en bout : son texte
+porte l'attribut Word « masqué » (`w:vanish`), et sa marque de paragraphe
+aussi. C'est la seconde qui décide de la mise en page — masquer le seul texte
+laisse la ligne vide et l'écart d'après-paragraphe du style, quelques
+millimètres par marqueur et une bonne respiration de trop entre deux blocs.
+Marque masquée, Word joint le paragraphe au suivant : le marqueur ne prend
+plus aucune place. Restent les écarts nuls et la petite taille du texte : ils
+ne servent qu'au moment où l'utilisateur affiche le texte masqué pour voir ce
+que le script a posé — les marqueurs y sont lisibles sans écarter le document
+(voir `collapse`).
 
 Un marqueur se lit sur le seul texte du paragraphe : celui d'une forme
-flottante qu'on y a ancrée — un repère déposé sur une image — ne lui appartient
-pas (voir `own_text`).
+flottante qu'on y a ancrée — un repère déposé sur une capture — ne lui
+appartient pas (voir `own_text`).
 """
 
 import hashlib
@@ -48,36 +55,20 @@ from docx.oxml.ns import qn
 from docx.shared import Pt
 
 PREFIX = "pbi::"
-"""En tête de tout marqueur : c'est à lui qu'on en reconnaît un."""
 
 ELEMENT = "elem"
-"""Ancre un élément documenté, et porte son empreinte."""
-
 GENERATED = "gen"
-"""Ouvre un contenu du script, réécrit à chaque génération."""
-
 GENERATED_END = "endgen"
-"""Le ferme, et porte l'empreinte de chaque contenu écrit."""
-
 SEED = "seed"
-"""Ouvre une amorce : écrite une fois, puis laissée à l'utilisateur."""
-
 SEED_END = "endseed"
-"""La ferme, et porte l'empreinte de ce qu'elle contenait."""
 
+# Encadrements : marqueur d'ouverture -> marqueur de fermeture.
 ENCLOSURES = {GENERATED: GENERATED_END, SEED: SEED_END}
-"""Encadrements : marqueur d'ouverture → marqueur de fermeture."""
-
 CLOSINGS = frozenset(ENCLOSURES.values())
-"""Les marqueurs qui ferment un encadrement."""
 
+# Les ancres que la fusion pose pour elle-même — et non pour le plan — portent
+# ce préfixe : elles ne décrivent rien du rapport documenté.
 INTERNAL_PREFIX = "merge:"
-"""
-Préfixe des ancres que la fusion pose pour elle-même.
-
-Elles ne décrivent rien du rapport documenté, et ne comptent donc pas parmi
-les éléments qu'il aurait perdus.
-"""
 
 # Séparateur des champs. Les identifiants d'éléments contiennent des « : »
 # (`measure:Chiffre d'affaires`) mais jamais de barre verticale.
@@ -148,7 +139,6 @@ class Marker:
 
 
 def element(element_id: str, fingerprint: str) -> str:
-    """Marqueur ancrant un élément documenté, avec son empreinte."""
     return f"{PREFIX}{ELEMENT}{_SEPARATOR}{element_id}{_SEPARATOR}{fingerprint}"
 
 
@@ -159,20 +149,19 @@ def opening(kind: str, block_id: str) -> str:
 
 def closing(kind: str, digests: list[str] | tuple[str, ...] = ()) -> str:
     """
-    Marqueur fermant un encadrement, avec l'empreinte de chaque contenu écrit.
+    Marqueur fermant un encadrement, portant l'empreinte de chaque contenu écrit.
 
-    Le séparateur est écrit même sans contenu : c'est lui qui distingue un bloc
-    qui n'a rien produit d'un marqueur d'ancienne version.
+    Le séparateur est toujours écrit, même sans contenu : c'est lui qui
+    distingue un bloc qui n'a rien produit d'un marqueur d'ancienne version.
     """
     return f"{PREFIX}{ENCLOSURES[kind]}{_SEPARATOR}{' '.join(digests)}"
 
 
 def fingerprint(text: str) -> str:
     """
-    Empreinte du contenu technique d'un élément — expression DAX, champs.
-
-    Une empreinte plutôt que le texte : le marqueur reste court, et ne recopie
-    pas le document dans du texte masqué.
+    Empreinte du contenu technique d'un élément (expression DAX, champs d'un
+    visuel...). Une empreinte plutôt que le texte lui-même : le marqueur reste
+    court et ne recopie pas le contenu du document dans du texte masqué.
     """
     normalized = " ".join((text or "").split())
     # `usedforsecurity=False` : ce condensé identifie un contenu, il ne
@@ -182,27 +171,24 @@ def fingerprint(text: str) -> str:
     return digest.hexdigest()[:_FINGERPRINT_LENGTH]
 
 
+# Empreinte d'un contenu sans texte ni image : la place laissée libre par le
+# script en fin de bloc. Ce qu'on y écrit ne remplace rien.
 EMPTY = fingerprint("")
-"""
-Empreinte d'un contenu sans texte ni image.
-
-C'est la place que le script laisse libre en fin de bloc : ce qu'on y écrit ne
-remplace rien, et appartient donc à l'utilisateur.
-"""
 
 
 def digest(node) -> str:
     """
-    Empreinte du contenu d'un paragraphe ou d'un tableau.
+    Empreinte du contenu d'un élément de corps (paragraphe ou tableau).
 
-    Prise à l'écriture, elle se retrouve identique tant que personne n'a
-    touché à l'élément. Trois choses la composent, chacune parce qu'un geste
-    de l'utilisateur doit se voir :
+    Elle est prise au moment de l'écriture, puis retrouvée telle quelle à la
+    relecture tant que personne n'a touché à l'élément. Trois choses la
+    composent, chacune parce qu'un geste de l'utilisateur doit se voir :
 
-      - le texte écrit, sans les résultats de champs — un numéro que Word
-        recalcule ne dit rien de ce que l'utilisateur a fait ;
-      - la présence d'une image, collée dans un paragraphe laissé vide ;
-      - la position des formes flottantes : un repère glissé sur l'image ne
+      - le texte écrit, sans les résultats de champs — un numéro de figure que
+        Word recalcule ne dit rien de ce que l'utilisateur a fait ;
+      - la présence d'une image : une capture collée dans un paragraphe laissé
+        vide doit se voir ;
+      - la position des formes flottantes : un repère glissé sur la capture ne
         change rien d'autre, et c'est pourtant tout le travail.
     """
     marks = []
@@ -223,15 +209,15 @@ def text(node) -> str:
 
 def own_text(node) -> str:
     """
-    Le texte du paragraphe seul, sans celui des formes qui y flottent.
+    Le texte du paragraphe lui-même, sans celui que portent les formes flottantes.
 
-    Une forme est *ancrée* dans un paragraphe sans lui appartenir, et Word
-    change son ancre pour le paragraphe le plus proche de l'endroit où on la
-    dépose. Un repère glissé sur une image atterrit donc volontiers dans le
-    paragraphe masqué qui la précède — celui du marqueur. Son numéro se
-    collait alors au texte du marqueur, qui n'était plus reconnu : le bloc
-    perdait son identité, et la régénération reposait un emplacement d'image
-    par-dessus la capture déjà collée.
+    Une forme est *ancrée* dans un paragraphe, elle ne lui appartient pas : elle
+    flotte au-dessus de la page, et Word change son ancre pour le paragraphe le
+    plus proche de l'endroit où on la dépose. Un repère glissé sur une capture
+    atterrit donc volontiers dans le paragraphe masqué qui précède l'image —
+    celui du marqueur. Son numéro se collait alors au texte du marqueur, qui
+    n'était plus reconnu : le bloc perdait son identité, et la régénération
+    reposait un emplacement de capture par-dessus la capture déjà collée.
     """
     return "".join(run.text or "" for run in node.iter(_TEXT) if not _floats_over(run, node))
 
@@ -251,12 +237,13 @@ def written_text(node) -> str:
     Le texte de l'élément, sans ce que Word recalcule lui-même.
 
     Le résultat d'un champ — numéro de figure, renvoi, numéro de page — change
-    d'une ouverture à l'autre sans que personne n'y touche : le retenir ferait
-    passer pour rédigée une légende que Word vient de renuméroter.
+    d'une ouverture à l'autre sans que personne n'y touche. Le retenir ferait
+    passer pour rédigée une légende que Word vient simplement de renuméroter.
 
-    Un lien fait exception : Word réécrit volontiers un lien interne en champ
-    `HYPERLINK`, mais son résultat est le libellé posé par le script, et il ne
-    bouge plus.
+    Un lien fait exception. Word réécrit volontiers un lien interne sous forme
+    de champ `HYPERLINK`, mais son résultat est le libellé posé par le script,
+    et il ne bouge plus : l'écarter ferait passer pour retouché un code DAX
+    dont Word a seulement changé la façon d'écrire les liens.
     """
     parts: list[str] = []
     # Champs ouverts, du plus englobant au plus imbriqué : chacun retient son
@@ -288,14 +275,18 @@ def same_content(left, right) -> bool:
     Deux éléments portent-ils le même contenu, aux retouches de Word près ?
 
     L'empreinte relevée à l'écriture ne survit pas à tout : Word recoupe les
-    runs, perd une espace, réécrit un lien en champ. Rien de cela n'est un
-    geste de l'utilisateur, et la fusion doit reconnaître la donnée qu'elle
-    s'apprête à réécrire à l'identique.
+    runs, perd une espace de bord, réécrit un lien interne sous forme de champ.
+    Rien de tout cela n'est un geste de l'utilisateur, et la fusion doit
+    pouvoir reconnaître, dans le document relu, la donnée qu'elle s'apprête à
+    réécrire à l'identique.
 
-    La comparaison est donc tolérante : les espaces ne comptent pas, et les
-    deux lectures du texte sont acceptées, avec et sans résultats de champs.
-    Ce qui relève du geste de l'utilisateur, lui, se voit : une image collée
-    dans une donnée du script, ou un repère qu'on a fait glisser.
+    La comparaison est donc volontairement tolérante : les espaces ne comptent
+    pas — une différence qui ne tient qu'à elles ne vaut pas la peine d'être
+    archivée — et les deux lectures du texte sont acceptées, avec et sans les
+    résultats de champs, puisque Word peut avoir changé de forme entre les deux
+    générations. Ce qui relève du geste de l'utilisateur, en revanche, se voit :
+    une capture collée dans une donnée du script n'est pas la même chose que la
+    donnée seule, et un repère qu'on a fait glisser non plus.
     """
     if has_picture(left) != has_picture(right) or _positions(left) != _positions(right):
         return False
@@ -340,10 +331,11 @@ def has_content(node) -> bool:
 
 def is_field(node) -> bool:
     """
-    L'élément est-il un contenu que Word calcule — sommaire, renvoi ?
+    L'élément est-il un contenu que Word calcule — table des matières, renvoi ?
 
-    Son texte change tout seul d'une ouverture à l'autre : le prendre pour de
-    la rédaction en ferait un doublon à chaque génération.
+    Son texte change tout seul d'une ouverture à l'autre : le comparer à ce que
+    le script avait écrit n'a pas de sens, et le prendre pour de la rédaction
+    en ferait un doublon à chaque génération.
     """
     return node.tag in _FIELDS or any(next(node.iter(tag), None) is not None for tag in _FIELDS)
 
@@ -357,8 +349,8 @@ def write(body, text: str):
     """
     Ajoute un paragraphe masqué portant le marqueur, et le retourne.
 
-    `body` est ce qui sait ajouter un paragraphe : le `word.body.Body` du
-    document en cours d'écriture, ou le document lui-même.
+    `body` est ce qui sait ajouter un paragraphe : le corps du document en
+    cours d'écriture (`generators.word.body.Body`), ou le document lui-même.
     """
     paragraph = body.add_paragraph()
     hide(paragraph.add_run(text))
@@ -367,7 +359,7 @@ def write(body, text: str):
 
 
 def hide(run) -> None:
-    """Masque un run, et le réduit à la taille d'un marqueur."""
+    """Applique l'attribut « masqué » à un run, et le réduit à la taille d'un marqueur."""
     _vanish(run._r.get_or_add_rPr())
 
 
@@ -375,13 +367,19 @@ def collapse(node) -> None:
     """
     Retire au paragraphe d'un marqueur la place qu'il prendrait.
 
-    Masquer le texte ne suffit pas : la marque de paragraphe reste affichée, et
-    avec elle une ligne et l'écart du style — jusqu'à quatre marqueurs entre
-    deux contenus rédigés. La masquer aussi fait disparaître la ligne entière.
+    Masquer le texte ne suffit pas : la marque de paragraphe, elle, reste
+    affichée, et avec elle une ligne et l'écart d'après-paragraphe du style —
+    quelques millimètres par marqueur, et jusqu'à quatre marqueurs entre deux
+    contenus rédigés. Masquer aussi la marque de paragraphe fait disparaître la
+    ligne entière : Word joint le paragraphe au suivant tant que l'affichage du
+    texte masqué est désactivé.
 
     Le reste — écarts nuls, interligne fixe — vaut pour le moment où
-    l'utilisateur affiche le texte masqué : les marqueurs s'y lisent sans
-    écarter le document. Rien n'est demandé au template.
+    l'utilisateur affiche le texte masqué : les marqueurs se voient alors, en
+    petit mais lisibles, sans écarter le document qu'ils encadrent.
+
+    Rien n'est demandé au template : un marqueur ne doit pas dépendre d'un
+    style que le document de l'utilisateur pourrait ne pas avoir.
     """
     properties = node.get_or_add_pPr()
 
@@ -398,9 +396,11 @@ def collapse_all(doc) -> None:
     """
     Réduit tous les marqueurs du document terminé.
 
-    La fusion recopie ceux du document précédent avec ce qu'ils encadrent :
-    sans ce passage, une documentation produite par une version antérieure
-    garderait ses marqueurs encombrants là où elle n'a pas été réécrite.
+    La fusion recopie les marqueurs du document précédent avec ce qu'ils
+    encadrent : sans ce passage, une documentation produite par une version
+    antérieure garderait ses marqueurs encombrants là où elle n'a pas été
+    réécrite. Un document régénéré est donc entièrement resserré, même sur ce
+    qui vient de l'ancien.
     """
     for node in doc.element.body.iter(_PARAGRAPH):
         if of(node) is not None:
@@ -421,7 +421,7 @@ def _mark_properties(properties):
 
 
 def _vanish(properties) -> None:
-    """Pose « masqué » et la taille d'un marqueur sur des propriétés de run."""
+    """Masque un texte et le met à la taille d'un marqueur, marque de paragraphe comprise."""
     properties.get_or_add_vanish()
     properties.get_or_add_sz().val = _MARKER_SIZE
 

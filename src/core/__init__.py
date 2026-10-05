@@ -1,5 +1,5 @@
 """
-Le socle commun aux deux modules de la génération.
+Le socle commun aux trois modules de la génération.
 
     models.py       les structures de données qui circulent, `PowerBiMetadata`
     config.py       le plan (`config.yaml`), ses défauts, son accès
@@ -11,16 +11,13 @@ Le socle commun aux deux modules de la génération.
     answers.py      la mémoire des réponses d'une génération à l'autre
     paths.py        la localisation des fichiers livrés (exécutable compris)
     window.py       la fenêtre console de l'exécutable : attente et plantages
-    version.py      la version du projet, lue sur le dernier tag du dépôt
 
-`core` ne dépend ni de l'extraction ni de l'écriture ; les deux dépendent de
-lui, et jamais l'une de l'autre.
+`core` ne dépend d'aucun des trois modules ; les trois dépendent de lui, et
+jamais les uns des autres.
 
-La version du projet s'expose ici, et nulle part ailleurs — et vient du dernier tag `v…`
-du dépôt git (voir `src.core.version`).
+La version du projet est déclarée ici, et nulle part ailleurs : un exécutable
+n'embarque pas les métadonnées de son paquet, et serait sans cela le seul à ne
+pas savoir quelle version il est.
 """
 
-from src.core.version import current
-
-__version__ = current()
-"""Version du projet, relevée sur le dernier tag `v…` du dépôt."""
+__version__ = "1.0"

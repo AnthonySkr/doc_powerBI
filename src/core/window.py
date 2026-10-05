@@ -1,8 +1,5 @@
 """
 Fenêtre console de l'exécutable distribué.
-
-Lancé par un double-clic, le programme referme sa fenêtre en terminant : le
-compte rendu et les erreurs disparaîtraient avec elle. Ce module la retient.
 """
 
 import sys
@@ -17,12 +14,11 @@ class ConsoleWindow:
     """
     Décide si la fenêtre doit être retenue, et la retient le cas échéant.
 
-    `pause` vaut vrai depuis un exécutable. Le point d'entrée le rabat sur
-    `False` sur `--no-pause`, ce qu'il ne sait qu'après lecture des arguments.
+    `pause` reste modifiable : le point d'entrée le rabat sur `False` lorsque
+    `--no-pause` est passé, ce qu'il ne sait qu'après lecture des arguments.
     """
 
     def __init__(self):
-        """Ne retient la fenêtre que depuis un exécutable."""
         self.pause = paths.is_frozen()
 
     def install_crash_handler(self) -> None:
