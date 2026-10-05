@@ -93,9 +93,8 @@ def _apply_property(measure: DaxMeasure, line: str) -> bool:
     """
     Applique une propriété TMDL à la mesure.
 
-    Returns:
-        True dès que la ligne *est* une propriété, même ignorée : c'est ce qui
-        marque la fin de l'expression DAX.
+    Retourne True dès que la ligne *est* une propriété, même ignorée : c'est ce
+    qui marque la fin de l'expression DAX.
     """
     if not line:
         return False

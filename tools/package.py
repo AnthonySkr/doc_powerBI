@@ -29,7 +29,6 @@ README = "README.md"
 
 
 def main() -> int:
-    """Assemble le dossier livré et le zippe. Retourne le code de sortie."""
     version = __version__
     system = platform.system().lower()
     executable = _executable()
@@ -58,7 +57,6 @@ def main() -> int:
 
 
 def _executable() -> str | None:
-    """L'exécutable construit dans `dist/`, ou None s'il n'y en a pas."""
     for name in ("powerbi-doc.exe", "powerbi-doc"):
         path = os.path.join(DIST, name)
         if os.path.isfile(path):
@@ -67,7 +65,7 @@ def _executable() -> str | None:
 
 
 def _write_readme(folder: str, version: str) -> None:
-    """Recopie le mode d'emploi dans le dossier, version inscrite."""
+    """Recopie le mode d'emploi en y inscrivant la version."""
     with open(os.path.join(ROOT, "tools", README), encoding="utf-8") as f:
         # `replace` et non `format` : le mode d'emploi parle de la
         # configuration, où les accolades sont de mise (`{{ report.name }}`).
@@ -80,7 +78,6 @@ def _write_readme(folder: str, version: str) -> None:
 
 
 def _zip(folder: str, archive: str) -> str:
-    """Compresse le dossier livré, et retourne le chemin de l'archive."""
     with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as bundle:
         for directory, _, files in os.walk(folder):
             for name in files:

@@ -3,9 +3,10 @@ Champs Word et textes du template : table des matières, numéros de figure,
 en-têtes, pieds de page.
 
 Un champ est un contenu que Word calcule lui-même. On s'en sert pour ce que le
-script ne peut pas savoir — les numéros de page dépendent de la mise en page —
-et pour ce qu'il ne doit pas figer : le numéro d'une figure change dès qu'on en
-supprime une, et c'est à Word de le suivre.
+script ne peut pas savoir — les numéros de page d'une table des matières
+dépendent de la mise en page — et pour ce qu'il ne doit pas figer : le numéro
+d'une figure change dès qu'on supprime une capture, et c'est à Word de le
+suivre, pas à l'utilisateur de le corriger à la main.
 
 Les champs sont marqués « à recalculer » (`w:dirty`), ce que Word applique à
 l'ouverture du document ; un Ctrl+A puis F9 le refait à tout moment.
@@ -44,15 +45,10 @@ _SETTINGS_AFTER_UPDATE_FIELDS = (
 
 def mark_toc_fields_dirty(body, levels: str = "") -> int:
     r"""
-    Marque les champs TOC « à recalculer ».
+    Marque les champs TOC « à recalculer » et, si `levels` est renseigné,
+    ajuste les niveaux de titres repris (`\o "1-3"`).
 
-    Args:
-        body: le corps du document.
-        levels: niveaux de titres à reprendre (`\o "1-3"`), ou "" pour
-            laisser ceux du template.
-
-    Returns:
-        Le nombre de champs traités.
+    Retourne le nombre de champs traités.
     """
     fields = 0
 
@@ -90,8 +86,8 @@ def set_toc_levels(instruction: str, levels: str) -> str:
     r"""
     Remplace les niveaux repris par le champ TOC (`\o "1-2"` → `\o "1-3"`).
 
-    Le remplacement passe par une fonction : la chaîne porte un antislash, que
-    `re.sub` prendrait pour une séquence d'échappement.
+    Le remplacement passe par une fonction : la chaîne contient un antislash,
+    que `re.sub` interpréterait comme une séquence d'échappement.
     """
     return re.sub(r'\\o\s*"[^"]*"', lambda _: f'\\o "{levels}"', instruction)
 
@@ -105,14 +101,13 @@ def write_sequence_field(paragraph, name: str, cached: str = "") -> None:
     r"""
     Écrit `{ SEQ <name> \* ARABIC }` à la suite du paragraphe.
 
-    C'est le champ dont Word se sert pour ses légendes : il compte les figures
-    dans l'ordre du document, et en supprimer une renumérote les suivantes.
+    C'est le champ dont Word se sert pour ses propres légendes : il compte les
+    figures dans l'ordre du document. En supprimer une renumérote les
+    suivantes, sans que personne n'ait à y toucher.
 
-    Args:
-        paragraph: le paragraphe qui reçoit le champ.
-        name: la suite comptée — « Figure ».
-        cached: le numéro déjà compté par le script, montré tel quel à un
-            lecteur qui ne recalcule pas les champs.
+    `cached` est le résultat mémorisé — le numéro tel que le script l'a compté.
+    Il est juste tant qu'on n'a rien supprimé, et c'est lui que montre un
+    lecteur qui ne recalcule pas les champs.
     """
     _append(paragraph, _field_char("begin", dirty=True))
     _append(paragraph, _instruction(rf" SEQ {name} \* ARABIC "))
@@ -122,14 +117,12 @@ def write_sequence_field(paragraph, name: str, cached: str = "") -> None:
 
 
 def _append(paragraph, child) -> None:
-    """Ajoute l'élément au paragraphe, dans un `w:r` à lui."""
     run = OxmlElement("w:r")
     run.append(child)
     paragraph._p.append(run)
 
 
 def _field_char(kind: str, dirty: bool = False):
-    """Borne de champ : `begin`, `separate` ou `end`."""
     element = OxmlElement("w:fldChar")
     element.set(qn("w:fldCharType"), kind)
     if dirty:
@@ -138,7 +131,6 @@ def _field_char(kind: str, dirty: bool = False):
 
 
 def _instruction(text: str):
-    """Instruction du champ, celle que Word exécute."""
     element = OxmlElement("w:instrText")
     element.set(qn("xml:space"), "preserve")
     element.text = text
@@ -146,7 +138,6 @@ def _instruction(text: str):
 
 
 def _text(value: str):
-    """Nœud de texte simple."""
     element = OxmlElement("w:t")
     element.text = value
     return element
@@ -154,10 +145,9 @@ def _text(value: str):
 
 def set_update_fields(settings) -> None:
     """
-    Demande à Word de recalculer tous les champs à l'ouverture.
-
-    L'élément `w:updateFields` doit respecter l'ordre du schéma, sans quoi
-    Word tient le fichier pour corrompu.
+    Ajoute `<w:updateFields w:val="true"/>` : Word recalcule alors tous les
+    champs du document à son ouverture. L'élément doit respecter l'ordre du
+    schéma, sans quoi Word considère le fichier comme corrompu.
     """
     existing = settings.find(qn("w:updateFields"))
     if existing is not None:
@@ -196,10 +186,9 @@ def replace_in_part(part, placeholder: str, value: str) -> int:
 
 def replace_in_paragraph(paragraph, placeholder: str, value: str) -> int:
     """
-    Remplace un texte dans un paragraphe, sa mise en forme intacte.
-
-    Seuls les nœuds `w:t` sont réécrits : les tabulations et les images qui
-    les entourent — logo, alignement à droite de l'en-tête — restent en place.
+    Remplace un texte dans un paragraphe sans toucher au reste de sa mise en
+    forme : seuls les nœuds `w:t` sont réécrits, les tabulations et les images
+    qui les entourent (logo, alignement à droite de l'en-tête) sont conservées.
     """
     nodes = paragraph._p.findall(".//" + qn("w:t"))
     if not nodes:
@@ -227,7 +216,6 @@ def replace_in_paragraph(paragraph, placeholder: str, value: str) -> int:
 
 
 def _set_text(node, text: str) -> None:
-    """Écrit un texte dans un `w:t`, ses espaces de bord préservés."""
     node.text = text
     if text != text.strip():
         node.set(qn("xml:space"), "preserve")

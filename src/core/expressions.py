@@ -134,7 +134,6 @@ def resolve(expression: str, context: dict[str, Any]) -> Any:
 
 
 def _lookup(path: str, context: dict[str, Any]) -> Any:
-    """Suit un chemin pointé dans le contexte, ou None s'il ne mène nulle part."""
     current: Any = context
     for step in path.split("."):
         part = step.strip()
@@ -206,7 +205,6 @@ def evaluate(condition: Any, context: dict[str, Any]) -> bool:
 
 
 def _is_truthy(value: Any) -> bool:
-    """Vrai si la valeur compte pour vraie, « non » et « false » compris."""
     if isinstance(value, str):
         return value.strip().lower() not in ("", "false", "non", "no", "0")
     return bool(value)

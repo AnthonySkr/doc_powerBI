@@ -7,9 +7,9 @@ Trois sources se rejoignent ici :
     les dépendances        ce dont chaque mesure a besoin, et qui l'emploie
     le rapport             pages, groupes, visuels, filtres
 
-Le croisement fait de ces trois lectures un seul objet : les mesures que le
-rapport emploie réellement, dépendances comprises, sont relevées ici et nulle
-part ailleurs.
+Le croisement est ce qui fait de ces trois lectures un seul objet : les mesures
+que le rapport emploie réellement, dépendances comprises, sont relevées ici et
+nulle part ailleurs.
 """
 
 from pathlib import Path
@@ -20,6 +20,8 @@ from src.pbi_extractor import dependencies
 from src.pbi_extractor.pbip import PbipProject
 from src.pbi_extractor.report import parse_report
 from src.pbi_extractor.tmdl import load_semantic_model
+
+__all__ = ["ExtractError", "extract", "open_project"]
 
 
 class ExtractError(Exception):
@@ -39,7 +41,7 @@ def open_project(pbip_path: str | Path) -> PbipProject:
 
 
 def extract(project: PbipProject) -> PowerBiMetadata:
-    """Lit le projet et retourne tout ce que la suite aura à savoir."""
+    """Lit le projet et retourne tout ce que la suite aura besoin de savoir."""
     return PowerBiMetadata(report=_read(project), source=project.path)
 
 

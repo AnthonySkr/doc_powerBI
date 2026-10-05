@@ -15,12 +15,22 @@ dev = [
     "pyinstaller>=6.10",
     "pdoc>=16.0",
 ]
+capture = [
+    "pywinauto>=0.6.9 ; sys_platform == 'win32'",
+    "mss>=9.0",
+]
+
 [project.scripts]
 powerbi-doc = "main:main"
 
 [tool.taskipy.tasks]
 install = "pip install -e \".[dev]\""
 run = "python main.py"
+
+#   task capture-plan -- rapport.pbip     ce qui serait capturé
+#   task calibrate -- rapport.pbip        régler le cadrage de la fenêtre
+capture-plan = "python main.py --no-pause --capture-plan"
+calibrate = "python main.py --no-pause --calibrate"
 
 #   task docs                 tout le projet, servi et rechargé à chaud
 #   task docs-build           le site statique, dans docs/site/
@@ -103,19 +113,9 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-# Les tests décrivent des cas : `assert`, nombres en clair, signatures longues,
-# imports tardifs et commandes lancées sur un dépôt jetable y sont normaux.
-# Le motif descend dans les sous-dossiers : `tests/core/`, `tests/document/`…
-"tests/**" = [
-    "ARG005",
-    "PLC0415",
-    "PLR0913",
-    "PLR0917",
-    "PLR2004",
-    "S101",
-    "S603",
-    "S607",
-]
+# Les tests décrivent des cas : `assert`, nombres en clair, signatures longues
+# et imports tardifs y sont normaux.
+"**/tests/*" = ["ARG005", "PLC0415", "PLR0913", "PLR0917", "PLR2004", "S101"]
 # Outil de construction : sa sortie console *est* son interface.
 "tools/*" = ["T201"]
 

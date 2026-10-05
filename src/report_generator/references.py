@@ -3,8 +3,8 @@ Tableaux numérotés des visuels, et chemin inverse (« utilisée dans »).
 
 Chaque visuel documenté est accompagné d'un tableau numérotant les champs qu'il
 affiche, et chaque groupe d'une légende numérotant les visuels qu'il contient —
-dans les deux cas, le numéro est reporté à la main sur l'image. Symétriquement,
-chaque mesure liste les visuels qui l'emploient.
+dans les deux cas, le numéro est reporté à la main sur la capture.
+Symétriquement, chaque mesure liste les visuels qui l'emploient.
 
 Les libellés, rôles traduits et gabarits de numérotation sont déclarés dans le
 plan, sous `options:` de la section des visuels.
@@ -23,12 +23,9 @@ from src.core.models import (
     VisualReference,
 )
 
+# Section du plan portant les options de numérotation et de libellés. Le
+# générateur n'a pas d'autre attache à un identifiant de section.
 VISUALS_SECTION_ID = "visuels"
-"""
-Section du plan portant les options de numérotation et de libellés.
-
-C'est la seule attache du générateur à un identifiant de section.
-"""
 
 _KIND_BY_CATEGORY = {
     "Mesure": "mesure",
@@ -51,38 +48,52 @@ def visual_options(config: DocConfig) -> dict[str, Any]:
 def index_references(report: PowerBIReport, options: dict[str, Any]) -> None:
     """Construit `visual.references` pour tous les visuels du rapport."""
     references = options.get("references") or {}
-    numbering = _Numbering(references.get("numbering"), default_scope="visual")
+    numbering = references.get("numbering") or {}
+    scope = numbering.get("scope", "visual")
+    start = int(numbering.get("start", 1))
+
+    document_counter = _Counter(start)
 
     for page in report.pages:
-        numbering.open_page()
+        page_counter = _Counter(start)
         for visual in page.visuals:
-            visual.references = build_references(visual, references, numbering.counter())
+            counter = {"document": document_counter, "page": page_counter}.get(
+                scope, _Counter(start)
+            )
+            visual.references = build_references(visual, references, counter)
 
 
 def index_group_members(report: PowerBIReport, options: dict[str, Any]) -> None:
     """
     Numérote la légende de chaque groupe de visuels.
 
-    La légende relie l'image du groupe à son contenu : elle porte les mêmes
-    numéros que ceux reportés sur l'image.
+    La légende est la table de correspondance entre la capture du groupe et
+    son contenu : elle porte les mêmes numéros que ceux reportés sur l'image.
     """
-    numbering = _Numbering((options.get("groups") or {}).get("numbering"), default_scope="group")
+    numbering = (options.get("groups") or {}).get("numbering") or {}
+    scope = numbering.get("scope", "group")
+    start = int(numbering.get("start", 1))
+    number_format = numbering.get("format", "{n}")
+
+    document_counter = _Counter(start)
 
     for page in report.pages:
-        numbering.open_page()
+        page_counter = _Counter(start)
         for group in page.groups:
-            counter = numbering.counter()
+            counter = {"document": document_counter, "page": page_counter}.get(
+                scope, _Counter(start)
+            )
             for member in group.members:
-                member.number = numbering.format(counter.next())
+                member.number = number_format.format(n=counter.next())
 
 
 def index_usages(
     report: PowerBIReport, all_measures: dict[str, DaxMeasure], options: dict[str, Any]
 ) -> None:
     """
-    Renseigne `measure.usages` : les visuels où chaque mesure est employée.
+    Renseigne `measure.usages` : les visuels où chaque mesure est utilisée.
 
-    C'est le chemin inverse des liens vers les définitions : depuis la
+    C'est le chemin inverse des liens vers les définitions — depuis la
     définition d'une mesure, on remonte aux visuels qui l'affichent.
     """
     usages = options.get("usages") or {}
@@ -175,49 +186,15 @@ def build_references(
 
 
 class _Counter:
-    """Une suite de numéros, distribués un à un."""
+    """Numérotation continue des références sur une portée donnée."""
 
     def __init__(self, start: int = 1):
-        """Ouvre une suite au numéro donné."""
         self.value = start
 
     def next(self) -> int:
-        """Le numéro suivant."""
         current = self.value
         self.value += 1
         return current
-
-
-class _Numbering:
-    """
-    Distribue les compteurs selon la portée déclarée par le plan.
-
-    `scope: document` numérote d'un bout à l'autre, `page` repart à chaque
-    page, et toute autre valeur repart à chaque élément.
-    """
-
-    def __init__(self, options: dict[str, Any] | None, default_scope: str):
-        """Lit `start:`, `scope:` et `format:` du bloc `numbering:` du plan."""
-        options = options or {}
-        self.start = int(options.get("start", 1))
-        self.scope = options.get("scope", default_scope)
-        self.template = options.get("format", "{n}")
-        self._document = _Counter(self.start)
-        self._page = _Counter(self.start)
-
-    def open_page(self) -> None:
-        """Ouvre une page : le compteur de portée « page » repart du début."""
-        self._page = _Counter(self.start)
-
-    def counter(self) -> _Counter:
-        """Compteur à employer pour l'élément courant."""
-        return {"document": self._document, "page": self._page}.get(
-            self.scope, _Counter(self.start)
-        )
-
-    def format(self, number: int) -> str:
-        """Met le numéro en forme selon le gabarit du plan."""
-        return self.template.format(n=number)
 
 
 def _group_levels(
@@ -227,9 +204,12 @@ def _group_levels(
     Réunit les niveaux d'une même hiérarchie affichés sur un même rôle.
 
     Une hiérarchie de dates posée sur un axe est projetée niveau par niveau —
-    Année, Trimestre, Mois… — et remplirait autant de lignes du tableau. Le
-    lecteur, lui, ne voit qu'un champ : ces niveaux tiennent donc une seule
-    référence. Tout le reste garde son groupe d'un seul élément.
+    Année, Trimestre, Mois… — et remplirait autant de lignes du tableau des
+    références. Le lecteur, lui, ne voit qu'un champ : ces niveaux sont donc
+    ramenés à une seule référence, dans l'ordre de forage du visuel.
+
+    Les autres champs, et les niveaux d'une hiérarchie portée par un rôle
+    différent, restent chacun dans leur groupe d'un seul élément.
     """
     if not options.get("group", True):
         return [[element] for element in elements]
@@ -252,7 +232,7 @@ def _group_levels(
 
 
 def _hierarchy_key(element: VisualElement) -> tuple[str, str, str] | None:
-    """Hiérarchie à laquelle rattacher un niveau, ou None si c'est un champ."""
+    """Hiérarchie à laquelle rattacher un niveau, ou None si le champ n'en est pas un."""
     if element.type_category != "Hiérarchie" or not element.hierarchy_name:
         return None
     return (element.role, element.table_name, element.hierarchy_name)
@@ -275,7 +255,6 @@ def _reference_name(members: list[VisualElement], kind: str, options: dict[str, 
 
 
 def _measure_names(visual: Visual) -> set[str]:
-    """Noms de modèle des mesures affichées par le visuel."""
     return {e.model_name for e in visual.elements if e.type_category == "Mesure"}
 
 
@@ -283,12 +262,10 @@ def _label(labels: dict[str, str], kind: str, **values: str) -> str:
     """
     Met en forme le libellé d'une référence.
 
-    Args:
-        labels: les gabarits déclarés sous `labels:`.
-        kind: `mesure`, `colonne`, `hierarchie` ou `filtre`.
-        **values: ce qu'un gabarit peut citer — `{name}` (le nom du modèle,
-            celui qui porte le lien), `{display}` (le nom affiché, parfois un
-            alias), `{role}` et `{expression}`.
+    `values` porte ce qu'un gabarit de `labels:` peut citer : `{name}`, le nom
+    du modèle — celui qui porte le lien vers la définition —, `{display}`, le
+    nom affiché dans le visuel, qui peut être un alias, ainsi que `{role}` et
+    `{expression}`.
     """
     template = labels.get(kind) or labels.get("defaut") or "{name}"
     return template.format(**values).strip()

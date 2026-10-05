@@ -1,13 +1,15 @@
 """
 Localisation des fichiers livrés avec l'application.
 
-Le plan et le template se cherchent à trois endroits (voir `candidates`), et
-les fichiers posés à côté de l'exécutable font foi : c'est ainsi qu'on adapte
-le plan du document sans rien reconstruire.
+Le plan et le template se cherchent à trois endroits (voir `candidates`). Les
+fichiers posés à côté de l'exécutable font foi : c'est ainsi qu'on adapte le
+plan sans reconstruire.
 """
 
 import sys
 from pathlib import Path
+
+__all__ = ["app_dir", "bundled_dir", "candidates", "find", "is_frozen"]
 
 
 def is_frozen() -> bool:
@@ -19,8 +21,9 @@ def app_dir() -> Path:
     """
     Dossier de référence de l'application.
 
-    Le dossier du `.exe` lorsque le programme en est un — c'est là que vivent
-    le plan et le template livrés. Sinon la racine du dépôt.
+    Exécutable : le dossier du .exe, à côté duquel sont livrés le plan et le
+    template — ce sont eux que l'utilisateur adapte. Sinon : la racine du dépôt,
+    deux dossiers au-dessus de `src/core/`.
     """
     if is_frozen():
         return Path(sys.executable).resolve().parent
