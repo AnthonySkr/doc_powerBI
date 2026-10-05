@@ -14,12 +14,13 @@ import shutil
 import sys
 import zipfile
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, ROOT)
-
 from src.core import (
     __version__,
 )
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
 
 DIST = os.path.join(ROOT, "dist")
 
