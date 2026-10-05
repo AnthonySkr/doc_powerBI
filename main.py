@@ -47,9 +47,7 @@ MODES = {
 _WORD_CLOSED = ("Le document Word fermé, s'il est ouvert", "sinon il ne peut pas être réécrit")
 _CAPTURE_READY = (
     "Power BI Desktop ouvert sur ce rapport, en vue Rapport",
-    (
-        "Le pointillé autour de la page visible sur ses quatre côtés",
-    ),
+    ("Le pointillé autour de la page visible sur ses quatre côtés",),
     ("Ni souris ni clavier pendant les captures", "le script pilote Power BI"),
 )
 PREREQUISITES = {
