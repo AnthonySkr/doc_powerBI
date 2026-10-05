@@ -9,11 +9,12 @@ transite par le disque entre deux étapes.
 
 import argparse
 import sys
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.core import __version__, answers, console, prompts
+from src.core import __version__, answers, console, prompts, questions
 from src.core.config import DEFAULT_CONFIG_PATH, DocConfig, load_config
 from src.core.models import PowerBiMetadata
 from src.core.window import ConsoleWindow
@@ -21,12 +22,28 @@ from src.gui_automator import CaptureError, capturer
 from src.pbi_extractor import ExtractError, PbipProject, extract, open_project
 from src.report_generator import (
     DocumentError,
+    document_path,
     output_directory,
     report_result,
     write_document,
 )
 
-BASE_STEPS = 3
+# Ce que le lancement produit : le texte, les images, ou les deux.
+TEXT = "texte"
+CAPTURES = "captures"
+PICTURES = "images"
+FULL = "complet"
+
+MODES = {
+    TEXT: "Texte seul — la documentation, sans prendre de captures",
+    CAPTURES: "Captures seules — les images du dossier des captures, sans document",
+    PICTURES: "Mise à jour des images — nouvelles captures, remplacées dans le document",
+    FULL: "Complet — texte et captures, pour initialiser ou tout mettre à jour",
+}
+
+# Lecture du rapport, puis ce que chaque mode y ajoute : questions, captures,
+# document.
+_STEPS = {TEXT: 3, CAPTURES: 2, PICTURES: 3, FULL: 4}
 
 
 class PipelineError(Exception):
@@ -53,7 +70,7 @@ class Options:
     config_path: str = DEFAULT_CONFIG_PATH
     interactive: bool = True
     pause: bool = True
-    captures: bool = False
+    mode: str = TEXT
     capture_options: capturer.CaptureOptions = field(default_factory=capturer.CaptureOptions)
     show_capture_plan: bool = False
     calibrate: bool = False
@@ -65,19 +82,33 @@ class Options:
 
 
 def generate(options: Options) -> Path:
-    """Génère la documentation et retourne le dossier de sortie."""
+    """
+    Déroule le mode demandé et retourne le dossier de sortie.
+
+    Celui du document, ou celui des captures quand aucun document n'est écrit.
+    """
     config = _config(options.config_path)
     project = _project(options.pbip_path)
     _announce(project, config)
+    inspecting = options.calibrate or options.show_capture_plan
+    if not inspecting:
+        console.field("Mode", MODES[options.mode].split(" — ")[0])
 
-    steps = Steps(BASE_STEPS + (1 if options.captures else 0))
+    steps = Steps(_STEPS[options.mode])
 
     metadata = _extract(project, steps)
-    if options.calibrate or options.show_capture_plan:
+    if inspecting:
         _inspect_captures(metadata, config, options)
         return project.directory
 
-    if options.captures:
+    if options.mode == CAPTURES:
+        _capture(metadata, config, options, steps, required=True)
+        return capturer.captures_dir(metadata, config)
+
+    if options.mode == PICTURES:
+        return _update_pictures(metadata, config, options, steps)
+
+    if options.mode == FULL:
         _capture(metadata, config, options, steps)
 
     inputs = _ask(metadata, config, options.interactive, steps)
@@ -91,7 +122,77 @@ def generate(options: Options) -> Path:
 
     console.step("Document Word", *steps.next())
     _document(metadata, config, inputs, output_dir, rewrite)
+
+    if options.mode == TEXT and _captures_wanted(options):
+        _add_pictures(
+            metadata,
+            config,
+            options,
+            steps,
+            lambda: _document(metadata, config, inputs, output_dir, None),
+        )
     return output_dir
+
+
+def _update_pictures(
+    metadata: PowerBiMetadata, config: DocConfig, options: Options, steps: Steps
+) -> Path:
+    """
+    Nouvelles captures, puis le document existant réécrit autour d'elles.
+
+    Sans question : les réponses de la dernière génération sont reprises
+    telles quelles. La régénération garde tout ce qui a été écrit dans le
+    document, et chaque image non retouchée y cède la place à sa nouvelle
+    capture. Sans document à mettre à jour, il n'y a rien à faire : mieux
+    vaut le dire avant d'ouvrir Power BI.
+    """
+    inputs = _remembered(metadata, config)
+    output_dir = metadata.project_dir / output_directory(metadata, config, inputs)
+    existing = document_path(metadata, config, inputs, output_dir)
+    if not existing.is_file():
+        raise PipelineError(
+            f"Aucun document à mettre à jour ({existing}) — "
+            "lancez d'abord une documentation, avec ou sans captures."
+        )
+    console.field("Document", str(existing))
+
+    _capture(metadata, config, options, steps, required=True)
+    console.step("Document Word", *steps.next())
+    _document(metadata, config, inputs, output_dir, None)
+    return output_dir
+
+
+def _captures_wanted(options: Options) -> bool:
+    """
+    Après le texte seul, proposer d'ajouter les captures dans la foulée.
+
+    La question n'est posée qu'en interactif : Power BI doit être ouvert sur
+    le rapport, ce que seul l'utilisateur présent peut garantir.
+    """
+    if not options.interactive:
+        return False
+    console.blank()
+    console.info("Le document est écrit. Les captures peuvent y être ajoutées maintenant,")
+    console.note("Power BI Desktop ouvert sur ce rapport, en mode Rapport.")
+    return questions.confirm("Prendre les captures et les insérer dans le document ?", False)
+
+
+def _add_pictures(
+    metadata: PowerBiMetadata,
+    config: DocConfig,
+    options: Options,
+    steps: Steps,
+    rewrite_document: Callable[[], None],
+) -> None:
+    """Les captures, puis le document réécrit avec les mêmes réponses."""
+    steps.total += 2
+    try:
+        _capture(metadata, config, options, steps, required=True)
+    except PipelineError as e:
+        console.warn(f"{e} — le document reste tel quel.")
+        return
+    console.step("Document Word", *steps.next())
+    rewrite_document()
 
 
 def _extract(project: PbipProject, steps: Steps) -> PowerBiMetadata:
@@ -103,17 +204,26 @@ def _extract(project: PbipProject, steps: Steps) -> PowerBiMetadata:
         raise PipelineError(str(e)) from e
 
 
-def _capture(metadata: PowerBiMetadata, config: DocConfig, options: Options, steps: Steps) -> None:
+def _capture(
+    metadata: PowerBiMetadata,
+    config: DocConfig,
+    options: Options,
+    steps: Steps,
+    required: bool = False,
+) -> None:
     """
-    Étape facultative : photographier les visuels dans Power BI Desktop.
+    Photographier les visuels dans Power BI Desktop.
 
-    Une séance qui échoue n'emporte pas la génération : le document garde ses
-    emplacements réservés.
+    Avec le document, une séance qui échoue n'emporte pas la génération : le
+    document garde ses emplacements réservés. Quand les captures sont tout ce
+    qui est demandé (`required`), l'échec arrête l'exécution.
     """
     console.step("Captures des visuels", *steps.next())
     try:
         capturer.capture(metadata, config, options.capture_options)
     except CaptureError as e:
+        if required:
+            raise PipelineError(f"Captures abandonnées : {e}") from e
         console.warn(f"Captures abandonnées ({e}) — le document réservera leur place.")
 
 
@@ -153,6 +263,13 @@ def _ask(
 
     answers.write(path, given)
     return given
+
+
+def _remembered(metadata: PowerBiMetadata, config: DocConfig) -> dict[str, Any]:
+    """Les réponses de la dernière génération, complétées des valeurs du plan."""
+    context = prompts.base_context(metadata.report, config)
+    path = answers.path(config, {"report": metadata.report}, metadata.project_dir)
+    return prompts.default_inputs(config, context, answers.read(path))
 
 
 def _document(
@@ -228,11 +345,19 @@ def parse_args(argv: list[str] | None = None) -> Options:
         help="Ne pas attendre de touche à la fin (exécution automatisée)",
     )
 
+    parser.add_argument(
+        "-m",
+        "--mode",
+        choices=list(MODES),
+        help="Ce que produit l'exécution — sans cette option, la question est posée : "
+        + " ; ".join(f"{name} = {label.split(' — ')[0].lower()}" for name, label in MODES.items()),
+    )
+
     captures = parser.add_argument_group("captures d'écran (facultatives)")
     captures.add_argument(
         "--captures",
         action="store_true",
-        help="Photographier les visuels dans Power BI Desktop avant d'écrire",
+        help="Documentation et captures : équivaut à `--mode complet`",
     )
     captures.add_argument(
         "--fake-captures",
@@ -263,12 +388,14 @@ def parse_args(argv: list[str] | None = None) -> Options:
     captures.add_argument("--shot", default="", help="Ne capturer que les prises nommées ainsi")
     args = parser.parse_args(argv)
 
+    pbip_path = (args.pbip or _ask_pbip()).strip().strip('"').strip("'")
+    inspecting = args.capture_plan or args.calibrate
     return Options(
-        pbip_path=(args.pbip or _ask_pbip()).strip().strip('"').strip("'"),
+        pbip_path=pbip_path,
         config_path=args.config,
         interactive=not args.no_input,
         pause=not args.no_pause,
-        captures=args.captures or args.fake_captures,
+        mode=_mode(args.mode, args.captures or args.fake_captures, not args.no_input, inspecting),
         capture_options=capturer.CaptureOptions(
             fake=args.fake_captures,
             manual_pages=args.manual_pages,
@@ -279,6 +406,30 @@ def parse_args(argv: list[str] | None = None) -> Options:
         show_capture_plan=args.capture_plan,
         calibrate=args.calibrate,
     )
+
+
+def _mode(given: str | None, captures: bool, interactive: bool, inspecting: bool) -> str:
+    """
+    Le mode demandé par l'option, ou à défaut par l'utilisateur.
+
+    `--captures` seul garde son sens d'avant : le document et ses captures.
+    Sans rien, la question est posée — c'est le cas du double-clic sur
+    l'exécutable ; sans question possible (`--no-input`), le texte seul.
+    """
+    if given:
+        return given
+    if captures:
+        return FULL
+    if not interactive or inspecting:
+        return TEXT
+    return _ask_mode()
+
+
+def _ask_mode() -> str:
+    """Le menu du lancement : quatre façons de documenter le rapport."""
+    labels = list(MODES.values())
+    chosen = questions.choice("Que faut-il produire ?", labels, labels[0])
+    return next(name for name, label in MODES.items() if label == chosen)
 
 
 def _ask_pbip() -> str:
@@ -311,7 +462,7 @@ def main(argv: list[str] | None = None) -> int:
         return window.close(130)
 
     console.blank()
-    console.banner("Documentation générée")
+    console.banner("Captures prises" if options.mode == CAPTURES else "Documentation générée")
     console.field("Dossier", str(output_dir))
     return window.close(0)
 
