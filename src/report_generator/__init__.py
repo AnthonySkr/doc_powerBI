@@ -17,6 +17,7 @@ projet à chaque essai.
 from src.report_generator.writer import (
     DocumentError,
     DocumentResult,
+    document_path,
     output_directory,
     report_result,
     write_document,
@@ -25,6 +26,7 @@ from src.report_generator.writer import (
 __all__ = [
     "DocumentError",
     "DocumentResult",
+    "document_path",
     "output_directory",
     "report_result",
     "write_document",

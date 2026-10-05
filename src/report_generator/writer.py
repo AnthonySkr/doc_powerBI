@@ -22,6 +22,7 @@ from src.report_generator.word import DocumentError, generate_word_documentation
 __all__ = [
     "DocumentError",
     "DocumentResult",
+    "document_path",
     "output_directory",
     "report_result",
     "write_document",
@@ -55,18 +56,9 @@ def write_document(
 ) -> DocumentResult:
     """Écrit le document Word et retourne son bilan."""
     report = metadata.report
-    context = build_context(report, report.all_measures, config, inputs)
-    # Le dossier des captures, que les blocs `image` fouillent : une image
-    # prise par `--captures`, ou déposée à la main, y est trouvée d'elle-même.
-    captures = str(config.capture.get("directory") or DEFAULT_CAPTURES_DIR)
-    context["captures"] = CaptureLibrary(metadata.project_dir / captures)
-    name = render(config.document.get("output_name"), context) or (
-        f"documentation_{report.name}.docx"
-    )
-
-    directory = Path(output_dir)
-    directory.mkdir(parents=True, exist_ok=True)
-    path = directory / name
+    context = _context(metadata, config, inputs)
+    path = _path(config, context, output_dir)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     log = generate_word_documentation(config, context, str(path), rewrite)
     return DocumentResult(
@@ -75,6 +67,33 @@ def write_document(
         details=log.details(),
         undocumented=list(report.undocumented_measures),
     )
+
+
+def document_path(
+    metadata: PowerBiMetadata,
+    config: DocConfig,
+    inputs: dict[str, Any],
+    output_dir: str | Path,
+) -> Path:
+    """Chemin du document que `write_document` écrirait — qu'il existe ou non."""
+    return _path(config, _context(metadata, config, inputs), output_dir)
+
+
+def _context(metadata: PowerBiMetadata, config: DocConfig, inputs: dict[str, Any]) -> dict:
+    report = metadata.report
+    context = build_context(report, report.all_measures, config, inputs)
+    # Le dossier des captures, que les blocs `image` fouillent : une image
+    # prise par `--captures`, ou déposée à la main, y est trouvée d'elle-même.
+    captures = str(config.capture.get("directory") or DEFAULT_CAPTURES_DIR)
+    context["captures"] = CaptureLibrary(metadata.project_dir / captures)
+    return context
+
+
+def _path(config: DocConfig, context: dict[str, Any], output_dir: str | Path) -> Path:
+    name = render(config.document.get("output_name"), context) or (
+        f"documentation_{context['report'].name}.docx"
+    )
+    return Path(output_dir) / name
 
 
 def report_result(result: DocumentResult) -> None:

@@ -21,8 +21,10 @@ qu'il faudra reprendre partout.
 ### 1. Il vous faut Windows et Microsoft Word
 
 L'outil produit un fichier `.docx`. Word sert à l'ouvrir, le compléter et
-l'imprimer. Vous n'avez pas besoin de Power BI Desktop sur ce poste : l'outil
-lit des fichiers, il ne se connecte à rien.
+l'imprimer. Pour le texte seul, vous n'avez pas besoin de Power BI Desktop sur
+ce poste : l'outil lit des fichiers, il ne se connecte à rien. Pour les
+captures d'écran, Power BI Desktop doit être ouvert sur le rapport, en mode
+Rapport.
 
 ### 2. Le rapport doit être enregistré au **format projet** (`.pbip`)
 
@@ -88,10 +90,23 @@ fichiers : l'application cherche les deux autres à côté d'elle.
    *À défaut :* double-cliquez sur `powerbi-doc.exe`, puis déposez le `.pbip`
    dans la fenêtre qui s'ouvre (ou collez son chemin) et appuyez sur Entrée.
 
-2. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
-   accepter la valeur proposée entre crochets.
+2. **Choisissez ce que l'outil doit produire :**
 
-3. **Récupérez le document.** Il est écrit à côté de votre `.pbip`, dans un
+   | Choix | Ce qu'il fait | Power BI ouvert |
+   | --- | --- | --- |
+   | 1. Texte seul | le document, sans prendre de captures | non |
+   | 2. Captures seules | les images, dans le dossier `assets` à côté du `.pbip` ; pas de document | oui |
+   | 3. Mise à jour des images | de nouvelles captures, remplacées dans le document déjà généré — sans question, votre rédaction est gardée | oui |
+   | 4. Complet | captures et document : pour un premier passage, ou tout remettre à jour | oui |
+
+   Après le texte seul, l'outil vous propose d'ajouter les captures
+   aussitôt : ouvrez Power BI sur le rapport, répondez *oui*.
+
+3. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
+   accepter la valeur proposée entre crochets. La mise à jour des images et
+   les captures seules n'en posent pas.
+
+4. **Récupérez le document.** Il est écrit à côté de votre `.pbip`, dans un
    sous-dossier `doc`.
 
 La fenêtre reste ouverte à la fin : lisez le compte rendu, puis Entrée pour la
@@ -141,9 +156,11 @@ vous pourrez réécrire avant qu'ils ne soient posés dans le document.
 Le document est complet côté technique : tout ce qui vient de Power BI y est
 déjà. Trois choses vous attendent.
 
-**Les emplacements de captures.** L'outil n'insère pas d'images : il réserve la
-place par une ligne 🖼 décrivant la capture attendue, suivie de sa légende
-numérotée. Remplacez cette ligne par votre capture d'écran.
+**Les emplacements de captures.** Les captures prises par l'outil — ou
+déposées par vous dans le dossier `assets` — sont insérées à leur place. Celles
+qui manquent, et les images que l'outil ne sait pas prendre, gardent une ligne
+🖼 décrivant la capture attendue, suivie de sa légende numérotée : remplacez
+cette ligne par votre capture d'écran.
 
 **Les pastilles numérotées.** Sous un emplacement de capture, une rangée de
 pastilles rondes porte les numéros du tableau qui suit. Attrapez-en une à la

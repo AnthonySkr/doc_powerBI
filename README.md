@@ -28,6 +28,25 @@ Options :
 | --- | --- |
 | `-c`, `--config` | Utiliser un autre fichier de configuration (défaut : `config.yaml`) |
 | `-y`, `--no-input` | Ne poser aucune question : utilise les valeurs par défaut du YAML |
+| `-m`, `--mode` | `texte`, `captures`, `images` ou `complet` — sans elle, la question est posée |
+
+### Les quatre modes
+
+Au lancement, le script demande ce qu'il doit produire :
+
+| Mode | Ce qu'il fait | Power BI ouvert |
+| --- | --- | --- |
+| 1. Texte seul (`texte`) | la documentation ; les captures déjà dans le dossier y sont insérées, aucune n'est prise | non |
+| 2. Captures seules (`captures`) | les images, dans le dossier des captures (`assets/`) ; aucun document | oui |
+| 3. Mise à jour des images (`images`) | nouvelles captures, puis le document existant réécrit sans question : chaque image non retouchée cède la place à la nouvelle, tout ce que vous avez écrit est gardé | oui |
+| 4. Complet (`complet`) | captures puis documentation : pour initialiser, ou tout mettre à jour | oui |
+
+Après le texte seul, le script propose d'ajouter les captures dans la foulée :
+Power BI ouvert sur le rapport, il les prend et réécrit le document avec les
+mêmes réponses. La mise à jour des images s'arrête avant d'ouvrir Power BI
+s'il n'y a pas encore de document — lancez d'abord le texte seul ou le mode
+complet. Sans question possible (`--no-input`), le mode par défaut est le texte
+seul ; `--captures` équivaut à `--mode complet`.
 
 Le document est écrit dans `documentation_<rapport>.docx`, sous le dossier
 demandé au lancement (`/doc` par défaut), à côté du `.pbip`.
