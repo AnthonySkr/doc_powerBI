@@ -188,3 +188,39 @@ class SearchAreaTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ForegroundTest(unittest.TestCase):
+    """
+    Une question posée pendant la séance amène le terminal devant, puis rend
+    la main à Power BI : c'est lui que les captures photographient.
+    """
+
+    def setUp(self):
+        self.recorder = DesktopRecorder(DesktopOptions(settle_seconds=0))
+        self.recorder._window = object()
+        self.recorder._handle = 20
+        self.recorder._terminal = 10
+        self.order: list[str] = []
+
+    def test_le_terminal_devant_pour_la_question_puis_power_bi(self):
+        with (
+            patch.object(finder, "bring_forward", lambda h: self.order.append(f"devant {h}")),
+            patch(
+                "src.gui_automator.desktop._bring_to_front",
+                lambda w, h: self.order.append(f"pbi {h}"),
+            ),
+            patch.object(console, "ask", lambda *a: self.order.append("question")),
+        ):
+            self.recorder._ask("Entrée")
+        self.assertEqual(self.order, ["devant 10", "question", "pbi 20"])
+
+    def test_la_fin_de_seance_rend_la_main_au_terminal(self):
+        with patch.object(finder, "bring_forward", lambda h: self.order.append(f"devant {h}")):
+            self.recorder.stop()
+        self.assertEqual(self.order, ["devant 10"])
+
+    def test_hors_de_windows_rien_ne_bouge(self):
+        with patch.object(finder, "_api", return_value=None):
+            self.assertEqual(finder.foreground(), 0)
+            self.assertFalse(finder.bring_forward(10))

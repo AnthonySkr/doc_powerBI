@@ -41,6 +41,24 @@ MODES = {
     FULL: "Complet — texte et captures, pour initialiser ou tout mettre à jour",
 }
 
+# Ce qui doit être prêt avant de lancer, mode par mode : la consigne, et ce
+# qui la précise. Une capture prise sans eux échoue, ou photographie autre
+# chose que le rapport.
+_WORD_CLOSED = ("Le document Word fermé, s'il est ouvert", "sinon il ne peut pas être réécrit")
+_CAPTURE_READY = (
+    ("Power BI Desktop ouvert sur ce rapport, en vue Rapport", ""),
+    (
+        "Le pointillé autour de la page visible sur ses quatre côtés",
+    ),
+    ("Ni souris ni clavier pendant les captures", "le script pilote Power BI"),
+)
+PREREQUISITES = {
+    TEXT: (_WORD_CLOSED,),
+    CAPTURES: _CAPTURE_READY,
+    PICTURES: (_WORD_CLOSED, *_CAPTURE_READY),
+    FULL: (_WORD_CLOSED, *_CAPTURE_READY),
+}
+
 # Lecture du rapport, puis ce que chaque mode y ajoute : questions, captures,
 # document.
 _STEPS = {TEXT: 3, CAPTURES: 2, PICTURES: 3, FULL: 4}
@@ -93,6 +111,8 @@ def generate(options: Options) -> Path:
     inspecting = options.calibrate or options.show_capture_plan
     if not inspecting:
         console.field("Mode", MODES[options.mode].split(" — ")[0])
+        if options.interactive:
+            _check_prerequisites(PREREQUISITES[options.mode])
 
     steps = Steps(_STEPS[options.mode])
 
@@ -172,9 +192,28 @@ def _captures_wanted(options: Options) -> bool:
     if not options.interactive:
         return False
     console.blank()
-    console.info("Le document est écrit. Les captures peuvent y être ajoutées maintenant,")
-    console.note("Power BI Desktop ouvert sur ce rapport, en mode Rapport.")
-    return questions.confirm("Prendre les captures et les insérer dans le document ?", False)
+    console.info("Le document est écrit. Les captures peuvent y être ajoutées maintenant.")
+    if not questions.confirm("Prendre les captures et les insérer dans le document ?", False):
+        return False
+    _check_prerequisites(PREREQUISITES[FULL])
+    return True
+
+
+def _check_prerequisites(items: tuple[tuple[str, str], ...]) -> None:
+    """
+    Ce qui doit être prêt avant de continuer, et l'attente que ce le soit.
+
+    Dit avant de lire le rapport plutôt qu'au moment de capturer : Power BI à
+    ouvrir ou un document à fermer, c'est maintenant que l'utilisateur est
+    devant le terminal pour le lire.
+    """
+    console.question("Avant de continuer")
+    for number, (item, detail) in enumerate(items, start=1):
+        console.option(number, item)
+        if detail:
+            console.note(f"       {detail}")
+    console.blank()
+    console.ask("Entrée quand tout est prêt (Ctrl+C pour abandonner)")
 
 
 def _add_pictures(

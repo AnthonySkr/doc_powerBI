@@ -160,6 +160,9 @@ class DesktopRecorder:
         self.options = options or DesktopOptions()
         self._window = None
         self._handle = 0
+        # Le terminal d'où le script est lancé : c'est là qu'il pose ses
+        # questions, et il passe derrière Power BI dès la première capture.
+        self._terminal = 0
         self._screen = None
         # Canevas reconnu, par dimensions de page et zone cherchée : la
         # reconnaissance coûte une seconde, et rien ne bouge entre deux pages.
@@ -195,8 +198,11 @@ class DesktopRecorder:
 
         self._window = _attach(pywinauto, found)
         self._handle = found.handle
+        # Relevé avant d'amener Power BI devant : c'est encore le terminal.
+        terminal = finder.foreground()
+        self._terminal = terminal if terminal != found.handle else 0
         self._canvas_areas.clear()
-        _bring_to_front(self._window, found)
+        _bring_to_front(self._window, found.handle)
         if self.options.maximize:
             finder.maximize(found.handle)
         # Une fenêtre qui vient d'être dépliée ou agrandie s'anime : la
@@ -205,12 +211,19 @@ class DesktopRecorder:
         self._screen = mss.mss()
 
     def stop(self) -> None:
-        """Referme la capture d'écran. Power BI reste ouvert : il l'était déjà."""
+        """
+        Referme la capture d'écran, et rend le premier plan au terminal.
+
+        Power BI reste ouvert : il l'était déjà. Le terminal revient devant,
+        où la suite — les questions, le compte rendu — se lit.
+        """
         if self._screen is not None:
             self._screen.close()
             self._screen = None
+        finder.bring_forward(self._terminal)
         self._window = None
         self._handle = 0
+        self._terminal = 0
 
     # ── Capture ───────────────────────────────────────────────────
     def show_page(self, page: PagePlan) -> Rect:
@@ -433,7 +446,7 @@ class DesktopRecorder:
             return False
         console.question(f"Appliquez le signet « {title} » dans Power BI Desktop")
         console.note("Ctrl+clic sur son bouton, ou volet Affichage › Signets.")
-        console.ask("Entrée quand l'affichage est à l'écran")
+        self._ask("Entrée quand l'affichage est à l'écran")
         self._canvas_areas.clear()
         return True
 
@@ -447,7 +460,7 @@ class DesktopRecorder:
         l'on demande plutôt que de capturer autre chose.
         """
         if self.options.manual_pages:
-            _ask_for_page(page)
+            self._ask_for_page(page)
             self._order = page.order
             return True
         if self._order == page.order:
@@ -538,9 +551,29 @@ class DesktopRecorder:
             console.detail("Personne pour l'afficher : les prises de cette page sont écartées.")
             return False
 
-        _ask_for_page(page)
+        self._ask_for_page(page)
         self._order = page.order
         return True
+
+    def _ask_for_page(self, page: PagePlan) -> None:
+        console.question(f"Affichez la page « {page.title} » dans Power BI Desktop")
+        console.note("Puis revenez ici et validez pour lancer la capture.")
+        self._ask("Entrée quand la page est à l'écran")
+
+    def _ask(self, label: str) -> None:
+        """
+        Attend l'utilisateur, le terminal au premier plan.
+
+        Sur un seul écran, Power BI le recouvre pendant la séance : la
+        question passerait inaperçue, et la séance resterait suspendue sans
+        que rien ne le dise. Une fois la réponse donnée, Power BI revient
+        devant — c'est lui qu'on photographie, pas le terminal.
+        """
+        finder.bring_forward(self._terminal)
+        console.ask(label)
+        if self._window is not None:
+            _bring_to_front(self._window, self._handle)
+            _settle(self.options.settle_seconds)
 
     def _press(self, keys: str, times: int = 1) -> None:
         """Envoie une combinaison à la fenêtre, plusieurs fois s'il le faut."""
@@ -640,7 +673,7 @@ def _attach(pywinauto, found: finder.WindowInfo):
     return window
 
 
-def _bring_to_front(window, found: finder.WindowInfo) -> None:
+def _bring_to_front(window, handle: int) -> None:
     """
     Déplie la fenêtre et l'amène devant : on photographie l'écran, pas elle.
 
@@ -648,17 +681,11 @@ def _bring_to_front(window, found: finder.WindowInfo) -> None:
     processus qui n'a pas la main — n'arrête pas la séance : elle se signale,
     et l'utilisateur voit tout de suite, sur les images, ce qui s'est passé.
     """
-    finder.restore(found.handle)
+    finder.restore(handle)
     try:
         window.set_focus()
     except Exception as e:  # noqa: BLE001 — l'échec est sans gravité, il se dit
         console.warn(f"Fenêtre non mise au premier plan ({e}) — capture telle quelle")
-
-
-def _ask_for_page(page: PagePlan) -> None:
-    console.question(f"Affichez la page « {page.title} » dans Power BI Desktop")
-    console.note("Puis revenez ici et validez pour lancer la capture.")
-    console.ask("Entrée quand la page est à l'écran")
 
 
 def _middle(area: Rect) -> Rect:
