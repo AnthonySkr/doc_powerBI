@@ -49,7 +49,6 @@ _CAPTURE_READY = (
     ("Power BI Desktop ouvert sur ce rapport, en vue Rapport", ""),
     (
         "Le pointillé autour de la page visible sur ses quatre côtés",
-        "Affichage › Ajuster à la page ; ni volet ni fenêtre par-dessus",
     ),
     ("Ni souris ni clavier pendant les captures", "le script pilote Power BI"),
 )
