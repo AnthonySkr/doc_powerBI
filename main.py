@@ -41,12 +41,12 @@ MODES = {
     FULL: "Complet — texte et captures, pour initialiser ou tout mettre à jour",
 }
 
-# Ce qui doit être prêt avant de lancer, mode par mode : la consigne, et ce
-# qui la précise. Une capture prise sans eux échoue, ou photographie autre
-# chose que le rapport.
+# Ce qui doit être prêt avant de lancer, mode par mode. Une capture prise
+# sans eux échoue, ou photographie autre chose que le rapport. Chaque entrée
+# est une consigne seule, ou un couple (consigne, ce qui la précise).
 _WORD_CLOSED = ("Le document Word fermé, s'il est ouvert", "sinon il ne peut pas être réécrit")
 _CAPTURE_READY = (
-    ("Power BI Desktop ouvert sur ce rapport, en vue Rapport", ""),
+    "Power BI Desktop ouvert sur ce rapport, en vue Rapport",
     (
         "Le pointillé autour de la page visible sur ses quatre côtés",
         "Affichage › Ajuster à la page ; ni volet ni fenêtre par-dessus",
@@ -200,7 +200,7 @@ def _captures_wanted(options: Options) -> bool:
     return True
 
 
-def _check_prerequisites(items: tuple[tuple[str, str], ...]) -> None:
+def _check_prerequisites(items: tuple[str | tuple[str, ...], ...]) -> None:
     """
     Ce qui doit être prêt avant de continuer, et l'attente que ce le soit.
 
@@ -209,9 +209,10 @@ def _check_prerequisites(items: tuple[tuple[str, str], ...]) -> None:
     devant le terminal pour le lire.
     """
     console.question("Avant de continuer")
-    for number, (item, detail) in enumerate(items, start=1):
+    for number, entry in enumerate(items, start=1):
+        item, *details = (entry,) if isinstance(entry, str) else entry
         console.option(number, item)
-        if detail:
+        for detail in filter(None, details):
             console.note(f"       {detail}")
     console.blank()
     console.ask("Entrée quand tout est prêt (Ctrl+C pour abandonner)")
