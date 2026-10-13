@@ -12,7 +12,7 @@ Le script ne contient aucune structure de document : **tout le plan est dans
 python -m venv .venv
 .venv\Scripts\Activate        # Windows
 pip install taskipy
-task install                  # dépendances + outils de développement
+task install                  # dépendances, outils de développement et de capture
 ```
 
 ## Lancer le script
@@ -511,6 +511,10 @@ Python ni dépendances à installer.
 task package     # vérifie, construit, assemble et zippe
 ```
 
+La construction exige les outils de capture dans l'environnement (`task
+install` les pose) : sans eux, l'exécutable ne saurait pas photographier
+Power BI Desktop, et la recette refuse de le construire.
+
 Résultat dans `dist/` :
 
 ```
@@ -679,7 +683,8 @@ place de chaque visuel dans un canevas logique de 1280 × 720.
     pywinauto   piloter la fenêtre : l'amener devant, changer de page
     mss         photographier une région de l'écran, et la rendre en PNG
 
-Les deux sont en option : `pip install -e ".[capture]"`.
+Les deux sont en option pour lancer le script (`pip install -e ".[capture]"`),
+mais obligatoires pour construire l'exécutable : `task install` les pose.
 
 ### Reconnaître la fenêtre
 
