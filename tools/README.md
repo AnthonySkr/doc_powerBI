@@ -7,9 +7,6 @@ l'être : la liste des pages, des visuels, des champs affichés, des tables, des
 sources de données et le code de chaque mesure. Il vous rend un document Word,
 qu'il ne vous reste plus qu'à compléter et à mettre à vos couleurs.
 
-**Rien à installer** — ni Python, ni Power BI, ni quoi que ce soit d'autre.
-Tout ce qui est nécessaire se trouve dans ce dossier.
-
 ---
 
 ## Avant de commencer
@@ -39,17 +36,14 @@ Vous devez alors obtenir, **dans un même dossier**, un fichier et deux
 sous-dossiers portant tous le même nom :
 
 ```
-Mon rapport.pbip
-Mon rapport.SemanticModel/     ← le modèle : tables, mesures, sources
-Mon rapport.Report/            ← les pages, les visuels, les filtres
+rapport.pbip
+rapport.SemanticModel/     ← le modèle : tables, mesures, sources
+rapport.Report/            ← les pages, les visuels, les filtres
 ```
 
 Si vous ne voyez pas les deux sous-dossiers, l'enregistrement n'a pas été fait
 au bon format : recommencez. Ne renommez ni ne déplacez l'un des trois
 séparément — ils vont ensemble.
-
-> Le format projet est aussi ce qui permet de suivre un rapport dans un outil
-> de versionnement. Si votre rapport y est déjà, vous n'avez rien à faire.
 
 ### 3. Chaque visuel doit porter un titre
 
@@ -105,9 +99,8 @@ fichiers : l'application cherche les deux autres à côté d'elle.
    L'outil affiche ensuite ce qui doit être prêt avant de continuer. Pour
    les captures : Power BI Desktop ouvert sur le rapport, en vue Rapport, et
    **le pointillé qui entoure la page visible sur ses quatre côtés**
-   (Affichage › Ajuster à la page) — sans lui, les captures échouent. Ne
-   touchez ni la souris ni le clavier pendant les captures. Si l'outil a
-   besoin de vous (une page à afficher), sa fenêtre revient d'elle-même au
+   — sans lui, les captures échouent. Ne touchez ni la souris ni le clavier pendant les captures. 
+   Si l'outil a besoin de vous (une page à afficher), sa fenêtre revient d'elle-même au
    premier plan.
 
 3. **Répondez aux questions** (détaillées ci-dessous). Appuyez sur Entrée pour
@@ -152,10 +145,7 @@ vous pourrez réécrire avant qu'ils ne soient posés dans le document.
 
 > **Vos réponses sont conservées.** Elles sont enregistrées dans
 > `reponses_<rapport>.yaml`, à côté du `.pbip`, et reproposées au lancement
-> suivant : une suite d'Entrée les reconduit à l'identique. C'est important
-> pour la liste des visuels écartés — la ressaisir de mémoire à chaque fois
-> serait une source d'erreurs. Les entrées déjà retenues sont marquées
-> « retenu » dans la liste. Supprimez ce fichier pour repartir de zéro.
+> suivant : une suite d'Entrée les reconduit à l'identique.
 
 ---
 
@@ -276,6 +266,3 @@ un, l'outil vous signalera qu'il ne le trouve plus.
 | `Configuration : YAML illisible` | Une faute de frappe dans `config.yaml`. Le message donne la ligne. |
 | `Impossible d'enregistrer le document` | Le document est ouvert dans Word. Fermez-le et relancez. |
 | Des visuels nommés `barChart (a1b2c3d4)` | Ces visuels n'ont pas de titre dans Power BI (voir le prérequis n° 3). |
-
-Si la fenêtre affiche une erreur inattendue, le détail complet y est écrit :
-joignez-le à votre demande d'aide.
