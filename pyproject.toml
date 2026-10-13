@@ -24,7 +24,7 @@ capture = [
 powerbi-doc = "main:main"
 
 [tool.taskipy.tasks]
-install = "pip install -e \".[dev]\""
+install = "pip install -e \".[dev,capture]\""
 run = "python main.py"
 
 #   task capture-plan -- rapport.pbip     ce qui serait capturé

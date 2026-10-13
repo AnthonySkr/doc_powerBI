@@ -11,9 +11,40 @@ c'est ainsi que l'utilisateur adapte le plan du document sans reconstruire
 (voir `src/core/paths.py`).
 """
 
-from PyInstaller.utils.hooks import collect_data_files
+import importlib.util
+import sys
+
+from PyInstaller.utils.hooks import collect_data_files, collect_submodules
 
 NAME = "powerbi-doc"
+
+# Outils de capture (extra `capture`). Le script les charge à la demande, au
+# moment de photographier : rien ne casse à la construction s'ils manquent,
+# et l'exécutable livré annonce seulement, chez l'utilisateur, « Capture
+# indisponible ». Leur absence arrête donc la construction, ici, sous Windows
+# — le seul système où un exécutable se livre.
+CAPTURE = ["mss", "pywinauto"] if sys.platform == "win32" else ["mss"]
+
+missing = [name for name in CAPTURE if importlib.util.find_spec(name) is None]
+if missing:
+    raise SystemExit(
+        f"Outils de capture absents de l'environnement : {', '.join(missing)}.\n"
+        'Installez-les avant de construire : pip install -e ".[dev,capture]"'
+    )
+
+
+def _submodules(package: str) -> list[str]:
+    """Tous les modules d'un paquet, ses tests exceptés."""
+    return collect_submodules(package, filter=lambda name: ".test" not in name)
+
+
+# `pywinauto` passe par `comtypes`, qui génère et charge l'interface
+# d'UI Automation à l'exécution ; `mss` choisit son module d'après le système.
+# Ces chargements dynamiques échappent en partie à l'analyse : on embarque
+# les paquets entiers.
+HIDDEN = [module for name in CAPTURE for module in _submodules(name)]
+if sys.platform == "win32":
+    HIDDEN += _submodules("comtypes")
 
 # Fichiers déposés à la racine du bundle : `(source, destination)`.
 DATA = [
@@ -31,10 +62,8 @@ analysis = Analysis(
     ["main.py"],
     pathex=["."],
     datas=DATA,
-    # Tout est atteint depuis `main.py`, que PyInstaller suit. Les deux outils
-    # de capture sont facultatifs : ils ne sont embarqués que s'ils sont
-    # installés.
-    hiddenimports=[],
+    # Tout le reste est atteint depuis `main.py`, que PyInstaller suit.
+    hiddenimports=HIDDEN,
     excludes=EXCLUDES,
     noarchive=False,
 )

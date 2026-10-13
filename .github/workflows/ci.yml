@@ -26,3 +26,39 @@ jobs:
 
       - name: Tests unitaires
         run: python -m unittest discover -s tests -t .
+
+  # Construit l'exécutable comme on le livre, et vérifie qu'il embarque les
+  # outils de capture : leur absence ne se voit sinon que chez l'utilisateur.
+  build-exe:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+
+      - name: Installer les dépendances
+        run: pip install -e ".[dev,capture]"
+
+      - name: Construire l'exécutable
+        run: pyinstaller --noconfirm --clean powerbi-doc.spec
+
+      - name: Générer un document avec l'exécutable
+        shell: bash
+        run: |
+          cp -r tests/fixtures/rapport_test "$RUNNER_TEMP/"
+          # Pas de Power BI Desktop ici : la capture échoue faute de fenêtre,
+          # mais seulement *après* avoir chargé pywinauto et mss.
+          ./dist/powerbi-doc.exe "$RUNNER_TEMP/rapport_test/Rapport.pbip" -y --no-pause -m complet 2>&1 | tee run.log
+          test -f "$RUNNER_TEMP/rapport_test/doc/documentation_Rapport.docx"
+          if grep -q "Capture indisponible" run.log; then
+            echo "::error::L'exécutable n'embarque pas les outils de capture."
+            exit 1
+          fi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: powerbi-doc-exe
+          path: dist/powerbi-doc.exe

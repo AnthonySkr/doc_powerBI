@@ -52,7 +52,7 @@ import hashlib
 import sys
 from dataclasses import dataclass, field
 
-from src.core import console
+from src.core import console, paths
 from src.gui_automator import canvas, finder
 from src.gui_automator.geometry import Rect, Size
 from src.gui_automator.plan import PagePlan
@@ -67,9 +67,11 @@ _RATIO_SLACK = 0.003
 # Clics de signet sans effet, d'affilée, au-delà desquels on cesse de cliquer.
 _IDLE_CLICKS = 2
 
-_MISSING = (
-    "Capture indisponible : `pywinauto` et `mss` ne sont pas installés. "
-    'Installez-les avec `pip install -e ".[capture]"`.'
+_MISSING = "Capture indisponible : le module `{module}` manque."
+_INSTALL = 'Installez les outils de capture avec `pip install -e ".[capture]"`.'
+_REBUILD = (
+    "Cet exécutable a été construit sans les outils de capture : "
+    'reconstruisez-le après `pip install -e ".[dev,capture]"`.'
 )
 
 # Raccourcis de changement de page, dans la notation de `pywinauto`.
@@ -727,5 +729,9 @@ def _import_tools():
         import mss.tools  # noqa: PLC0415
         import pywinauto  # noqa: PLC0415
     except ImportError as e:
-        raise CaptureError(_MISSING) from e
+        # Le module nommé, et non « pywinauto ou mss » : c'est parfois une de
+        # leurs dépendances (`win32api`, `comtypes`) qui fait défaut.
+        missing = _MISSING.format(module=e.name or e)
+        advice = _REBUILD if paths.is_frozen() else _INSTALL
+        raise CaptureError(f"{missing} {advice}") from e
     return pywinauto, mss

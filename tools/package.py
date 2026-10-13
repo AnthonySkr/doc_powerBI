@@ -14,13 +14,12 @@ import shutil
 import sys
 import zipfile
 
-from src.core import (
-    __version__,
-)
-
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# Lancé en script, Python ne voit que `tools/` : la racine du dépôt doit être
+# sur le chemin *avant* d'importer le projet.
 sys.path.insert(0, ROOT)
 
+from src.core import __version__  # noqa: E402
 
 DIST = os.path.join(ROOT, "dist")
 
