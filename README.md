@@ -459,7 +459,21 @@ laissées à l'utilisateur. Un bloc du plan peut trancher explicitement :
 - Ce qui précède la première ancre (page de garde, sommaire) vient du template
   et est régénéré ; ce que vous y aviez ajouté part en annexe. La table des
   matières fait exception : Word la recalcule à chaque ouverture, elle n'est
-  donc jamais prise pour de la rédaction.
+  donc jamais prise pour de la rédaction. Le cartouche de la page de garde
+  aussi : il est repris tel que vous l'avez rempli (voir ci-dessous).
+
+### Cartouche de la page de garde
+
+Un tableau est posé en bas de la page de garde : version, date de mise à jour,
+réalisée par, validation technique, validation process. À la création du
+document, la date du jour est remplie, le reste est laissé vide pour être
+complété dans Word. Ensuite le cartouche vous appartient : la régénération le
+reprend tel quel, lignes ajoutées comprises (un historique des versions, par
+exemple). Pour en obtenir un neuf, daté du jour, supprimez-le du document avant
+de régénérer.
+
+Ses colonnes, leurs libellés, le format de la date (`{{ today }}`) et les
+styles se règlent dans `document.cover.table` ; `enabled: false` le retire.
 
 ## Template
 

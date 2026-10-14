@@ -20,7 +20,8 @@ from src.core.config import DocConfig
 from src.core.expressions import evaluate, printable, render, render_list, resolve_items
 from src.core.models import DocLink
 from src.report_generator.merge import PreviousDocument
-from src.report_generator.word import fields, shapes, tables
+from src.report_generator.merge.transplant import Transplanter
+from src.report_generator.word import cover, fields, shapes, tables
 from src.report_generator.word.body import Body
 from src.report_generator.word.figures import FigureWriter
 from src.report_generator.word.links import LinkIndex
@@ -47,6 +48,7 @@ class DocumentBuilder:
         self.config = config
         self.context = context
         self.text_provider = text_provider
+        self.previous = previous
 
         self.styles = StyleResolver(doc, config, context)
         self.links = LinkIndex(config, context, self.styles.ids)
@@ -79,10 +81,13 @@ class DocumentBuilder:
 
     # ── Éléments du template ──────────────────────────────────────
     def _write_cover(self) -> None:
-        """Remplace le texte repère de la page de garde par le titre du rapport."""
-        cover = self.config.document.get("cover") or {}
-        placeholder = render(cover.get("placeholder"), self.context)
-        text = render(cover.get("text"), self.context)
+        """
+        Remplace le texte repère de la page de garde par le titre du rapport,
+        et pose le cartouche en bas de cette page.
+        """
+        options = self.config.document.get("cover") or {}
+        placeholder = render(options.get("placeholder"), self.context)
+        text = render(options.get("text"), self.context)
         if not placeholder or not text:
             return
 
@@ -95,10 +100,34 @@ class DocumentBuilder:
                 paragraph,
                 text,
                 self.context,
-                bold=bool(cover.get("bold", True)),
+                bold=bool(options.get("bold", True)),
                 links=False,
             )
+            self._write_cover_table(paragraph, options.get("table") or {})
             return
+
+    def _write_cover_table(self, title, options: dict[str, Any]) -> None:
+        """
+        Cartouche de la page de garde (version, date, rédacteur, validations).
+
+        Placé devant le titre, il reste dans la section de la page de garde ;
+        flottant, il se pose en bas de la page. Celui du document précédent
+        est repris tel que l'utilisateur l'a rempli : seul un document qui
+        n'en a pas encore reçoit un cartouche neuf, daté du jour.
+        """
+        if not options or options.get("enabled") is False:
+            return
+
+        kept = None
+        if self.previous is not None and self.config.merge.get("keep_user_text", True):
+            kept = cover.find(self.previous.document)
+        if kept is not None:
+            title._p.addprevious(Transplanter(self.previous.document, self.doc).copy(kept))
+            return
+
+        table = cover.build(self.doc, options, self.context, self.styles, _text_width(self.doc))
+        if table is not None:
+            title._p.addprevious(table._tbl)
 
     def _write_properties(self) -> None:
         """Renseigne les propriétés du fichier .docx (titre, sujet, catégorie...)."""
