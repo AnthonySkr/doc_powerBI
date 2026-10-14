@@ -59,6 +59,27 @@ document:
     text: "Documentation \n{{ inputs.nom_rapport }}"
     bold: true
 
+    # Cartouche posé en bas de la page de garde : une ligne d'en-tête, une
+    # ligne à remplir. Écrit à la création du document — `{{ today }}` y vaut
+    # la date du jour —, le reste laissé vide pour être rempli dans Word.
+    # Ensuite il vous appartient : la régénération le reprend tel quel, lignes
+    # ajoutées comprises. Supprimez-le du document pour en obtenir un neuf,
+    # daté du jour, à la génération suivante.
+    table:
+      enabled: true
+      style: "{{ styles.table }}"
+      header_style: "{{ styles.ref_header }}"
+      value_style: "{{ styles.ref_value }}"
+      date_format: "%d/%m/%Y"
+      row_height_cm: 1.2         # hauteur de la ligne à remplir (signatures)
+      columns:                   # `width_cm` facultatif : largeur partagée sinon
+        - label: "Version"
+        - label: "Date de mise à jour"
+          value: "{{ today }}"
+        - label: "Réalisée par"
+        - label: "Validation technique"
+        - label: "Validation process"
+
   # En-têtes et pieds de page du template : le texte placé à droite est
   # remplacé par la réponse à `titre_entete` (le nom du rapport par défaut).
   # `scope` : header | footer | all (défaut : all).
